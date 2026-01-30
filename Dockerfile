@@ -17,7 +17,12 @@ RUN apt-get update && apt-get install -y \
 COPY . .
 
 RUN pip install --upgrade pip
-RUN pip install -r requirements.txt
+COPY pyproject.toml .
+COPY README.md .
+
+RUN pip install .
+
+COPY . .
 
 # установить браузеры playwright
 RUN python -m playwright install --with-deps
