@@ -17,7 +17,7 @@ export default function History() {
   if (loading) {
     return (
       <div className="flex items-center gap-2 text-[var(--text-muted)] text-sm">
-        <span className="inline-block w-4 h-4 border-2 border-[#2E9FFF] border-t-transparent rounded-full animate-spin" />
+        <span className="inline-block w-4 h-4 border-2 border-[#4578FC] border-t-transparent rounded-full animate-spin" />
         Загрузка…
       </div>
     );
@@ -28,7 +28,7 @@ export default function History() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-gray-900 tracking-tight">История</h1>
+      <h1 className="text-2xl font-bold text-[#181819] tracking-tight">История</h1>
       <p className="text-sm text-[var(--text-muted)]">Ваши сгенерированные резюме</p>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -37,7 +37,7 @@ export default function History() {
             key={item.filename}
             className="rounded-2xl bg-[#FFFFFF] p-5 flex flex-col min-h-[140px]"
           >
-            <div className="font-semibold text-gray-900 truncate text-base" title={item.job_title}>
+            <div className="font-semibold text-[#181819] truncate text-base" title={item.job_title}>
               {item.job_title}
             </div>
             <div className="text-sm text-[var(--text-muted)] mt-1">{item.company}</div>
@@ -53,13 +53,13 @@ export default function History() {
               <a
                 href={api.downloadUrl(item.filename)}
                 download={item.filename}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#2E9FFF] text-white text-sm font-medium hover:bg-[#2590e6] transition-colors"
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#4578FC] text-white text-sm font-medium hover:bg-[#3a6ae8] transition-colors"
               >
                 Скачать
               </a>
               <button
                 type="button"
-                className="p-2 rounded-lg text-[var(--text-muted)] hover:bg-[#F9F9F9] hover:text-gray-700 transition-colors"
+                className="p-2 rounded-lg text-[var(--text-muted)] hover:bg-[#EBEDF5] hover:text-gray-700 transition-colors"
                 title="Подробнее"
               >
                 ⋯

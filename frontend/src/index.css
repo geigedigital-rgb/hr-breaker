@@ -1,11 +1,12 @@
 @import "tailwindcss";
 
 :root {
-  --bg-page: #F9F9F9;
-  --accent: #2E9FFF;
+  --bg-page: #EBEDF5;
+  --accent: #4578FC;
+  --accent-soft: #EAFCB6;
   --card: #FFFFFF;
-  --text: #1a1a1a;
-  --text-muted: #6b7280;
+  --text: #181819;
+  --text-muted: #5c5d6a;
 }
 
 body {

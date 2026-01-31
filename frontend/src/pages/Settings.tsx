@@ -16,7 +16,7 @@ export default function Settings() {
   if (!settings) {
     return (
       <div className="flex items-center gap-2 text-[var(--text-muted)] text-sm">
-        <span className="inline-block w-4 h-4 border-2 border-[#2E9FFF] border-t-transparent rounded-full animate-spin" />
+        <span className="inline-block w-4 h-4 border-2 border-[#4578FC] border-t-transparent rounded-full animate-spin" />
         Загрузка…
       </div>
     );
@@ -24,7 +24,7 @@ export default function Settings() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Настройки</h1>
+      <h1 className="text-2xl font-bold text-[#181819] tracking-tight">Настройки</h1>
 
       <div className="rounded-2xl bg-[#FFFFFF] p-6 max-w-xl space-y-6">
         <div>
