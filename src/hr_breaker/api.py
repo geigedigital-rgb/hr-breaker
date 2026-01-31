@@ -5,9 +5,10 @@ FastAPI backend for HR-Breaker (React frontend).
 import asyncio
 import base64
 import logging
+import tempfile
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi import FastAPI
@@ -15,6 +16,7 @@ from pydantic import BaseModel
 
 from hr_breaker.agents import extract_name, parse_job_posting
 from hr_breaker.config import get_settings
+from hr_breaker.services.pdf_parser import extract_text_from_pdf
 from hr_breaker.models import GeneratedPDF, JobPosting, ResumeSource, ValidationResult
 from hr_breaker.orchestration import optimize_for_job
 from hr_breaker.services import PDFStorage, scrape_job_posting, CloudflareBlockedError
@@ -45,6 +47,10 @@ class ExtractNameRequest(BaseModel):
 class ExtractNameResponse(BaseModel):
     first_name: str | None
     last_name: str | None
+
+
+class ParsePdfResponse(BaseModel):
+    content: str
 
 
 class JobParseRequest(BaseModel):
@@ -118,6 +124,27 @@ async def api_extract_name(req: ExtractNameRequest) -> ExtractNameResponse:
     """Extract first/last name from resume content."""
     first_name, last_name = await extract_name(req.content)
     return ExtractNameResponse(first_name=first_name, last_name=last_name)
+
+
+@router.post("/resume/parse-pdf", response_model=ParsePdfResponse)
+async def api_parse_resume_pdf(file: UploadFile = File(...)) -> ParsePdfResponse:
+    """Extract text from uploaded PDF resume."""
+    if not file.filename or not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(400, "Expected a PDF file")
+    try:
+        body = await file.read()
+    except Exception as e:
+        raise HTTPException(400, f"Failed to read file: {e}")
+    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+        tmp.write(body)
+        tmp_path = Path(tmp.name)
+    try:
+        content = await asyncio.to_thread(extract_text_from_pdf, tmp_path)
+    except Exception as e:
+        tmp_path.unlink(missing_ok=True)
+        raise HTTPException(422, f"PDF parsing failed: {e}")
+    tmp_path.unlink(missing_ok=True)
+    return ParsePdfResponse(content=content)
 
 
 @router.post("/job/parse", response_model=JobPostingOut)

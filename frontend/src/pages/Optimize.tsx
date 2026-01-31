@@ -1,7 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Disclosure, DisclosureButton, DisclosurePanel } from "@headlessui/react";
-import { SparklesIcon } from "@heroicons/react/24/outline";
+import { SparklesIcon, ArrowUpTrayIcon, ClipboardDocumentIcon, LinkIcon } from "@heroicons/react/24/outline";
 import * as api from "../api";
+
+const RESUME_FILE_ACCEPT = ".txt,.md,.html,.htm,.tex,.pdf";
+const RESUME_TEXT_EXTS = ["txt", "md", "html", "htm", "tex"];
 
 type Stage = "idle" | "scanning" | "assessment" | "loading" | "result";
 
@@ -23,6 +26,8 @@ export default function Optimize() {
   const [stage, setStage] = useState<Stage>("idle");
   const [result, setResult] = useState<api.OptimizeResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const hasResume = !!resumeContent.trim();
   const hasJob = !!jobInput.trim();
@@ -50,6 +55,65 @@ export default function Optimize() {
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to extract name");
     }
+  }
+
+  async function readResumeFile(file: File) {
+    setError(null);
+    const ext = file.name.split(".").pop()?.toLowerCase();
+    const isPdf = ext === "pdf";
+    if (isPdf) {
+      try {
+        const res = await api.parseResumePdf(file);
+        setResumeContent(res.content || "");
+        setResumeName(null);
+        setResult(null);
+        setStage("idle");
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Не удалось распознать PDF");
+      }
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = typeof reader.result === "string" ? reader.result : "";
+      setResumeContent(text);
+      setResumeName(null);
+      setResult(null);
+      setStage("idle");
+    };
+    reader.onerror = () => setError("Не удалось прочитать файл");
+    reader.readAsText(file, "UTF-8");
+  }
+
+  function handleResumeFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    void readResumeFile(file);
+    e.target.value = "";
+  }
+
+  function handleResumeDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (!file) return;
+    const ext = file.name.split(".").pop()?.toLowerCase();
+    const allowed = [...RESUME_TEXT_EXTS, "pdf"];
+    if (!ext || !allowed.includes(ext)) {
+      setError("Поддерживаются файлы: .txt, .md, .html, .tex, .pdf");
+      return;
+    }
+    void readResumeFile(file);
+  }
+
+  function handleResumeDragOver(e: React.DragEvent) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+    setIsDragging(true);
+  }
+
+  function handleResumeDragLeave() {
+    setIsDragging(false);
   }
 
   async function handleJobFetch() {
@@ -100,27 +164,53 @@ export default function Optimize() {
         <div className="rounded-2xl bg-[#FFFFFF] p-6 border border-[#EBEDF5]">
           {/* Один слот: показывается либо Шаг 1, либо Шаг 2 */}
           {!hasResume ? (
-            /* Шаг 1 — на месте слота */
+            /* Шаг 1 — на месте слота + drag-and-drop */
             <div>
               <div className="inline-flex items-center rounded-lg border border-[#4578FC]/25 bg-[#4578FC]/08 px-2.5 py-1 mb-3">
                 <span className="text-[11px] font-semibold uppercase tracking-wider text-[#4578FC]">Шаг 1</span>
               </div>
               <h2 className="text-base font-semibold text-[#181819] mb-4">Загрузите резюме</h2>
-              <div className="flex gap-2 mb-3">
-                <button type="button" className="px-3 py-2 text-sm font-medium rounded-xl bg-[#EBEDF5] text-gray-700 hover:bg-gray-100 transition-colors">
-                  Загрузить файл
-                </button>
-                <button type="button" className="px-3 py-2 text-sm font-medium rounded-xl bg-[#EBEDF5] text-gray-700 hover:bg-gray-100 transition-colors">
-                  Вставить текст
-                </button>
-              </div>
-              <textarea
-                value={resumeContent}
-                onChange={(e) => setResumeContent(e.target.value)}
-                onBlur={handleResumePaste}
-                placeholder="Вставьте текст резюме…"
-                className="w-full h-28 rounded-xl bg-[#EBEDF5] px-4 py-3 text-sm text-[#181819] placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#4578FC]/30 focus:bg-[#FFFFFF] resize-none transition-colors"
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept={RESUME_FILE_ACCEPT}
+                className="hidden"
+                onChange={handleResumeFileSelect}
+                aria-label="Выбрать файл резюме"
               />
+              <div
+                onDragOver={handleResumeDragOver}
+                onDragLeave={handleResumeDragLeave}
+                onDrop={handleResumeDrop}
+                className={`rounded-xl border-2 border-dashed p-3 transition-colors ${
+                  isDragging ? "border-[#4578FC] bg-[#4578FC]/10" : "border-[#EBEDF5] bg-transparent"
+                }`}
+              >
+                <div className="flex gap-2 mb-3">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-xl bg-[#4578FC] text-white hover:bg-[#3a6ae8] transition-colors"
+                  >
+                    <ArrowUpTrayIcon className="w-4 h-4 shrink-0" aria-hidden />
+                    Загрузить файл
+                  </button>
+                  <button
+                    type="button"
+                    className="flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-xl bg-[#EBEDF5] text-gray-700 hover:bg-gray-100 transition-colors"
+                  >
+                    <ClipboardDocumentIcon className="w-4 h-4 shrink-0" aria-hidden />
+                    Вставить текст
+                  </button>
+                </div>
+                <textarea
+                  value={resumeContent}
+                  onChange={(e) => setResumeContent(e.target.value)}
+                  onBlur={handleResumePaste}
+                  placeholder="Или перетащите файл сюда (.txt, .md, .html, .tex, .pdf)"
+                  className="w-full h-28 rounded-xl bg-[#EBEDF5] px-4 py-3 text-sm text-[#181819] placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#4578FC]/30 focus:bg-[#FFFFFF] resize-none transition-colors border-0"
+                />
+              </div>
             </div>
           ) : (
             /* Шаг 2 — на месте шага 1 после заполнения резюме */
@@ -177,19 +267,21 @@ export default function Optimize() {
                     <button
                       type="button"
                       onClick={() => setJobMode("url")}
-                      className={`px-3 py-2 text-sm font-medium rounded-xl transition-colors ${
+                      className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-xl transition-colors ${
                         jobMode === "url" ? "bg-[#4578FC] text-white" : "bg-[#EBEDF5] text-gray-700 hover:bg-gray-100"
                       }`}
                     >
+                      <LinkIcon className="w-4 h-4 shrink-0" aria-hidden />
                       URL
                     </button>
                     <button
                       type="button"
                       onClick={() => setJobMode("text")}
-                      className={`px-3 py-2 text-sm font-medium rounded-xl transition-colors ${
+                      className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-xl transition-colors ${
                         jobMode === "text" ? "bg-[#4578FC] text-white" : "bg-[#EBEDF5] text-gray-700 hover:bg-gray-100"
                       }`}
                     >
+                      <ClipboardDocumentIcon className="w-4 h-4 shrink-0" aria-hidden />
                       Вставить текст
                     </button>
                   </div>

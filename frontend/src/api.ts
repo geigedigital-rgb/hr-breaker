@@ -50,6 +50,28 @@ export async function extractName(content: string): Promise<ExtractNameResponse>
   return r.json();
 }
 
+export type ParsePdfResponse = { content: string };
+
+export async function parseResumePdf(file: File): Promise<ParsePdfResponse> {
+  const form = new FormData();
+  form.append("file", file);
+  const r = await fetch(`${API}/resume/parse-pdf`, {
+    method: "POST",
+    body: form,
+  });
+  if (!r.ok) {
+    const t = await r.text();
+    try {
+      const j = JSON.parse(t);
+      throw new Error(j.detail || t);
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      throw new Error(t);
+    }
+  }
+  return r.json();
+}
+
 export async function parseJob(params: { url?: string; text?: string }): Promise<JobPostingOut> {
   const r = await fetch(`${API}/job/parse`, {
     method: "POST",
