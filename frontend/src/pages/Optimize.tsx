@@ -8,6 +8,61 @@ const RESUME_TEXT_EXTS = ["txt", "md", "html", "htm", "tex"];
 
 type Stage = "idle" | "scanning" | "assessment" | "loading" | "result";
 
+/** Контент предпросмотра: важное — выделено, второстепенное — абзацами, без вложенного блока с тенью */
+function JobPreviewContent({
+  parsedJob,
+  rawText,
+}: {
+  parsedJob: api.JobPostingOut | null;
+  rawText: string;
+}) {
+  const hasStructured = parsedJob && (parsedJob.title || parsedJob.company || parsedJob.requirements?.length || parsedJob.description);
+  if (hasStructured) {
+    return (
+      <div className="mt-3 space-y-4 text-sm max-h-64 overflow-y-auto" itemScope itemType="https://schema.org/JobPosting">
+        <p className="font-bold text-[#181819] text-base" itemProp="title">{parsedJob!.title || "—"}</p>
+        <p className="font-medium text-[#181819]" itemProp="hiringOrganization" itemScope itemType="https://schema.org/Organization">
+          <span itemProp="name">{parsedJob!.company || "—"}</span>
+        </p>
+        {parsedJob!.requirements && parsedJob!.requirements.length > 0 && (
+          <div>
+            <p className="font-semibold text-[#181819] mb-1">Требования</p>
+            <ul className="list-disc list-inside space-y-0.5 text-[#181819] text-[13px] text-[var(--text-muted)]">
+              {parsedJob!.requirements.slice(0, 8).map((r, i) => (
+                <li key={i}>{r}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {parsedJob!.description && (
+          <div itemProp="description">
+            <p className="font-semibold text-[#181819] mb-1">Описание</p>
+            <div className="text-[#181819] text-[13px] leading-relaxed text-[var(--text-muted)] whitespace-pre-wrap">
+              {parsedJob!.description.split(/\n\n+/).map((block, i) => (
+                <p key={i} className="mb-2 last:mb-0">{block}</p>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+  const paragraphs = rawText.trim().split(/\n\n+/).filter(Boolean);
+  return (
+    <div className="mt-3 max-h-64 overflow-y-auto">
+      {paragraphs.length > 0 ? (
+        paragraphs.map((block, i) => (
+          <p key={i} className={i === 0 ? "font-semibold text-[#181819] text-sm mb-2" : "text-[13px] text-[var(--text-muted)] leading-relaxed mb-2 last:mb-0"}>
+            {block}
+          </p>
+        ))
+      ) : (
+        <p className="text-[13px] text-[var(--text-muted)] leading-relaxed whitespace-pre-wrap">{rawText.slice(0, 800)}{rawText.length > 800 ? "…" : ""}</p>
+      )}
+    </div>
+  );
+}
+
 function getAtsScore(result: api.OptimizeResponse): number | null {
   const r = result.validation.results.find((f) => f.filter_name === "LLMChecker");
   return r != null ? Math.round(r.score * 100) : null;
@@ -27,6 +82,7 @@ export default function Optimize() {
   const [result, setResult] = useState<api.OptimizeResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [parsedJob, setParsedJob] = useState<api.JobPostingOut | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const hasResume = !!resumeContent.trim();
@@ -127,9 +183,11 @@ export default function Optimize() {
     setError(null);
     setStage("scanning");
     try {
-      await api.parseJob({ url: jobInput.trim() });
+      const job = await api.parseJob({ url: jobInput.trim() });
+      setParsedJob(job);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to fetch job");
+      setParsedJob(null);
     } finally {
       setStage("assessment");
     }
@@ -250,6 +308,7 @@ export default function Optimize() {
                       type="button"
                       onClick={() => {
                         setJobInput("");
+                        setParsedJob(null);
                         setResult(null);
                         setStage("idle");
                       }}
@@ -259,11 +318,11 @@ export default function Optimize() {
                     </button>
                   </div>
                   <Disclosure>
-                    <DisclosureButton className="text-sm text-[var(--text-muted)] hover:text-[#181819]">
+                    <DisclosureButton className="text-sm font-medium text-[#4578FC] hover:opacity-80">
                       Предпросмотр
                     </DisclosureButton>
-                    <DisclosurePanel className="mt-2 text-sm text-gray-600 whitespace-pre-wrap max-h-28 overflow-y-auto">
-                      {jobInput.slice(0, 400)}…
+                    <DisclosurePanel className="mt-2">
+                      <JobPreviewContent parsedJob={parsedJob} rawText={jobInput} />
                     </DisclosurePanel>
                   </Disclosure>
                 </>

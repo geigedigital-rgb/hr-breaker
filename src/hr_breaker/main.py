@@ -7,7 +7,11 @@ from pathlib import Path
 import nest_asyncio
 import streamlit as st
 
-nest_asyncio.apply()
+# nest_asyncio не умеет патчить uvloop (Railway, Replit и др.) — пропускаем при ошибке
+try:
+    nest_asyncio.apply()
+except ValueError:
+    pass
 
 # Create a persistent event loop for the session
 if "event_loop" not in st.session_state:
