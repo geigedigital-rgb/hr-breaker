@@ -38,6 +38,12 @@ INPUT: The user's resume text (any format).
 
 OUTPUT: Generate HTML for the <body> of a resume PDF. Do NOT include <html>, <head>, or <body> tags - only the content.
 
+LANGUAGE (important for UX):
+- Write the ENTIRE resume in the SAME language as the original resume: all section titles, summary, bullet points, and body text.
+- If the source is in Russian → write in Russian. If in Ukrainian → Ukrainian. If in English → English. Same for any other language.
+- Do NOT translate the resume to another language unless the job posting explicitly asks for it (e.g. "resume in English").
+- Preserve the user's language choice so the optimized PDF matches their original.
+
 CONTENT RULES:
 - When describing job experiences, show concrete results: focus on impact, not tasks.
 - Include specific technologies within achievement descriptions.
@@ -209,6 +215,8 @@ Company: {job.company}
 Requirements: {', '.join(job.requirements)}
 Keywords: {', '.join(job.keywords)}
 Description: {job.description}
+
+Write the optimized resume in the SAME language as the Original Resume above (do not translate).
 """
 
     if context.last_attempt:

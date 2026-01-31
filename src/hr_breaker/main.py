@@ -37,6 +37,19 @@ def run_async(coro):
     return loop.run_until_complete(coro)
 
 
+def open_folder_in_explorer(folder: str) -> None:
+    """Open folder in system file manager. On failure (e.g. in container) show path."""
+    try:
+        if sys.platform == "darwin":
+            subprocess.run(["open", folder], check=True)
+        elif sys.platform == "win32":
+            subprocess.run(["explorer", folder], check=True)
+        else:
+            subprocess.run(["xdg-open", folder], check=True)
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        st.info(f"Folder path: `{folder}` (cannot open in this environment)")
+
+
 @st.cache_data(show_spinner=False)
 def cached_scrape_job(url: str) -> str:
     """Cached job scraping by URL."""
@@ -86,13 +99,7 @@ with st.sidebar:
     col_open, col_refresh = st.columns(2)
     with col_open:
         if st.button("📂 Open", use_container_width=True, help="Open output folder"):
-            folder = str(settings.output_dir.resolve())
-            if sys.platform == "darwin":
-                subprocess.run(["open", folder])
-            elif sys.platform == "win32":
-                subprocess.run(["explorer", folder])
-            else:
-                subprocess.run(["xdg-open", folder])
+            open_folder_in_explorer(str(settings.output_dir.resolve()))
     with col_refresh:
         if st.button("🔄 Refresh", use_container_width=True, help="Rescan folder"):
             st.rerun()
@@ -346,13 +353,7 @@ if "last_result" in st.session_state:
     if pdf_path:
         st.success(f"PDF saved: {pdf_path}")
         if st.button("📂 Open Output Folder", use_container_width=True):
-            folder = str(pdf_path.parent.resolve())
-            if sys.platform == "darwin":
-                subprocess.run(["open", folder])
-            elif sys.platform == "win32":
-                subprocess.run(["explorer", folder])
-            else:
-                subprocess.run(["xdg-open", folder])
+            open_folder_in_explorer(str(pdf_path.parent.resolve()))
     elif optimized:
         st.error("Failed to render PDF")
 
