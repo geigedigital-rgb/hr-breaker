@@ -1,45 +1,53 @@
-"""Abstract renderer interface and implementations."""
+"""
+Abstract renderer interface and HTML renderer implementation.
+Production-safe version using importlib.resources.
+"""
 
 import os
 import sys
 from abc import ABC, abstractmethod
-from pathlib import Path
 
-from jinja2 import Environment, FileSystemLoader
+from importlib.resources import files
+from jinja2 import Environment, PackageLoader, select_autoescape
 
 from hr_breaker.models.resume_data import ResumeData, RenderResult
 
-# Template directory
-TEMPLATE_DIR = Path(__file__).parent.parent.parent.parent / "templates"
 
+# =========================
+# macOS WeasyPrint helpers
+# =========================
 
 def _setup_macos_library_path():
     """Set up library path for WeasyPrint on macOS with Homebrew."""
     if sys.platform != "darwin":
         return
 
-    # Check if DYLD_FALLBACK_LIBRARY_PATH is already set
     if os.environ.get("DYLD_FALLBACK_LIBRARY_PATH"):
         return
 
-    # Try common Homebrew paths
     homebrew_paths = [
         "/opt/homebrew/lib",  # Apple Silicon
-        "/usr/local/lib",  # Intel
+        "/usr/local/lib",     # Intel
     ]
 
     for path in homebrew_paths:
-        gobject_lib = Path(path) / "libgobject-2.0.dylib"
-        if gobject_lib.exists():
+        if os.path.exists(os.path.join(path, "libgobject-2.0.dylib")):
             os.environ["DYLD_FALLBACK_LIBRARY_PATH"] = path
             return
 
 
+# =========================
+# Errors
+# =========================
+
 class RenderError(Exception):
     """Raised when rendering fails."""
-
     pass
 
+
+# =========================
+# Base renderer
+# =========================
 
 class BaseRenderer(ABC):
     """Abstract base class for resume renderers."""
@@ -47,8 +55,12 @@ class BaseRenderer(ABC):
     @abstractmethod
     def render(self, data: ResumeData) -> RenderResult:
         """Render resume data to PDF."""
-        pass
+        raise NotImplementedError
 
+
+# =========================
+# HTML Renderer
+# =========================
 
 class HTMLRenderer(BaseRenderer):
     """Render resume using HTML + WeasyPrint."""
@@ -57,13 +69,29 @@ class HTMLRenderer(BaseRenderer):
 
     def __init__(self):
         self._ensure_weasyprint()
+
+        # Jinja environment (package-safe)
         self.env = Environment(
-            loader=FileSystemLoader(TEMPLATE_DIR),
-            autoescape=True,
+            loader=PackageLoader("hr_breaker", "templates"),
+            autoescape=select_autoescape(["html", "xml"]),
         )
+
         from weasyprint.text.fonts import FontConfiguration
         self.font_config = FontConfiguration()
-        self._wrapper_html = (TEMPLATE_DIR / "resume_wrapper.html").read_text()
+
+        # Load wrapper HTML via importlib.resources
+        self._wrapper_html = (
+            files("hr_breaker.templates")
+            .joinpath("resume_wrapper.html")
+            .read_text(encoding="utf-8")
+        )
+
+        # Base directory for WeasyPrint (real filesystem path)
+        self._template_base = str(files("hr_breaker.templates"))
+
+    # -------------------------
+    # Lazy WeasyPrint import
+    # -------------------------
 
     @classmethod
     def _ensure_weasyprint(cls):
@@ -71,37 +99,44 @@ class HTMLRenderer(BaseRenderer):
         if cls._weasyprint_imported:
             return
 
-        # Set up library path before importing
         _setup_macos_library_path()
 
         try:
-            # Import WeasyPrint - this will fail if libs not found
             import weasyprint  # noqa: F401
             cls._weasyprint_imported = True
         except OSError as e:
             if "libgobject" in str(e) or "libpango" in str(e):
                 raise RenderError(
-                    "WeasyPrint libraries not found. On macOS, run:\n"
-                    "  brew install pango gdk-pixbuf libffi\n"
+                    "WeasyPrint libraries not found.\n"
+                    "On macOS, run:\n"
+                    "  brew install pango gdk-pixbuf libffi\n\n"
                     "Then either:\n"
-                    "  1. Add to ~/.zshrc: export DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib\n"
-                    "  2. Or run with: DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib uv run hr-breaker ..."
+                    "  export DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib\n"
+                    "or run:\n"
+                    "  DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib hr-breaker ..."
                 ) from e
             raise
 
+    # -------------------------
+    # Render HTML body (LLM)
+    # -------------------------
+
     def render(self, html_body: str) -> RenderResult:
-        """Render LLM-generated HTML body to PDF.
+        """
+        Render LLM-generated HTML body to PDF.
 
         Args:
-            html_body: HTML content for the <body> (no wrapper needed)
+            html_body: HTML content for <body> (no wrapper needed)
         """
         from weasyprint import HTML
 
-        # Wrap LLM's body content with our template
         html_content = self._wrapper_html.replace("{{BODY}}", html_body)
 
-        # Render with WeasyPrint
-        html = HTML(string=html_content, base_url=str(TEMPLATE_DIR))
+        html = HTML(
+            string=html_content,
+            base_url=self._template_base,
+        )
+
         doc = html.render(font_config=self.font_config)
         pdf_bytes = doc.write_pdf()
         page_count = len(doc.pages)
@@ -116,20 +151,37 @@ class HTMLRenderer(BaseRenderer):
             warnings=warnings,
         )
 
+    # -------------------------
+    # Legacy Jinja rendering
+    # -------------------------
+
     def render_data(self, data: ResumeData) -> RenderResult:
-        """Legacy: Render ResumeData to PDF via Jinja template."""
+        """Render ResumeData to PDF via Jinja template."""
         from weasyprint import HTML, CSS
 
         template = self.env.get_template("resume.html")
         html_content = template.render(resume=data)
 
-        html = HTML(string=html_content, base_url=str(TEMPLATE_DIR))
-        css_path = TEMPLATE_DIR / "resume.css"
-        stylesheets = []
-        if css_path.exists():
-            stylesheets.append(CSS(filename=str(css_path), font_config=self.font_config))
+        html = HTML(
+            string=html_content,
+            base_url=self._template_base,
+        )
 
-        doc = html.render(stylesheets=stylesheets, font_config=self.font_config)
+        stylesheets = []
+        css_path = files("hr_breaker.templates").joinpath("resume.css")
+        if css_path.exists():
+            stylesheets.append(
+                CSS(
+                    filename=str(css_path),
+                    font_config=self.font_config,
+                )
+            )
+
+        doc = html.render(
+            stylesheets=stylesheets,
+            font_config=self.font_config,
+        )
+
         pdf_bytes = doc.write_pdf()
         page_count = len(doc.pages)
 
@@ -143,6 +195,10 @@ class HTMLRenderer(BaseRenderer):
             warnings=warnings,
         )
 
+
+# =========================
+# Factory
+# =========================
 
 def get_renderer() -> HTMLRenderer:
     """Get the HTML renderer."""
