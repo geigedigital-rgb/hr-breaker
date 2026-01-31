@@ -8,51 +8,104 @@ const RESUME_TEXT_EXTS = ["txt", "md", "html", "htm", "tex"];
 
 type Stage = "idle" | "scanning" | "assessment" | "loading" | "result";
 
-/** Контент предпросмотра: важное — выделено, второстепенное — абзацами, без вложенного блока с тенью */
+/** Контент предпросмотра: вакансия структурирована — заголовки, требования, описание абзацами */
 function JobPreviewContent({
   parsedJob,
   rawText,
+  isParsing,
 }: {
   parsedJob: api.JobPostingOut | null;
   rawText: string;
+  isParsing?: boolean;
 }) {
+  if (isParsing) {
+    return (
+      <p className="mt-3 text-[13px] text-[var(--text-muted)]">
+        Структурируем вакансию…
+      </p>
+    );
+  }
   const hasStructured = parsedJob && (parsedJob.title || parsedJob.company || parsedJob.requirements?.length || parsedJob.description);
   if (hasStructured) {
     return (
-      <div className="mt-3 space-y-4 text-sm max-h-64 overflow-y-auto" itemScope itemType="https://schema.org/JobPosting">
-        <p className="font-bold text-[#181819] text-base" itemProp="title">{parsedJob!.title || "—"}</p>
-        <p className="font-medium text-[#181819]" itemProp="hiringOrganization" itemScope itemType="https://schema.org/Organization">
-          <span itemProp="name">{parsedJob!.company || "—"}</span>
-        </p>
+      <div className="mt-3 space-y-4 text-sm max-h-72 overflow-y-auto" itemScope itemType="https://schema.org/JobPosting">
+        <section>
+          <p className="font-bold text-[#181819] text-base leading-tight" itemProp="title">{parsedJob!.title || "—"}</p>
+          <p className="mt-0.5 font-medium text-[#181819] text-[13px]" itemProp="hiringOrganization" itemScope itemType="https://schema.org/Organization">
+            <span itemProp="name">{parsedJob!.company || "—"}</span>
+          </p>
+        </section>
+        {parsedJob!.keywords && parsedJob!.keywords.length > 0 && (
+          <section>
+            <p className="font-semibold text-[#181819] text-[13px] mb-1.5">Ключевые слова / Навыки</p>
+            <p className="text-[13px] text-[var(--text-muted)] leading-relaxed">
+              {parsedJob!.keywords.slice(0, 20).join(", ")}
+              {parsedJob!.keywords.length > 20 ? " …" : ""}
+            </p>
+          </section>
+        )}
         {parsedJob!.requirements && parsedJob!.requirements.length > 0 && (
-          <div>
-            <p className="font-semibold text-[#181819] mb-1">Требования</p>
-            <ul className="list-disc list-inside space-y-0.5 text-[#181819] text-[13px] text-[var(--text-muted)]">
-              {parsedJob!.requirements.slice(0, 8).map((r, i) => (
+          <section>
+            <p className="font-semibold text-[#181819] text-[13px] mb-1.5">Требования</p>
+            <ul className="list-disc list-inside space-y-0.5 text-[13px] text-[var(--text-muted)] leading-relaxed">
+              {parsedJob!.requirements.map((r, i) => (
                 <li key={i}>{r}</li>
               ))}
             </ul>
-          </div>
+          </section>
         )}
         {parsedJob!.description && (
-          <div itemProp="description">
-            <p className="font-semibold text-[#181819] mb-1">Описание</p>
-            <div className="text-[#181819] text-[13px] leading-relaxed text-[var(--text-muted)] whitespace-pre-wrap">
-              {parsedJob!.description.split(/\n\n+/).map((block, i) => (
-                <p key={i} className="mb-2 last:mb-0">{block}</p>
+          <section itemProp="description">
+            <p className="font-semibold text-[#181819] text-[13px] mb-1.5">Описание</p>
+            <div className="text-[13px] text-[var(--text-muted)] leading-relaxed space-y-2">
+              {parsedJob!.description.trim().split(/\n\n+/).filter(Boolean).map((block, i) => (
+                <p key={i}>{block}</p>
               ))}
             </div>
-          </div>
+          </section>
         )}
       </div>
     );
   }
-  const paragraphs = rawText.trim().split(/\n\n+/).filter(Boolean);
+  // Fallback: разбить сырой текст по типичным заголовкам секций (DE/EN)
+  const sectionPattern = /^(Deine Aufgaben:|Du bringst mit:|Wir bieten:|Requirements?:|Responsibilities?:|Qualifications?:|Описание|Требования|Обязанности|Условия)\s*$/im;
+  const parts = rawText.trim().split(/\n\n+/).filter(Boolean);
+  const sections: { title?: string; body: string }[] = [];
+  let current: { title?: string; body: string } = { body: "" };
+  for (const block of parts) {
+    const firstLine = block.split(/\n/)[0]?.trim() ?? "";
+    if (sectionPattern.test(firstLine) || (firstLine.endsWith(":") && firstLine.length < 50)) {
+      if (current.body.trim()) sections.push(current);
+      const afterTitle = block.includes("\n") ? block.slice(block.indexOf("\n") + 1).trim() : "";
+      current = { title: firstLine, body: afterTitle || block };
+    } else {
+      current.body = current.body ? `${current.body}\n\n${block}` : block;
+    }
+  }
+  if (current.body.trim()) sections.push(current);
+
+  if (sections.length > 0) {
+    return (
+      <div className="mt-3 max-h-72 overflow-y-auto space-y-4">
+        {sections.map((s, i) => (
+          <section key={i}>
+            {s.title && <p className="font-semibold text-[#181819] text-[13px] mb-1.5">{s.title}</p>}
+            <div className="text-[13px] text-[var(--text-muted)] leading-relaxed space-y-2">
+              {s.body.split(/\n\n+/).filter(Boolean).map((p, j) => (
+                <p key={j}>{p}</p>
+              ))}
+            </div>
+          </section>
+        ))}
+      </div>
+    );
+  }
+  const paragraphs = parts;
   return (
-    <div className="mt-3 max-h-64 overflow-y-auto">
+    <div className="mt-3 max-h-72 overflow-y-auto space-y-2">
       {paragraphs.length > 0 ? (
         paragraphs.map((block, i) => (
-          <p key={i} className={i === 0 ? "font-semibold text-[#181819] text-sm mb-2" : "text-[13px] text-[var(--text-muted)] leading-relaxed mb-2 last:mb-0"}>
+          <p key={i} className={i === 0 ? "font-semibold text-[#181819] text-sm" : "text-[13px] text-[var(--text-muted)] leading-relaxed"}>
             {block}
           </p>
         ))
@@ -83,6 +136,8 @@ export default function Optimize() {
   const [error, setError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [parsedJob, setParsedJob] = useState<api.JobPostingOut | null>(null);
+  const [isParsingJob, setIsParsingJob] = useState(false);
+  const [scanProgress, setScanProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const hasResume = !!resumeContent.trim();
@@ -94,13 +149,63 @@ export default function Optimize() {
     if (!hasResume || !hasJob) setStage("idle");
   }, [hasResume, hasJob]);
 
-  // После заполнения резюме и вакансии — этап «Сканирование», затем «Оценка» (только из idle)
+  // Авто-парсинг вставленного текста вакансии для структурированного предпросмотра
+  useEffect(() => {
+    if (!hasJob || jobMode !== "text" || jobInput.trim().length < 150) return;
+    const t = setTimeout(() => {
+      setIsParsingJob(true);
+      api
+        .parseJob({ text: jobInput.trim() })
+        .then(setParsedJob)
+        .catch(() => setParsedJob(null))
+        .finally(() => setIsParsingJob(false));
+    }, 600);
+    return () => clearTimeout(t);
+  }, [hasJob, jobMode, jobInput]);
+
+  async function requestJobParse() {
+    if (!jobInput.trim() || jobMode !== "text" || jobInput.trim().length < 100) return;
+    if (isParsingJob) return;
+    setIsParsingJob(true);
+    try {
+      const job = await api.parseJob({ text: jobInput.trim() });
+      setParsedJob(job);
+    } catch {
+      setParsedJob(null);
+    } finally {
+      setIsParsingJob(false);
+    }
+  }
+
+  // После заполнения резюме и вакансии — перейти на этап «Сканирование»
   useEffect(() => {
     if (!hasResume || !hasJob || stage !== "idle") return;
     setStage("scanning");
-    const t = setTimeout(() => setStage("assessment"), 1800);
-    return () => clearTimeout(t);
   }, [hasResume, hasJob, stage]);
+
+  // На этапе «Сканирование» — прогресс 0→100% и переход в «Оценка» (отдельный эффект, чтобы интервал не сбрасывался при ре-рендере)
+  const SCAN_DURATION_MS = 1800;
+  const SCAN_TICK_MS = 80;
+  useEffect(() => {
+    if (stage !== "scanning") return;
+    setScanProgress(0);
+    const step = (100 * SCAN_TICK_MS) / SCAN_DURATION_MS;
+    const interval = setInterval(() => {
+      setScanProgress((p) => {
+        const next = p + step;
+        return next >= 100 ? 100 : next;
+      });
+    }, SCAN_TICK_MS);
+    const t = setTimeout(() => {
+      clearInterval(interval);
+      setScanProgress(100);
+      setStage("assessment");
+    }, SCAN_DURATION_MS);
+    return () => {
+      clearTimeout(t);
+      clearInterval(interval);
+    };
+  }, [stage]);
 
   async function handleResumePaste() {
     if (!resumeContent.trim()) return;
@@ -318,11 +423,18 @@ export default function Optimize() {
                     </button>
                   </div>
                   <Disclosure>
-                    <DisclosureButton className="text-sm font-medium text-[#4578FC] hover:opacity-80">
+                    <DisclosureButton
+                      className="text-sm font-medium text-[#4578FC] hover:opacity-80"
+                      onClick={() => {
+                        if (jobMode === "text" && jobInput.trim().length >= 100 && !parsedJob && !isParsingJob) {
+                          void requestJobParse();
+                        }
+                      }}
+                    >
                       Предпросмотр
                     </DisclosureButton>
                     <DisclosurePanel className="mt-2">
-                      <JobPreviewContent parsedJob={parsedJob} rawText={jobInput} />
+                      <JobPreviewContent parsedJob={parsedJob} rawText={jobInput} isParsing={isParsingJob} />
                     </DisclosurePanel>
                   </Disclosure>
                 </>
@@ -381,10 +493,10 @@ export default function Optimize() {
           </div>
         )}
 
-        {(stage === "scanning" || stage === "assessment" || stage === "result") && hasResume && hasJob && (
+        {(stage === "scanning" || stage === "loading" || stage === "assessment" || stage === "result") && hasResume && hasJob && (
           <>
             {stage === "scanning" && (
-              <div className="rounded-2xl bg-[#FFFFFF] p-8 flex flex-col items-center justify-center gap-4">
+              <div className="rounded-2xl bg-[#FFFFFF] p-8 flex flex-col items-center justify-center gap-5">
                 <div
                   className="w-14 h-14 rounded-2xl flex items-center justify-center animate-pulse"
                   style={{ background: "linear-gradient(135deg, #EAFCB6 0%, #b0d8ff 50%, #4578FC 100%)" }}
@@ -393,6 +505,36 @@ export default function Optimize() {
                 </div>
                 <p className="text-[#181819] font-medium">Сканирование…</p>
                 <p className="text-sm text-[var(--text-muted)]">Анализируем резюме и вакансию</p>
+                <div className="w-full max-w-xs space-y-2">
+                  <div className="h-2 rounded-full bg-[#EBEDF5] overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-[#4578FC] transition-all duration-150 ease-linear"
+                      style={{ width: `${Math.round(scanProgress)}%` }}
+                      role="progressbar"
+                      aria-valuenow={Math.round(scanProgress)}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-label="Прогресс сканирования"
+                    />
+                  </div>
+                  <p className="text-center text-sm font-medium text-[#181819]">{Math.round(scanProgress)}%</p>
+                </div>
+              </div>
+            )}
+
+            {stage === "loading" && (
+              <div className="rounded-2xl bg-[#FFFFFF] p-8 flex flex-col items-center justify-center gap-5">
+                <div
+                  className="w-14 h-14 rounded-2xl flex items-center justify-center"
+                  style={{ background: "linear-gradient(135deg, #EAFCB6 0%, #b0d8ff 50%, #4578FC 100%)" }}
+                >
+                  <span
+                    className="inline-block w-8 h-8 border-2 border-[#181819] border-t-transparent rounded-full animate-spin"
+                    aria-hidden
+                  />
+                </div>
+                <p className="text-[#181819] font-semibold text-lg">Улучшаем резюме…</p>
+                <p className="text-sm text-[var(--text-muted)]">Не закрывайте страницу</p>
               </div>
             )}
 
@@ -510,22 +652,6 @@ export default function Optimize() {
           </>
         )}
 
-        {/* Лоадер на весь экран при загрузке */}
-        {stage === "loading" && (
-          <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-6 bg-[#EBEDF5]/95 backdrop-blur-sm">
-            <div
-              className="relative w-24 h-24 rounded-3xl flex items-center justify-center animate-pulse"
-              style={{
-                background: "linear-gradient(135deg, #EAFCB6 0%, #b0d8ff 50%, #4578FC 100%)",
-                boxShadow: "0 0 60px rgba(69, 120, 252, 0.4), 0 0 100px rgba(234, 252, 182, 0.2)",
-              }}
-            >
-              <SparklesIcon className="w-12 h-12 text-[#181819]" />
-            </div>
-            <p className="text-[#181819] font-semibold text-lg">Улучшаем резюме…</p>
-            <p className="text-sm text-[var(--text-muted)]">Не закрывайте страницу</p>
-          </div>
-        )}
       </div>
     </div>
   );

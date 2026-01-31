@@ -2,6 +2,11 @@
 
 You will generate HTML for the `<body>` of a resume PDF. The wrapper HTML/CSS is already applied - you only output the body content.
 
+## Strict Template — No Inventing
+
+- **Use only this template.** Output only sections that have corresponding data in the original resume. If the source has no summary, education, certifications, or projects — omit those sections. Do not create empty sections or placeholder text.
+- **Every line must come from the source.** If something is missing in the source, do not output it and do not make it up. No invented metrics, titles, technologies, or achievements.
+
 ## CSS Classes Available
 
 These classes are pre-defined and styled. Use them exactly as shown:
@@ -152,8 +157,9 @@ Use `<strong>` for category labels (NOT markdown `**bold**`):
 ## What NOT to Do
 
 - Never add `<script>` tags
-- Never add content not in the original resume
-- Never fabricate metrics, titles, or achievements
+- Never add content not in the original resume; if something is missing in the source, omit it — do not invent or make it up
+- Never fabricate metrics, titles, technologies, or achievements
+- Never create empty sections or placeholder text; only include sections that have data in the source
 - Never use `<html>`, `<head>`, or `<body>` tags - only body content
 - **Never use markdown syntax** (`**bold**`, `*italic*`) - use HTML (`<strong>`, `<em>`)
 - **Never put company and title on separate lines** - keep on one line with dash separator

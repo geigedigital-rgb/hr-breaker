@@ -31,9 +31,10 @@ Resume optimization tool that transforms any resume into a job-specific, ATS-fri
 # Install
 uv sync
 
-# Configure
+# Configure — API key for AI (Gemini)
 cp .env.example .env
-# Edit .env and add your GOOGLE_API_KEY
+# Open .env and replace your-api-key-here with your real key:
+#   GOOGLE_API_KEY=AIza...your-key-from-Google-AI-Studio
 
 # Run web UI (Streamlit)
 uv run streamlit run src/hr_breaker/main.py
@@ -88,7 +89,16 @@ uv run hr-breaker list
 
 ## Configuration
 
-Copy `.env.example` to `.env` and set your API key. All other settings have sensible defaults.
+**Где вписать API-ключ (GOOGLE_API_KEY):**
+
+1. В корне проекта создайте файл `.env` (или скопируйте: `cp .env.example .env`).
+2. Откройте `.env` и пропишите ключ в одну строку:
+   ```bash
+   GOOGLE_API_KEY=AIza...ваш-ключ-из-Google-AI-Studio
+   ```
+3. Перезапустите бэкенд (API). Файл `.env` не коммитится в git.
+
+Ключ берётся в [Google AI Studio](https://aistudio.google.com/apikey). Остальные переменные опциональны.
 
 | Variable | Required | Description |
 |----------|----------|-------------|
