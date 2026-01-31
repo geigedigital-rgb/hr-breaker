@@ -67,3 +67,6 @@ asyncio_default_test_loop_scope = "session"
 dev = [
     "pytest-asyncio>=1.3.0",
 ]
+
+[tool.setuptools.package-data]
+"hr_breaker" = ["templates/*"]
