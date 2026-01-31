@@ -113,6 +113,23 @@ src/hr_breaker/
 6. VectorSimilarityMatcher - Semantic similarity
 7. AIGeneratedChecker - Detect AI-sounding text
 
+## Deployment
+
+### Docker
+
+```bash
+docker build -t hr-breaker .
+docker run -p 8501:8501 -e GOOGLE_API_KEY=your-key hr-breaker
+```
+
+- **Порты**: приложение слушает `PORT` (по умолчанию 8501). Платформы вроде Heroku/Cloud Run задают `PORT` сами.
+- **Данные**: `output/` и `.cache/` создаются в рабочей директории контейнера. Для сохранения PDF и кэша резюме смонтируйте том, например:  
+  `-v $(pwd)/output:/app/output -v $(pwd)/.cache:/app/.cache`
+
+### Переменные окружения в продакшене
+
+Обязательно задайте `GOOGLE_API_KEY`. Остальное опционально (см. `.env.example`).
+
 ## Development
 
 ```bash

@@ -1,6 +1,7 @@
 import asyncio
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import nest_asyncio
@@ -162,10 +163,15 @@ with col_resume:
             )
             if uploaded_file:
                 if uploaded_file.name.lower().endswith(".pdf"):
-                    temp_path = Path(f"/tmp/{uploaded_file.name}")
-                    temp_path.write_bytes(uploaded_file.read())
-                    resume_content = extract_text_from_pdf(temp_path)
-                    temp_path.unlink()
+                    with tempfile.NamedTemporaryFile(
+                        suffix=".pdf", delete=False
+                    ) as tmp:
+                        tmp.write(uploaded_file.read())
+                        temp_path = Path(tmp.name)
+                    try:
+                        resume_content = extract_text_from_pdf(temp_path)
+                    finally:
+                        temp_path.unlink(missing_ok=True)
                 else:
                     resume_content = uploaded_file.read().decode("utf-8")
         else:

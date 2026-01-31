@@ -1,6 +1,6 @@
 import logging
 from datetime import date
-from pathlib import Path
+from importlib.resources import files
 
 from pydantic import BaseModel
 from pydantic_ai import Agent, BinaryContent
@@ -21,13 +21,14 @@ from hr_breaker.utils import extract_text_from_html
 
 logger = logging.getLogger(__name__)
 
-TEMPLATE_DIR = Path(__file__).parent.parent.parent.parent / "templates"
-
 
 def _load_resume_guide() -> str:
-    """Load the HTML generation guide for the optimizer."""
-    guide_path = TEMPLATE_DIR / "resume_guide.md"
-    return guide_path.read_text()
+    """Load the HTML generation guide for the optimizer (package-safe)."""
+    return (
+        files("hr_breaker.templates")
+        .joinpath("resume_guide.md")
+        .read_text(encoding="utf-8")
+    )
 
 
 OPTIMIZER_PROMPT = r"""
