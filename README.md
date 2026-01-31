@@ -47,7 +47,11 @@ cd frontend && npm install && npm run dev   # Frontend on http://localhost:5173
 
 ### Web UI (React + Headless UI)
 
-1. Start API: `uv run hr-breaker-api` (port 8000)
+1. Start API: `uv run hr-breaker-api` (port 8000)  
+   Или с автоперезагрузкой при изменении кода (следит только за `src`):
+   ```bash
+   uvicorn hr_breaker.api:app --reload --port 8000 --reload-dir src
+   ```
 2. Start frontend: `cd frontend && npm run dev` (port 5173)
 3. Open http://localhost:5173 — Оптимизация, История, Настройки. Цвета: #F9F9F9, #2E9FFF, #FFFFFF.
 

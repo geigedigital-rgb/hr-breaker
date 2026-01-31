@@ -129,22 +129,27 @@ async def api_extract_name(req: ExtractNameRequest) -> ExtractNameResponse:
 @router.post("/resume/parse-pdf", response_model=ParsePdfResponse)
 async def api_parse_resume_pdf(file: UploadFile = File(...)) -> ParsePdfResponse:
     """Extract text from uploaded PDF resume."""
-    if not file.filename or not file.filename.lower().endswith(".pdf"):
-        raise HTTPException(400, "Expected a PDF file")
+    tmp_path: Path | None = None
     try:
+        if not file.filename or not file.filename.lower().endswith(".pdf"):
+            raise HTTPException(400, "Expected a PDF file")
         body = await file.read()
-    except Exception as e:
-        raise HTTPException(400, f"Failed to read file: {e}")
-    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
-        tmp.write(body)
-        tmp_path = Path(tmp.name)
-    try:
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+            tmp.write(body)
+            tmp_path = Path(tmp.name)
         content = await asyncio.to_thread(extract_text_from_pdf, tmp_path)
+        return ParsePdfResponse(content=content)
+    except HTTPException:
+        raise
     except Exception as e:
-        tmp_path.unlink(missing_ok=True)
-        raise HTTPException(422, f"PDF parsing failed: {e}")
-    tmp_path.unlink(missing_ok=True)
-    return ParsePdfResponse(content=content)
+        logger.exception("parse-pdf failed: %s", e)
+        raise HTTPException(500, detail=f"PDF error: {e!s}")
+    finally:
+        if tmp_path is not None:
+            try:
+                tmp_path.unlink(missing_ok=True)
+            except OSError:
+                pass
 
 
 @router.post("/job/parse", response_model=JobPostingOut)
@@ -319,6 +324,12 @@ async def api_settings() -> SettingsResponse:
 app.include_router(router)
 
 
-def run_api(host: str = "0.0.0.0", port: int = 8000) -> None:
+def run_api(host: str = "0.0.0.0", port: int = 8000, reload: bool = False) -> None:
     import uvicorn
-    uvicorn.run("hr_breaker.api:app", host=host, port=port, reload=False)
+    uvicorn.run(
+        "hr_breaker.api:app",
+        host=host,
+        port=port,
+        reload=reload,
+        reload_dirs=["src"] if reload else None,
+    )

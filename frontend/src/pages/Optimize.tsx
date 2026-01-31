@@ -69,7 +69,13 @@ export default function Optimize() {
         setResult(null);
         setStage("idle");
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Не удалось распознать PDF");
+        const msg = e instanceof Error ? e.message : "Не удалось распознать PDF";
+        setError(
+          msg +
+            (msg.includes("500") || msg.includes("NetworkError")
+              ? " Запустите бэкенд: uv run uvicorn hr_breaker.api:app --reload --port 8000"
+              : "")
+        );
       }
       return;
     }

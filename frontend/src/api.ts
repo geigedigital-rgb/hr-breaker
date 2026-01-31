@@ -1,5 +1,15 @@
 const API = "/api";
 
+async function parseJsonOrThrow<T>(r: Response): Promise<T> {
+  const text = await r.text();
+  if (!text.trim()) throw new Error(r.ok ? "Empty response" : r.statusText || "Request failed");
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new Error(r.ok ? "Invalid JSON response" : text || r.statusText);
+  }
+}
+
 export type ExtractNameResponse = { first_name: string | null; last_name: string | null };
 export type JobPostingOut = {
   title: string;
@@ -46,8 +56,9 @@ export async function extractName(content: string): Promise<ExtractNameResponse>
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ content }),
   });
-  if (!r.ok) throw new Error(await r.text());
-  return r.json();
+  const data = await parseJsonOrThrow<ExtractNameResponse & { detail?: string }>(r);
+  if (!r.ok) throw new Error(data.detail || r.statusText);
+  return data;
 }
 
 export type ParsePdfResponse = { content: string };
@@ -59,17 +70,9 @@ export async function parseResumePdf(file: File): Promise<ParsePdfResponse> {
     method: "POST",
     body: form,
   });
-  if (!r.ok) {
-    const t = await r.text();
-    try {
-      const j = JSON.parse(t);
-      throw new Error(j.detail || t);
-    } catch (e) {
-      if (e instanceof Error) throw e;
-      throw new Error(t);
-    }
-  }
-  return r.json();
+  const data = await parseJsonOrThrow<ParsePdfResponse & { detail?: string }>(r);
+  if (!r.ok) throw new Error(data.detail || r.statusText);
+  return data;
 }
 
 export async function parseJob(params: { url?: string; text?: string }): Promise<JobPostingOut> {
@@ -78,17 +81,9 @@ export async function parseJob(params: { url?: string; text?: string }): Promise
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(params),
   });
-  if (!r.ok) {
-    const t = await r.text();
-    try {
-      const j = JSON.parse(t);
-      throw new Error(j.detail || t);
-    } catch (e) {
-      if (e instanceof Error) throw e;
-      throw new Error(t);
-    }
-  }
-  return r.json();
+  const data = await parseJsonOrThrow<JobPostingOut & { detail?: string }>(r);
+  if (!r.ok) throw new Error(data.detail || r.statusText);
+  return data;
 }
 
 export async function optimize(params: {
@@ -103,15 +98,16 @@ export async function optimize(params: {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(params),
   });
-  const data = await r.json();
+  const data = await parseJsonOrThrow<OptimizeResponse & { detail?: string }>(r);
   if (!r.ok) throw new Error(data.detail || "Optimize failed");
   return data;
 }
 
 export async function getHistory(): Promise<HistoryResponse> {
   const r = await fetch(`${API}/history`);
-  if (!r.ok) throw new Error(await r.text());
-  return r.json();
+  const data = await parseJsonOrThrow<HistoryResponse>(r);
+  if (!r.ok) throw new Error((data as { detail?: string }).detail || r.statusText);
+  return data;
 }
 
 export function downloadUrl(filename: string): string {
@@ -120,6 +116,7 @@ export function downloadUrl(filename: string): string {
 
 export async function getSettings(): Promise<SettingsResponse> {
   const r = await fetch(`${API}/settings`);
-  if (!r.ok) throw new Error(await r.text());
-  return r.json();
+  const data = await parseJsonOrThrow<SettingsResponse>(r);
+  if (!r.ok) throw new Error((data as { detail?: string }).detail || r.statusText);
+  return data;
 }
