@@ -51,3 +51,7 @@ en_core_web_*
 
 # Sentence transformers cache
 .cache/torch/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/

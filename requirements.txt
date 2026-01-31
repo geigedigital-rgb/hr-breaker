@@ -1,6 +1,8 @@
 # Runtime dependencies (mirror of pyproject.toml [project.dependencies])
 # For install from repo: pip install .  (preferred)
 # For pip-only: pip install -r requirements.txt
+fastapi>=0.115
+uvicorn[standard]>=0.32
 streamlit>=1.30
 pydantic>=2.0
 pydantic-ai

@@ -15,6 +15,8 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
 ]
 dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
     "streamlit>=1.30",
     "pydantic>=2.0",
     "pydantic-ai",
@@ -38,6 +40,7 @@ dependencies = [
 
 [project.scripts]
 hr-breaker = "hr_breaker.cli:cli"
+hr-breaker-api = "hr_breaker.api:run_api"
 
 [project.urls]
 Homepage = "https://github.com/btseytlin/hr-breaker"

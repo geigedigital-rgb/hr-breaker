@@ -35,13 +35,23 @@ uv sync
 cp .env.example .env
 # Edit .env and add your GOOGLE_API_KEY
 
-# Run web UI
+# Run web UI (Streamlit)
 uv run streamlit run src/hr_breaker/main.py
+
+# Or run React UI (API + frontend)
+uv run hr-breaker-api          # Backend on http://127.0.0.1:8000
+cd frontend && npm install && npm run dev   # Frontend on http://localhost:5173
 ```
 
 ## Usage
 
-### Web UI
+### Web UI (React + Headless UI)
+
+1. Start API: `uv run hr-breaker-api` (port 8000)
+2. Start frontend: `cd frontend && npm run dev` (port 5173)
+3. Open http://localhost:5173 — Оптимизация, История, Настройки. Цвета: #F9F9F9, #2E9FFF, #FFFFFF.
+
+### Web UI (Streamlit)
 
 Launch with `uv run streamlit run src/hr_breaker/main.py`
 
