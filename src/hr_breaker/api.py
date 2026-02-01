@@ -36,6 +36,17 @@ app.add_middleware(
 router = APIRouter(prefix="/api", tags=["api"])
 pdf_storage = PDFStorage()
 
+# User-facing message when Google returns "API key not valid"
+_API_KEY_INVALID_MSG = (
+    "API key not valid. Get a key from https://aistudio.google.com/apikey (not from GCP Console). "
+    "In .env use one line: GOOGLE_API_KEY=AIza... with no quotes or spaces."
+)
+
+
+def _is_api_key_invalid(exc: BaseException) -> bool:
+    msg = str(exc).lower()
+    return "api key not valid" in msg or "api_key_invalid" in msg
+
 
 # --- Request/Response schemas ---
 
@@ -221,11 +232,11 @@ async def api_optimize(req: OptimizeRequest) -> OptimizeResponse:
         raise HTTPException(400, "Provide job_text or job_url")
 
     source = ResumeSource(content=req.resume_content)
-    first_name, last_name = await extract_name(req.resume_content)
-    source.first_name = first_name
-    source.last_name = last_name
 
     try:
+        first_name, last_name = await extract_name(req.resume_content)
+        source.first_name = first_name
+        source.last_name = last_name
         optimized, validation, job = await optimize_for_job(
             source,
             job_text=job_text,

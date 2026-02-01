@@ -614,20 +614,29 @@ export default function Optimize() {
                     <h2 className="text-sm font-semibold uppercase tracking-wider text-[var(--text-muted)]">
                       Результат
                     </h2>
-                    <p className="text-base font-medium text-green-600">
-                      Готово. {atsValue != null && `ATS match: ${atsValue}%. `}
-                      {keywordsValue != null && `Ключевые слова: ${Math.round(keywordsValue.score * 100)}%.`}
-                    </p>
-                    {result.pdf_filename && result.pdf_base64 && (
-                      <a
-                        href={`data:application/pdf;base64,${result.pdf_base64}`}
-                        download={result.pdf_filename}
-                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#4578FC] text-white text-sm font-medium hover:bg-[#3a6ae8] transition-colors"
-                      >
-                        Скачать PDF
-                      </a>
+                    {result.error ? (
+                      <>
+                        <p className="text-base font-medium text-red-600">Ошибка</p>
+                        <p className="text-sm text-red-600 whitespace-pre-wrap">{result.error}</p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-base font-medium text-green-600">
+                          Готово. {atsValue != null && `ATS match: ${atsValue}%. `}
+                          {keywordsValue != null && `Ключевые слова: ${Math.round(keywordsValue.score * 100)}%.`}
+                        </p>
+                        {result.pdf_filename && result.pdf_base64 && (
+                          <a
+                            href={`data:application/pdf;base64,${result.pdf_base64}`}
+                            download={result.pdf_filename}
+                            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#4578FC] text-white text-sm font-medium hover:bg-[#3a6ae8] transition-colors"
+                          >
+                            Скачать PDF
+                          </a>
+                        )}
+                      </>
                     )}
-                    {result.error && <p className="text-sm text-red-600">{result.error}</p>}
+                    {result.validation.results.length > 0 && (
                     <Disclosure>
                       <DisclosureButton className="text-sm font-medium text-[var(--text-muted)] hover:text-[#181819]">
                         Детали проверок
@@ -645,6 +654,7 @@ export default function Optimize() {
                         ))}
                       </DisclosurePanel>
                     </Disclosure>
+                    )}
                   </div>
                 )}
               </>
