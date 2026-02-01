@@ -14,8 +14,9 @@ from fastapi.responses import FileResponse
 from fastapi import FastAPI
 from pydantic import BaseModel
 
-from hr_breaker.agents import extract_name, parse_job_posting
+from hr_breaker.agents import extract_name, parse_job_posting, score_resume_vs_job
 from hr_breaker.config import get_settings
+from hr_breaker.filters.keyword_matcher import check_keywords
 from hr_breaker.services.pdf_parser import extract_text_from_pdf
 from hr_breaker.models import GeneratedPDF, JobPosting, ResumeSource, ValidationResult
 from hr_breaker.orchestration import optimize_for_job
@@ -48,6 +49,13 @@ def _is_api_key_invalid(exc: BaseException) -> bool:
     return "api key not valid" in msg or "api_key_invalid" in msg
 
 
+def _sanitize_url(url: str) -> str:
+    """Remove newlines and trim; avoids 'Invalid non-printable ASCII character in URL'."""
+    if not url:
+        return url
+    return url.strip().replace("\n", "").replace("\r", "").strip()
+
+
 # --- Request/Response schemas ---
 
 
@@ -75,6 +83,18 @@ class OptimizeRequest(BaseModel):
     job_url: str | None = None
     max_iterations: int | None = None
     parallel: bool = True
+
+
+class AnalyzeRequest(BaseModel):
+    resume_content: str
+    job_text: str | None = None
+    job_url: str | None = None
+
+
+class AnalyzeResponse(BaseModel):
+    ats_score: int  # 0-100
+    keyword_score: float
+    keyword_threshold: float
 
 
 class FilterResultOut(BaseModel):
@@ -203,6 +223,44 @@ async def api_parse_job(req: JobParseRequest) -> JobPostingOut:
     )
 
 
+@router.post("/analyze", response_model=AnalyzeResponse)
+async def api_analyze(req: AnalyzeRequest) -> AnalyzeResponse:
+    """Pre-assessment: score current resume vs job (ATS + keywords) before optimization."""
+    settings = get_settings()
+    if not settings.google_api_key:
+        raise HTTPException(503, "GOOGLE_API_KEY not set. Add it to .env and restart the backend.")
+
+    job_text = req.job_text
+    if req.job_url and not job_text:
+        url = _sanitize_url(req.job_url)
+        try:
+            job_text = await asyncio.to_thread(scrape_job_posting, url)
+        except CloudflareBlockedError:
+            raise HTTPException(422, "Job URL blocked by bot protection. Paste text instead.")
+        except Exception as e:
+            raise HTTPException(422, str(e))
+    if not job_text:
+        raise HTTPException(400, "Provide job_text or job_url")
+
+    try:
+        job = await parse_job_posting(job_text)
+    except Exception as e:
+        logger.exception("analyze job parse failed: %s", e)
+        if _is_api_key_invalid(e):
+            raise HTTPException(401, _API_KEY_INVALID_MSG)
+        raise HTTPException(500, f"Job parse failed: {e!s}")
+
+    kw_result = await asyncio.to_thread(
+        check_keywords, req.resume_content.strip(), job
+    )
+    ats_score = await score_resume_vs_job(req.resume_content.strip(), job)
+    return AnalyzeResponse(
+        ats_score=ats_score,
+        keyword_score=kw_result.score,
+        keyword_threshold=settings.filter_keyword_threshold,
+    )
+
+
 @router.post("/optimize", response_model=OptimizeResponse)
 async def api_optimize(req: OptimizeRequest) -> OptimizeResponse:
     """Run full optimization: parse job (if needed), optimize, save PDF, return result."""
@@ -212,8 +270,9 @@ async def api_optimize(req: OptimizeRequest) -> OptimizeResponse:
 
     job_text = req.job_text
     if req.job_url and not job_text:
+        url = _sanitize_url(req.job_url)
         try:
-            job_text = await asyncio.to_thread(scrape_job_posting, req.job_url)
+            job_text = await asyncio.to_thread(scrape_job_posting, url)
         except CloudflareBlockedError:
             return OptimizeResponse(
                 success=False,

@@ -86,6 +86,27 @@ export async function parseJob(params: { url?: string; text?: string }): Promise
   return data;
 }
 
+export type AnalyzeResponse = {
+  ats_score: number;
+  keyword_score: number;
+  keyword_threshold: number;
+};
+
+export async function analyze(params: {
+  resume_content: string;
+  job_text?: string;
+  job_url?: string;
+}): Promise<AnalyzeResponse> {
+  const r = await fetch(`${API}/analyze`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params),
+  });
+  const data = await parseJsonOrThrow<AnalyzeResponse & { detail?: string }>(r);
+  if (!r.ok) throw new Error(data.detail || r.statusText);
+  return data;
+}
+
 export async function optimize(params: {
   resume_content: string;
   job_text?: string;

@@ -138,6 +138,8 @@ export default function Optimize() {
   const [parsedJob, setParsedJob] = useState<api.JobPostingOut | null>(null);
   const [isParsingJob, setIsParsingJob] = useState(false);
   const [scanProgress, setScanProgress] = useState(0);
+  const [preScores, setPreScores] = useState<api.AnalyzeResponse | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const hasResume = !!resumeContent.trim();
@@ -206,6 +208,19 @@ export default function Optimize() {
       clearInterval(interval);
     };
   }, [stage]);
+
+  // После перехода в «Оценка» — запросить баллы «до» (ATS + ключевые слова)
+  useEffect(() => {
+    if (stage !== "assessment" || !hasResume || !hasJob || result != null) return;
+    setIsAnalyzing(true);
+    setPreScores(null);
+    const jobPayload = jobMode === "text" ? { job_text: jobInput.trim() } : { job_url: jobInput.trim() };
+    api
+      .analyze({ resume_content: resumeContent.trim(), ...jobPayload })
+      .then(setPreScores)
+      .catch(() => setPreScores(null))
+      .finally(() => setIsAnalyzing(false));
+  }, [stage, hasResume, hasJob, jobMode, jobInput, resumeContent, result]);
 
   async function handleResumePaste() {
     if (!resumeContent.trim()) return;
@@ -544,12 +559,24 @@ export default function Optimize() {
                 <div className="rounded-2xl bg-[#FFFFFF] p-5 flex items-center justify-between gap-4">
                   <div className="flex items-center gap-4">
                     <div className="w-14 h-14 rounded-full flex items-center justify-center text-lg font-bold text-[#4578FC] bg-[#EBEDF5]">
-                      {result && atsValue != null ? `${atsValue}%` : "—"}
+                      {result && atsValue != null
+                        ? `${atsValue}%`
+                        : isAnalyzing
+                          ? "…"
+                          : preScores != null
+                            ? `${preScores.ats_score}%`
+                            : "—"}
                     </div>
                     <div>
                       <p className="font-semibold text-[#181819]">ATS match</p>
                       <p className="text-sm text-[var(--text-muted)]">
-                        {result ? (result.validation.passed ? "Резюме проходит автоматический отбор." : "Есть что улучшить.") : "Соответствие резюме вакансии."}
+                        {result
+                          ? (result.validation.passed ? "Резюме проходит автоматический отбор." : "Есть что улучшить.")
+                          : isAnalyzing
+                            ? "Анализ резюме…"
+                            : preScores != null
+                              ? "Соответствие резюме вакансии (до улучшения)."
+                              : "Соответствие резюме вакансии."}
                       </p>
                     </div>
                   </div>
@@ -571,12 +598,22 @@ export default function Optimize() {
                     <div className="w-14 h-14 rounded-full flex items-center justify-center text-sm font-bold text-[#4578FC] bg-[#EBEDF5]">
                       {result && keywordsValue != null
                         ? `${Math.round(keywordsValue.score * 100)}%`
-                        : "—"}
+                        : isAnalyzing
+                          ? "…"
+                          : preScores != null
+                            ? `${Math.round(preScores.keyword_score * 100)}%`
+                            : "—"}
                     </div>
                     <div>
                       <p className="font-semibold text-[#181819]">Ключевые слова</p>
                       <p className="text-sm text-[var(--text-muted)]">
-                        {result ? "Покрытие ключевых слов из вакансии." : "Шанс попасть в топ-10 кандидатов."}
+                        {result
+                          ? "Покрытие ключевых слов из вакансии."
+                          : isAnalyzing
+                            ? "Анализ…"
+                            : preScores != null
+                              ? "Покрытие ключевых слов (до улучшения)."
+                              : "Шанс попасть в топ-10 кандидатов."}
                       </p>
                     </div>
                   </div>

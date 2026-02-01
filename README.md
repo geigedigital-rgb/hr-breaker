@@ -31,6 +31,10 @@ Resume optimization tool that transforms any resume into a job-specific, ATS-fri
 # Install
 uv sync
 
+# macOS: WeasyPrint needs system libs (for PDF export)
+brew install pango gdk-pixbuf libffi
+export DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib   # Apple Silicon; Intel: /usr/local/lib
+
 # Configure — API key for AI (Gemini)
 cp .env.example .env
 # Open .env and replace your-api-key-here with your real key:
@@ -111,6 +115,31 @@ uv run hr-breaker list
 | `MAX_ITERATIONS` | No | Optimization loop limit (default: 5) |
 
 See `.env.example` for all available options (filter thresholds, scraper settings, etc.)
+
+---
+
+## Troubleshooting
+
+**WeasyPrint libraries not found (macOS)**  
+PDF-рендер требует системных библиотек. Установите и укажите путь:
+
+```bash
+brew install pango gdk-pixbuf libffi
+export DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib   # Apple Silicon
+# или для Intel Mac: export DYLD_FALLBACK_LIBRARY_PATH=/usr/local/lib
+```
+
+Затем перезапустите бэкенд (uvicorn). Либо запускайте с переменной в одной команде:
+
+```bash
+DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib uvicorn hr_breaker.api:app --reload --port 8000 --reload-dir src
+```
+
+**Ускорение «Улучшить резюме»**  
+- Первый запуск скачивает модель sentence-transformers (~90 MB) — дальше быстрее.  
+- В `.env`: `GEMINI_THINKING_BUDGET=1024` (меньше — быстрее ответ Gemini), `GEMINI_PRO_MODEL=gemini-2.5-flash` и `GEMINI_FLASH_MODEL=gemini-2.5-flash` для более быстрых моделей.  
+- Меньше итераций: `MAX_ITERATIONS=2` — быстрее первый результат (качество может быть чуть ниже).  
+- `HR_BREAKER_FAST_MODE=true` (по умолчанию) — фильтры запускаются параллельно.
 
 ---
 
