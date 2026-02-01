@@ -155,6 +155,10 @@ async def api_parse_resume_pdf(file: UploadFile = File(...)) -> ParsePdfResponse
 @router.post("/job/parse", response_model=JobPostingOut)
 async def api_parse_job(req: JobParseRequest) -> JobPostingOut:
     """Parse job from URL (scrape first) or raw text."""
+    settings = get_settings()
+    if not settings.google_api_key:
+        raise HTTPException(503, "GOOGLE_API_KEY not set. Add it to .env and restart the backend.")
+
     if req.url and req.text:
         raise HTTPException(400, "Provide either url or text, not both")
     if req.url:
@@ -171,7 +175,14 @@ async def api_parse_job(req: JobParseRequest) -> JobPostingOut:
     else:
         raise HTTPException(400, "Provide url or text")
 
-    job = await parse_job_posting(job_text)
+    try:
+        job = await parse_job_posting(job_text)
+    except Exception as e:
+        logger.exception("job/parse failed: %s", e)
+        if _is_api_key_invalid(e):
+            raise HTTPException(401, _API_KEY_INVALID_MSG)
+        raise HTTPException(500, f"Job parse failed: {e!s}")
+
     return JobPostingOut(
         title=job.title,
         company=job.company,
@@ -186,7 +197,7 @@ async def api_optimize(req: OptimizeRequest) -> OptimizeResponse:
     """Run full optimization: parse job (if needed), optimize, save PDF, return result."""
     settings = get_settings()
     if not settings.google_api_key:
-        raise HTTPException(503, "GOOGLE_API_KEY not set")
+        raise HTTPException(503, "GOOGLE_API_KEY not set. Add it to .env and restart the backend.")
 
     job_text = req.job_text
     if req.job_url and not job_text:
@@ -223,11 +234,12 @@ async def api_optimize(req: OptimizeRequest) -> OptimizeResponse:
         )
     except Exception as e:
         logger.exception("Optimize failed")
+        err_msg = _API_KEY_INVALID_MSG if _is_api_key_invalid(e) else str(e)
         return OptimizeResponse(
             success=False,
             validation=ValidationResultOut(passed=False, results=[]),
             job=JobPostingOut(title="", company="", requirements=[], keywords=[], description=""),
-            error=str(e),
+            error=err_msg,
         )
 
     validation_out = ValidationResultOut(

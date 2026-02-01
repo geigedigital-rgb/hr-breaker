@@ -98,7 +98,9 @@ uv run hr-breaker list
    ```
 3. Перезапустите бэкенд (API). Файл `.env` не коммитится в git.
 
-Ключ берётся в [Google AI Studio](https://aistudio.google.com/apikey). Остальные переменные опциональны.
+Ключ берётся в [Google AI Studio](https://aistudio.google.com/apikey) (не из Google Cloud Console). Остальные переменные опциональны.
+
+**Если в логах «API key not valid»:** возьмите ключ именно из [aistudio.google.com/apikey](https://aistudio.google.com/apikey); в `.env` — одна строка `GOOGLE_API_KEY=AIza...` без кавычек и пробелов; при необходимости создайте новый ключ и подставьте его.
 
 | Variable | Required | Description |
 |----------|----------|-------------|
