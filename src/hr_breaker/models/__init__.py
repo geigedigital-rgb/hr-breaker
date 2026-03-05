@@ -1,4 +1,4 @@
-from .resume import ResumeSource, OptimizedResume
+from .resume import ChangeDetail, ResumeSource, OptimizedResume
 from .resume_data import (
     ResumeData,
     RenderResult,
@@ -12,6 +12,7 @@ from .feedback import FilterResult, ValidationResult, GeneratedPDF
 from .iteration import IterationContext
 
 __all__ = [
+    "ChangeDetail",
     "ResumeSource",
     "OptimizedResume",
     "ResumeData",

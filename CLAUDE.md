@@ -40,6 +40,27 @@ GEMINI_PRO_MODEL=gemini-2.5-flash
 GEMINI_FLASH_MODEL=gemini-2.5-flash
 ```
 
+### Почему этап «Генерация резюме (LLM)» долгий и как ускорить
+
+**Почему долго:** Один вызов LLM (модель `GEMINI_PRO_MODEL`, по умолчанию тяжёлая) генерирует весь HTML резюме за один раз. Прогресс в UI обновляется только до и после этого вызова, поэтому процент «зависает» на 20–30% на всё время ответа модели (30 сек – 2+ мин). У оптимизатора есть инструменты (tools): проверка длины через полный рендер PDF, превью (PDF→картинка), проверка ключевых слов — если модель их вызывает, каждый вызов добавляет задержку (особенно рендер WeasyPrint).
+
+**Варианты ускорения:**
+
+1. **Быстрая модель для генерации** (самый простой эффект):
+   - В `.env`: `GEMINI_PRO_MODEL=gemini-2.5-flash` (или `gemini-2.0-flash`). Flash отвечает в разы быстрее Pro, качество для резюме часто достаточное.
+
+2. **Уменьшить thinking budget** (если используется модель с «думанием»):
+   - В `.env`: `GEMINI_THINKING_BUDGET=1024` или `0` — меньше «внутренних» токенов, быстрее ответ.
+
+3. **Меньше итераций**:
+   - В `.env`: `MAX_ITERATIONS=1` или `2` — меньше повторных прогонов LLM при провале фильтров.
+
+4. **Один проход без лишних проверок**:
+   - Сейчас оптимизатор может вызывать инструменты (рендер PDF для проверки длины/превью). Ускорение: в коде отключить или упростить тяжёлые tools (например, не делать полный рендер внутри агента, а только оценку по длине текста).
+
+5. **Прогресс не «зависает»**:
+   - Во время одного долгого вызова LLM бэкенд может периодически слать тот же процент (heartbeat), чтобы UI показывал, что процесс жив (см. orchestration).
+
 ## Current Implementation
 
 ### Structure
@@ -83,9 +104,11 @@ To add filter: subclass `BaseFilter`, set `name` and `priority`, use `@FilterReg
 ### Services
 - `renderer.py` - HTMLRenderer (WeasyPrint)
 - `job_scraper.py` - Scrape job URLs (httpx → Wayback → Playwright fallback)
+- **Protected sites (e.g. StepStone):** (1) Playwright uses viewport 1920×1080, locale, and optional [playwright-stealth](https://pypi.org/project/playwright-stealth/) to reduce bot detection. Install with `uv pip install 'hr-breaker[stealth]'`. Env: `SCRAPER_USE_STEALTH=true`, `SCRAPER_PLAYWRIGHT_LOCALE=de-DE`. (2) **Apify:** optional paid StepStone scrapers (e.g. [fatihtahta/stepstone-scraper-fast-reliable-4-1k](https://apify.com/fatihtahta/stepstone-scraper-fast-reliable-4-1k)). Set `APIFY_TOKEN`, `SCRAPER_USE_APIFY=true`, install `uv pip install 'hr-breaker[apify]'`. Apify is tried after wayback, before Playwright, only when URL domain is in `SCRAPER_APIFY_DOMAINS`.
 - `pdf_parser.py` - Extract text from PDF
 - `cache.py` - Resume caching
-- `pdf_storage.py` - Save/list generated PDFs
+- `pdf_storage.py` - Save/list generated PDFs; optional Postgres (Neon) via `DATABASE_URL` and `uv pip install 'hr-breaker[db]'` — API then uses DB for history instead of index.json; PDF/source files stay on disk.
+- `services/db.py` - asyncpg pool, table `generated_resumes`, insert/list/delete (used when DATABASE_URL set).
 - `length_estimator.py` - Content length estimation for resume sizing
 
 ### Commands

@@ -8,6 +8,7 @@ from hr_breaker.models import JobPosting
 SYSTEM_PROMPT = """You are a job posting parser. Extract ONLY what is explicitly stated in the text.
 
 Rules (strict):
+- Preserve the original language of the job posting in all extracted fields; do not translate.
 - Extract exactly what appears in the source. Do NOT invent, add, paraphrase, or infer.
 - If a field is not clearly present in the text, leave it empty: title="" or company="" or requirements=[] or keywords=[] or description="".
 - Do NOT write summaries or descriptions that are not in the source. For description, use only verbatim or near-verbatim excerpts from the text, or leave empty.

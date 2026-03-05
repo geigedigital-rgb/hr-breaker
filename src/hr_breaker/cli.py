@@ -1,6 +1,7 @@
 """CLI interface for HR-Breaker."""
 
 import asyncio
+from datetime import datetime
 from pathlib import Path
 
 import click
@@ -111,7 +112,10 @@ def optimize(
     # Save final PDF (reuse bytes from last iteration)
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     if output is None:
-        output = OUTPUT_DIR / pdf_storage.generate_path(first_name, last_name, job.company, job.title).name
+        output = OUTPUT_DIR / pdf_storage.generate_path(
+            first_name, last_name, job.company, job.title,
+            unique_suffix=datetime.now().strftime("%Y%m%d_%H%M%S"),
+        ).name
 
     if not optimized.pdf_bytes:
         raise click.ClickException("No PDF generated (render failed)")

@@ -5,6 +5,15 @@ from pathlib import Path
 import fitz  # pymupdf
 
 
+def extract_text_from_pdf_bytes(pdf_bytes: bytes) -> str:
+    """Extract text from PDF bytes (e.g. in-memory generated PDF)."""
+    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+    try:
+        return "\n".join(page.get_text() for page in doc)
+    finally:
+        doc.close()
+
+
 def extract_text_from_pdf(pdf_path: Path) -> str:
     """Extract text from PDF file.
 

@@ -8,6 +8,14 @@ from pydantic import BaseModel, Field, computed_field, model_validator
 from hr_breaker.models.resume_data import ResumeData
 
 
+class ChangeDetail(BaseModel):
+    """Structured change for one category (e.g. skills, experience)."""
+
+    category: str  # e.g. "Навыки", "Опыт", "Ключевые слова"
+    description: str | None = None  # optional short description
+    items: list[str] = Field(default_factory=list)  # labels/skills for this category
+
+
 class ResumeSource(BaseModel):
     """Original resume as uploaded by user."""
 
@@ -41,8 +49,19 @@ class OptimizedResume(BaseModel):
     data: ResumeData | None = None  # Used by LaTeX renderer (legacy)
     html: str | None = None  # Used by HTML renderer (LLM-generated body)
     iteration: int = 0
-    changes: list[str] = Field(default_factory=list)
+    changes: list[ChangeDetail] = Field(default_factory=list)
     source_checksum: str
     pdf_text: str | None = None
     pdf_bytes: bytes | None = None
     pdf_path: Path | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def changes_accept_legacy_strings(cls, data: Any) -> Any:
+        """Accept legacy list[str] as single category 'Изменения'."""
+        if not isinstance(data, dict) or "changes" not in data:
+            return data
+        raw = data["changes"]
+        if isinstance(raw, list) and raw and isinstance(raw[0], str):
+            data["changes"] = [ChangeDetail(category="Изменения", items=raw)]
+        return data

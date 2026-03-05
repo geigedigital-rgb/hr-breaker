@@ -2,6 +2,7 @@ import asyncio
 import subprocess
 import sys
 import tempfile
+from datetime import datetime
 from pathlib import Path
 
 import nest_asyncio
@@ -302,7 +303,8 @@ if clicked:
     pdf_path = None
     if optimized and optimized.pdf_bytes:
         pdf_path = pdf_storage.generate_path(
-            source.first_name, source.last_name, job.company, job.title
+            source.first_name, source.last_name, job.company, job.title,
+            unique_suffix=datetime.now().strftime("%Y%m%d_%H%M%S"),
         )
         pdf_path.parent.mkdir(parents=True, exist_ok=True)
         pdf_path.write_bytes(optimized.pdf_bytes)

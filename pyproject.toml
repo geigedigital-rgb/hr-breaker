@@ -16,6 +16,8 @@ classifiers = [
 ]
 dependencies = [
     "fastapi>=0.115",
+    "passlib[bcrypt]>=1.7",
+    "pyjwt[crypto]>=2.8",
     "uvicorn[standard]>=0.32",
     "streamlit>=1.30",
     "pydantic>=2.0",
@@ -30,12 +32,14 @@ dependencies = [
     "python-dotenv",
     "click>=8.0",
     "pymupdf>=1.24",
+    "python-docx>=1.0",
     "importlib-metadata>=6.0,<8.0",
     "weasyprint>=60.0",
     "jinja2>=3.1",
     "watchdog>=6.0.0",
     "nest-asyncio>=1.6.0",
     "playwright>=1.40",
+    "stripe>=11.0",
 ]
 
 [project.scripts]
@@ -51,6 +55,19 @@ Issues = "https://github.com/btseytlin/hr-breaker/issues"
 dev = [
     "pytest>=7.0",
     "pytest-asyncio",
+]
+stealth = [
+    "playwright-stealth>=2.0",
+]
+apify = [
+    "apify-client>=1.0",
+]
+db = [
+    "asyncpg>=0.29",
+]
+auth = [
+    "passlib[bcrypt]>=1.7",
+    "pyjwt[crypto]>=2.8",
 ]
 
 [build-system]

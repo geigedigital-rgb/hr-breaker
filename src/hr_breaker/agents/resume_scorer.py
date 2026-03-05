@@ -50,3 +50,53 @@ async def score_resume_vs_job(resume_text: str, job: JobPosting) -> int:
     prompt = f"## Job:\n{summary}\n\n## Resume (text):\n{resume_text[:6000]}"
     result = await agent.run(prompt)
     return max(0, min(100, result.output.score))
+
+
+class BreakdownScores(BaseModel):
+    """Independent scores 0-100: Skills, Experience, Portfolio."""
+
+    skills: int  # match of skills/keywords to job
+    experience: int  # relevance of work experience to job
+    portfolio: int  # projects, achievements, certifications relevance
+    improvement_tips: str | None = None  # optional: short text with headers and tips for better match
+
+
+BREAKDOWN_SYSTEM = """You are an ATS analyst. Given a resume (plain text) and a job posting summary, output three independent scores 0-100 and optional improvement tips.
+
+SCORES (required, integers 0-100):
+- skills: How well the resume's skills and keywords match the job requirements (tools, technologies, methodologies).
+- experience: How relevant the candidate's work experience is to the role (titles, domains, seniority).
+- portfolio: How well projects, achievements, certifications, or education match what the job values.
+
+IMPROVEMENT_TIPS (optional): If the resume could be improved for this job, provide a short text in Russian (2-4 blocks). Each block: a clear header (e.g. "Ключевые слова", "Опыт", "Структура") and 1-2 short sentences with concrete tips for better match. Use line breaks between blocks. If the resume is already an excellent match (scores high), you may leave improvement_tips empty or null.
+
+Be strict but fair. Output valid integers 0-100 for each score field."""
+
+
+@lru_cache
+def get_breakdown_scorer_agent() -> Agent:
+    settings = get_settings()
+    return Agent(
+        f"google-gla:{settings.gemini_flash_model}",
+        output_type=BreakdownScores,
+        system_prompt=BREAKDOWN_SYSTEM,
+        model_settings=get_model_settings(),
+    )
+
+
+async def get_breakdown_scores(resume_text: str, job: JobPosting) -> BreakdownScores:
+    """Return independent Skills, Experience, Portfolio scores 0-100 and optional improvement_tips from LLM."""
+    agent = get_breakdown_scorer_agent()
+    summary = _job_summary(job)
+    prompt = f"## Job:\n{summary}\n\n## Resume (text):\n{resume_text[:6000]}"
+    result = await agent.run(prompt)
+    out = result.output
+    tips = getattr(out, "improvement_tips", None)
+    if isinstance(tips, str):
+        tips = tips.strip() or None
+    return BreakdownScores(
+        skills=max(0, min(100, out.skills)),
+        experience=max(0, min(100, out.experience)),
+        portfolio=max(0, min(100, out.portfolio)),
+        improvement_tips=tips,
+    )
