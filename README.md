@@ -141,6 +141,9 @@ DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib uvicorn hr_breaker.api:app --reload
 - Меньше итераций: `MAX_ITERATIONS=2` — быстрее первый результат (качество может быть чуть ниже).  
 - `HR_BREAKER_FAST_MODE=true` (по умолчанию) — фильтры запускаются параллельно.
 
+**httpx.ReadTimeout в логах**  
+Запрос к Gemini занял дольше, чем разрешает таймаут HTTP-клиента. Что делать: использовать быстрые модели (`gemini-2.5-flash`), уменьшить `GEMINI_THINKING_BUDGET` (например до 1024), поставить `MAX_ITERATIONS=2`. После этого повторить «Улучшить резюме».
+
 ---
 
 ## Architecture
