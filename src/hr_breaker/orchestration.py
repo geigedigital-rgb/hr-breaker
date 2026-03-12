@@ -142,11 +142,11 @@ async def optimize_for_job(
         if job_text is None:
             raise ValueError("Either job_text or job must be provided")
         if on_progress:
-            on_progress(12, "Парсинг вакансии…")
+            on_progress(12, "Parsing job…")
         with log_time("parse_job_posting"):
             job = await parse_job_posting(job_text)
         if on_progress:
-            on_progress(15, "Вакансия распознана")
+            on_progress(15, "Job parsed")
     optimized = None
     validation = None
     last_attempt: str | None = None
@@ -154,12 +154,12 @@ async def optimize_for_job(
     for i in range(max_iterations):
         logger.debug(f"Iteration {i + 1}/{max_iterations}")
         progress_pct = max(15, _progress_percent_iteration(i, max_iterations, "generate") - 8)
-        progress_msg = f"Итерация {i + 1}: генерация резюме (LLM)…"
+        progress_msg = f"Iteration {i + 1}: generating resume (LLM)…"
         if on_progress:
             on_progress(progress_pct, progress_msg)
 
         async def _heartbeat() -> None:
-            """Периодически повторять прогресс, чтобы UI не казался зависшим во время долгого вызова LLM."""
+            """Repeat progress so UI does not appear stuck during long LLM call."""
             while True:
                 await asyncio.sleep(8)
                 if on_progress:
@@ -183,7 +183,7 @@ async def optimize_for_job(
                 except asyncio.CancelledError:
                     pass
         if on_progress:
-            on_progress(_progress_percent_iteration(i, max_iterations, "generate"), "Резюме сгенерировано")
+            on_progress(_progress_percent_iteration(i, max_iterations, "generate"), "Resume generated")
         logger.debug(f"Optimizer changes: {optimized.changes}")
         # Store last attempt for feedback (html or data depending on mode)
         last_attempt = optimized.html if optimized.html else (
@@ -193,15 +193,15 @@ async def optimize_for_job(
         if on_progress:
             on_progress(
                 _progress_percent_iteration(i, max_iterations, "render") - 2,
-                "Рендер PDF…",
+                "Rendering PDF…",
             )
         # Render PDF and extract text for filters (like real ATS)
         optimized = _render_and_extract(optimized, renderer)
         if on_progress:
-            on_progress(_progress_percent_iteration(i, max_iterations, "render"), "PDF готов")
+            on_progress(_progress_percent_iteration(i, max_iterations, "render"), "PDF ready")
             on_progress(
                 _progress_percent_iteration(i, max_iterations, "filters") - 1,
-                "Проверка фильтров (ATS, ключевые слова)…",
+                "Running filters (ATS, keywords)…",
             )
 
         if optimized.pdf_text is None:
@@ -222,7 +222,7 @@ async def optimize_for_job(
             validation = await run_filters(optimized, job, source, parallel=parallel)
 
         if on_progress:
-            on_progress(_progress_percent_iteration(i, max_iterations, "filters"), "Итерация завершена")
+            on_progress(_progress_percent_iteration(i, max_iterations, "filters"), "Iteration complete")
         if on_iteration:
             on_iteration(i, optimized, validation)
 

@@ -1,17 +1,18 @@
 import { useState, useEffect, useRef, useId } from "react";
-import { useLocation, useNavigate, Link } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams, Link } from "react-router-dom";
 import { Disclosure, DisclosureButton, DisclosurePanel, RadioGroup } from "@headlessui/react";
 import { SparklesIcon, ArrowUpTrayIcon, ArrowDownTrayIcon, ArrowPathIcon, BriefcaseIcon, ClipboardDocumentIcon, DocumentTextIcon, LinkIcon, ExclamationTriangleIcon, CheckCircleIcon } from "@heroicons/react/24/outline";
 import * as api from "../api";
 import { useAuth } from "../contexts/AuthContext";
+import { t } from "../i18n";
 
 const RESUME_FILE_ACCEPT = ".txt,.md,.html,.htm,.tex,.pdf,.doc,.docx";
 const RESUME_TEXT_EXTS = ["txt", "md", "html", "htm", "tex", "pdf", "doc", "docx"];
 
-/** Сообщение бэкенда, когда ссылка ведёт на страницу поиска, а не на одну вакансию */
-const JOB_LIST_URL_MARKER = "страницу поиска вакансий";
-/** Сообщение при неудачном скрапинге (Cloudflare и т.д.) — предлагаем вставить текст */
-const SCRAPE_FAILED_PASTE_MARKER = "Try pasting the job description text directly";
+/** Backend message when URL is a job search page, not a single job */
+const JOB_LIST_URL_MARKER = "job search page";
+/** Backend message when scraping failed (Cloudflare etc.) — suggests pasting text */
+const SCRAPE_FAILED_PASTE_MARKER = "Paste";
 
 function isOfferPasteAsTextError(msg: string): boolean {
   return msg.includes(JOB_LIST_URL_MARKER) || msg.includes(SCRAPE_FAILED_PASTE_MARKER);
@@ -32,7 +33,7 @@ function JobPreviewContent({
   if (isParsing) {
     return (
       <p className="mt-3 text-[13px] text-[var(--text-muted)]">
-        Структурируем вакансию…
+        {t("optimize.parsingJob")}
       </p>
     );
   }
@@ -48,7 +49,7 @@ function JobPreviewContent({
         </section>
         {parsedJob!.keywords && parsedJob!.keywords.length > 0 && (
           <section>
-            <p className="font-semibold text-[#181819] text-[13px] mb-1.5">Ключевые слова / Навыки</p>
+            <p className="font-semibold text-[#181819] text-[13px] mb-1.5">{t("optimize.keywordsSkills")}</p>
             <p className="text-[13px] text-[var(--text-muted)] leading-relaxed">
               {parsedJob!.keywords.slice(0, 20).join(", ")}
               {parsedJob!.keywords.length > 20 ? " …" : ""}
@@ -57,7 +58,7 @@ function JobPreviewContent({
         )}
         {parsedJob!.requirements && parsedJob!.requirements.length > 0 && (
           <section>
-            <p className="font-semibold text-[#181819] text-[13px] mb-1.5">Требования</p>
+            <p className="font-semibold text-[#181819] text-[13px] mb-1.5">{t("optimize.requirements")}</p>
             <ul className="list-disc list-inside space-y-0.5 text-[13px] text-[var(--text-muted)] leading-relaxed">
               {parsedJob!.requirements.map((r, i) => (
                 <li key={i}>{r}</li>
@@ -67,7 +68,7 @@ function JobPreviewContent({
         )}
         {parsedJob!.description && (
           <section itemProp="description">
-            <p className="font-semibold text-[#181819] text-[13px] mb-1.5">Описание</p>
+            <p className="font-semibold text-[#181819] text-[13px] mb-1.5">{t("optimize.description")}</p>
             <div className="text-[13px] text-[var(--text-muted)] leading-relaxed space-y-2">
               {parsedJob!.description.trim().split(/\n\n+/).filter(Boolean).map((block, i) => (
                 <p key={i}>{block}</p>
@@ -163,13 +164,13 @@ function ResumePreviewContent({
   if (isExtracting && !name) {
     return (
       <p className="mt-3 text-[13px] text-[var(--text-muted)]">
-        Структурируем резюме…
+        {t("optimize.structuringResume")}
       </p>
     );
   }
   const text = rawContent.trim();
   if (!text) {
-    return <p className="mt-3 text-[13px] text-[var(--text-muted)]">Нет данных</p>;
+    return <p className="mt-3 text-[13px] text-[var(--text-muted)]">{t("optimize.noData")}</p>;
   }
 
   const lines = text.split(/\n/).map((l) => l.trimEnd());
@@ -237,21 +238,21 @@ function getKeywordsScore(result: api.OptimizeResponse): { score: number; thresh
 }
 
 const ATS_BANDS: { max: number; category: string; description: string }[] = [
-  { max: 55, category: "Inadequate", description: "Критически низкий. Резюме классифицируется как нерелевантное. Вероятность автоматического отказа — 90%." },
-  { max: 65, category: "Borderline", description: "Пограничный. Вы проходите по базовым критериям, но проигрываете в ранжировании. Просмотр возможен только при дефиците кадров." },
-  { max: 75, category: "Qualified", description: "Профессиональный минимум. Вы подтвердили основные компетенции. Резюме попадает в список на первичный скрининг." },
-  { max: 85, category: "Top Tier", description: "Золотой стандарт. Идеальный баланс между hard skills и контекстом. Вы входите в ТОП-5 выдачи системы." },
-  { max: 99, category: "Elite / Expert", description: "Максимальный приоритет. Полное соответствие всем фильтрам. Требует безупречного подтверждения опыта на интервью." },
-  { max: 100, category: "System Match", description: "Технический идеал. Часто воспринимается как «copy-paste» вакансии. Риск скептической оценки со стороны HR-менеджера." },
+  { max: 55, category: "Inadequate", description: "Critically low. Resume is classified as irrelevant. High chance of auto-reject." },
+  { max: 65, category: "Borderline", description: "Borderline. You meet basic criteria but rank low. May be reviewed only when candidates are scarce." },
+  { max: 75, category: "Qualified", description: "Professional minimum. You have shown core competencies. Resume makes it to the initial screening list." },
+  { max: 85, category: "Top Tier", description: "Gold standard. Strong balance of hard skills and context. You rank in the top 5 in the system." },
+  { max: 99, category: "Elite / Expert", description: "Maximum priority. Full match on all filters. Expect thorough verification at interview." },
+  { max: 100, category: "System Match", description: "Technical ideal. Can be seen as copy-paste of the job. Some HRs may view it with skepticism." },
 ];
 
 const KEYWORDS_BANDS: { max: number; category: string; description: string }[] = [
-  { max: 55, category: "Weak", description: "Отсутствуют критические Hard Skills. Алгоритм считает вас кандидатом из другой смежной области." },
-  { max: 65, category: "Basic", description: "Указаны «базовые» навыки, но проигнорированы специфические инструменты (стек, методологии, сертификации)." },
-  { max: 75, category: "Strong", description: "Отражены все обязательные требования (Must-have). Вы проходите фильтр по большинству поисковых запросов." },
-  { max: 85, category: "Optimal", description: "Идеальный охват. Включены как основные навыки, так и дополнительные (Nice-to-have). Максимальный вес в поиске." },
-  { max: 99, category: "Exact", description: "Почти стопроцентное дублирование лексики вакансии. Гарантирует попадание в топ, но требует «человеческой» шлифовки." },
-  { max: 100, category: "Overfit", description: "Дословное совпадение. В современных ATS может сработать триггер на анти-спам (keyword stuffing)." },
+  { max: 55, category: "Weak", description: "Critical hard skills missing. The algorithm sees you as from a different field." },
+  { max: 65, category: "Basic", description: "Basic skills listed but specific tools (stack, methodologies, certs) are missing." },
+  { max: 75, category: "Strong", description: "All must-have requirements covered. You pass filters for most search queries." },
+  { max: 85, category: "Optimal", description: "Ideal coverage. Both core and nice-to-have skills. Maximum weight in search." },
+  { max: 99, category: "Exact", description: "Near-perfect match to job wording. Guarantees top placement but may need human polish." },
+  { max: 100, category: "Overfit", description: "Word-for-word match. May trigger anti-spam (keyword stuffing) in some ATS." },
 ];
 
 function getAtsCategory(percent: number): { category: string; description: string } {
@@ -414,7 +415,7 @@ function JobReadinessSemicircle({ percent, size = 140 }: { percent: number; size
       <span className="absolute text-[22px] font-bold text-[#181819] tabular-nums" style={{ top: svgH * 0.38 - 6 }}>
         {Math.round(pct)}%
       </span>
-      <span className="text-[12px] font-medium text-[var(--text-tertiary)] mt-1">Готовность к вакансии</span>
+      <span className="text-[12px] font-medium text-[var(--text-tertiary)] mt-1">{t("optimize.jobReadiness")}</span>
     </div>
   );
 }
@@ -454,11 +455,11 @@ type SummaryData = {
 };
 
 function getAssessmentTierLabel(pct: number): string {
-  if (pct <= 55) return "Критический уровень";
-  if (pct <= 65) return "Пограничный";
-  if (pct <= 75) return "Уверенный джуниор";
-  if (pct <= 85) return "Сильный кандидат";
-  return "Эксперт";
+  if (pct <= 55) return t("optimize.levelCritical");
+  if (pct <= 65) return t("optimize.levelBorderline");
+  if (pct <= 75) return t("optimize.levelJunior");
+  if (pct <= 85) return t("optimize.levelStrong");
+  return t("optimize.levelExpert");
 }
 
 /** Дополнительный вид результатов: Assessment + Рекомендации + Готовность + Улучшение (стиль скриншота). */
@@ -490,23 +491,23 @@ function AdditionalResultsView({
   const tierLabel = getAssessmentTierLabel(summaryData.overallPct);
   const levelPos = Math.max(0, Math.min(100, summaryData.overallPct));
   const strongCandidates = [
-    { name: "Навыки", pct: summaryData.skillsPct },
-    { name: "Опыт", pct: summaryData.experiencePct },
-    { name: "Портфолио", pct: summaryData.portfolioPct },
+    { name: t("optimize.skills"), pct: summaryData.skillsPct },
+    { name: t("optimize.experience"), pct: summaryData.experiencePct },
+    { name: t("optimize.portfolio"), pct: summaryData.portfolioPct },
   ];
   const strongAt = strongCandidates.filter((s) => s.pct >= 70).map((s) => s.name);
   const strongAtDisplay = strongAt.length > 0 ? strongAt : [strongCandidates.reduce((a, b) => (a.pct >= b.pct ? a : b)).name];
   const growthAreas = [
-    summaryData.skillsPct < 60 && "Навыки",
-    summaryData.experiencePct < 60 && "Опыт",
-    summaryData.portfolioPct < 60 && "Портфолио",
+    summaryData.skillsPct < 60 && t("optimize.skills"),
+    summaryData.experiencePct < 60 && t("optimize.experience"),
+    summaryData.portfolioPct < 60 && t("optimize.portfolio"),
   ].filter(Boolean) as string[];
   const skillRows = [
-    { label: "Навыки", percent: summaryData.skillsPct },
-    { label: "Опыт", percent: summaryData.experiencePct },
-    { label: "Портфолио", percent: summaryData.portfolioPct },
+    { label: t("optimize.skills"), percent: summaryData.skillsPct },
+    { label: t("optimize.experience"), percent: summaryData.experiencePct },
+    { label: t("optimize.portfolio"), percent: summaryData.portfolioPct },
     { label: "ATS match", percent: summaryData.atsPct },
-    { label: "Ключевые слова", percent: summaryData.kwPct },
+    { label: t("optimize.keywords"), percent: summaryData.kwPct },
   ];
 
   return (
@@ -539,7 +540,7 @@ function AdditionalResultsView({
             <div className="flex flex-col gap-2">
               <div className="flex items-center gap-1.5">
                 <CheckCircleIcon className="w-5 h-5 text-[var(--text-tertiary)] shrink-0" aria-hidden />
-                <span className="text-[13px] font-semibold text-[#181819]">Сильные стороны</span>
+                <span className="text-[13px] font-semibold text-[#181819]">{t("optimize.strongSides")}</span>
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {strongAtDisplay.map((s) => (
@@ -554,7 +555,7 @@ function AdditionalResultsView({
                 <span className="flex items-center justify-center w-5 h-5 rounded-full bg-[#F2F3F9] shrink-0" aria-hidden>
                   <span className="text-[var(--text-tertiary)] text-[10px] font-bold">!</span>
                 </span>
-                <span className="text-[13px] font-semibold text-[#181819]">Зоны роста</span>
+                <span className="text-[13px] font-semibold text-[#181819]">{t("optimize.growthAreas")}</span>
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {growthAreas.length > 0 ? growthAreas.map((s) => (
@@ -570,7 +571,7 @@ function AdditionalResultsView({
         </div>
         <div className="rounded-2xl bg-white border border-[#EBEDF5] shadow-sm p-5 flex flex-col gap-0 min-h-0 min-w-0 overflow-auto flex-1">
           <p className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider shrink-0 mb-2">
-            Рекомендации к улучшению
+            {t("optimize.recommendationsTitle")}
           </p>
           {preScores?.improvement_tips ? (
             <div className="text-[13px] text-[var(--text-muted)] leading-relaxed whitespace-pre-wrap space-y-3">
@@ -590,7 +591,7 @@ function AdditionalResultsView({
           ) : preScores?.recommendations && preScores.recommendations.length > 0 ? (
             <ul className="space-y-3">
               {preScores.recommendations
-                .filter((rec) => !rec.labels.every((l) => l === "В порядке"))
+                .filter((rec) => !rec.labels.every((l) => l === "OK"))
                 .map((rec, i) => (
                   <li key={i}>
                     <p className="font-semibold text-[#181819] text-[13px] mb-1">{rec.category}</p>
@@ -603,14 +604,14 @@ function AdditionalResultsView({
                 ))}
             </ul>
           ) : (
-            <p className="text-[13px] text-[var(--text-tertiary)]">Запустите анализ по вакансии, чтобы получить рекомендации.</p>
+            <p className="text-[13px] text-[var(--text-tertiary)]">{t("optimize.runAnalysisForRec")}</p>
           )}
         </div>
       </div>
       {/* Правая колонка: Готовность к вакансии (полукруг + полосы) + Улучшение */}
       <div className="flex flex-col gap-4 min-h-0 min-w-0">
         <div className="rounded-2xl bg-white border border-[#EBEDF5] shadow-sm p-5 flex flex-col gap-4 shrink-0">
-          <h2 className="text-base font-bold text-[#181819] w-full">Готовность к вакансии</h2>
+          <h2 className="text-base font-bold text-[#181819] w-full">{t("optimize.jobReadiness")}</h2>
           <div className="flex flex-row items-start gap-6 w-full">
             <JobReadinessSemicircle percent={summaryData.overallPct} size={140} />
             <div className="flex-1 min-w-0 flex flex-col justify-center gap-3 pt-2">
@@ -627,22 +628,22 @@ function AdditionalResultsView({
             className="space-y-2"
           >
             <RadioGroup.Label className="block text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider">
-              Автоматическое улучшение
+              {t("optimize.autoImprove")}
             </RadioGroup.Label>
             <div className="grid grid-cols-1 gap-2">
               <RadioGroup.Option value="soft" className="rounded-xl outline-none focus:ring-2 focus:ring-[#4578FC]/30 focus:ring-offset-2">
                 {({ checked }) => (
                   <div className={`relative flex flex-col rounded-lg px-3 py-2.5 cursor-pointer transition-colors ${checked ? "bg-[#4578FC]/10 ring-1 ring-[#4578FC]/30" : "bg-[#EBEDF5] hover:bg-[#E0E4EE]"}`}>
-                    <span className="text-[13px] font-medium text-[#181819]">Мягкое</span>
-                    <span className="mt-0.5 text-[11px] text-[var(--text-tertiary)] leading-snug">Переупорядочивание и акценты из вашего резюме</span>
+                    <span className="text-[13px] font-medium text-[#181819]">{t("optimize.soft")}</span>
+                    <span className="mt-0.5 text-[11px] text-[var(--text-tertiary)] leading-snug">{t("optimize.softDesc")}</span>
                   </div>
                 )}
               </RadioGroup.Option>
               <RadioGroup.Option value="strict" className="rounded-lg outline-none focus:ring-2 focus:ring-[#4578FC]/30 focus:ring-offset-2">
                 {({ checked }) => (
                   <div className={`relative flex flex-col rounded-lg px-3 py-2.5 cursor-pointer transition-colors ${checked ? "bg-[#4578FC]/10 ring-1 ring-[#4578FC]/30" : "bg-[#EBEDF5] hover:bg-[#E0E4EE]"}`}>
-                    <span className="text-[13px] font-medium text-[#181819]">Жёсткое</span>
-                    <span className="mt-0.5 text-[11px] text-[var(--text-tertiary)] leading-snug">Может добавить навыки из вакансии</span>
+                    <span className="text-[13px] font-medium text-[#181819]">{t("optimize.aggressive")}</span>
+                    <span className="mt-0.5 text-[11px] text-[var(--text-tertiary)] leading-snug">{t("optimize.aggressiveDesc")}</span>
                   </div>
                 )}
               </RadioGroup.Option>
@@ -655,35 +656,35 @@ function AdditionalResultsView({
             className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-2xl text-[13px] font-semibold text-white bg-[#4578FC] hover:bg-[#3d6ae6] transition-colors focus:outline-none focus:ring-2 focus:ring-[#4578FC]/40 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <SparklesIcon className="w-5 h-5 shrink-0" />
-            Улучшить резюме
+            {t("optimize.improveResume")}
           </button>
         </div>
         {stage === "result" && result && (
           <div className="rounded-2xl bg-white border border-[#EBEDF5] shadow-sm p-5 space-y-4 shrink-0">
-            <h2 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Результат</h2>
+            <h2 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">{t("optimize.result")}</h2>
             {result.error ? (
               <p className="text-sm text-[var(--text-tertiary)]">{result.error}</p>
             ) : (
               <>
                 <p className="text-[13px] text-[var(--text-muted)]">
-                  Режим: <span className="font-medium text-[#181819]">{aggressiveTailoring ? "Жёсткий" : "Мягкий"}</span>
+                  {t("optimize.mode")}: <span className="font-medium text-[#181819]">{aggressiveTailoring ? t("optimize.aggressiveMode") : t("optimize.softMode")}</span>
                 </p>
                 {result.pdf_filename && result.pdf_base64 && (
                   <div className="flex flex-wrap gap-2">
                     <a href={`data:application/pdf;base64,${result.pdf_base64}`} download={result.pdf_filename} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-[#181819] text-sm font-medium hover:opacity-95 transition-opacity" style={{ background: "linear-gradient(128deg, #EAFCB6 0%, #d4f090 18%, #b0d8ff 52%, #5e8afc 88%, #4578FC 100%)" }}>
                       <ArrowDownTrayIcon className="w-4 h-4" />
-                      Скачать PDF
+                      {t("optimize.downloadPdf")}
                     </a>
                     {showImproveMore && (
                       <button type="button" onClick={onImproveMore} disabled={isImprovingMore} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#F5F6FA] text-[#181819] text-sm font-medium hover:bg-[#EBEDF5] transition-colors disabled:opacity-50">
-                        {isImprovingMore ? "Улучшаем…" : "Улучшить ещё"}
+                        {isImprovingMore ? t("optimize.improving") : t("optimize.improveMore")}
                       </button>
                     )}
                   </div>
                 )}
                 {result.success && !result.pdf_base64 && (
                   <p className="text-sm text-[var(--text-muted)]">
-                    Оптимизация выполнена. <Link to="/upgrade" className="text-[#4578FC] font-medium hover:underline">Оформите подписку</Link>, чтобы скачать PDF.
+                    {t("optimize.subscribeToDownload")} <Link to="/upgrade" className="text-[#4578FC] font-medium hover:underline">{t("optimize.subscribeLink")}</Link>
                   </p>
                 )}
               </>
@@ -878,6 +879,7 @@ function ScoreGauge({
 export default function Optimize() {
   const location = useLocation();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user, refreshUser } = useAuth();
   const [resumeContent, setResumeContent] = useState("");
   const [resumeName, setResumeName] = useState<{ first?: string; last?: string } | null>(null);
@@ -909,6 +911,39 @@ export default function Optimize() {
   const step2SectionRef = useRef<HTMLDivElement>(null);
   const prevHadResumeRef = useRef(false);
   const blockId = useId().replace(/:/g, "");
+  const claimedPendingRef = useRef<string | null>(null);
+
+  // Claim pending landing upload after login: подставляем резюме и вакансию и запускаем анализ
+  const pendingToken = searchParams.get("pending");
+  useEffect(() => {
+    if (!pendingToken || !user || user.id === "local" || claimedPendingRef.current === pendingToken) return;
+    claimedPendingRef.current = pendingToken;
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete("pending");
+      return next;
+    }, { replace: true });
+    api
+      .claimLandingPending(pendingToken)
+      .then((data) => {
+        setResumeContent(data.resume_content);
+        setUploadedFileName(data.resume_filename);
+        if (data.job_url) {
+          setJobInput(data.job_url);
+          setJobMode("url");
+        } else if (data.job_text) {
+          setJobInput(data.job_text);
+          setJobMode("text");
+        }
+        setResult(null);
+        setError(null);
+        setStage("scanning");
+      })
+      .catch((e) => {
+        setError(e instanceof Error ? e.message : t("optimize.claimError"));
+        claimedPendingRef.current = null;
+      });
+  }, [pendingToken, user, setSearchParams]);
 
   // Редирект с главной после загрузки файла — сразу шаг 2 (файл уже есть)
   useEffect(() => {
@@ -1111,7 +1146,7 @@ export default function Optimize() {
       setResult(null);
       setStage("idle");
     };
-    reader.onerror = () => setError("Не удалось прочитать файл");
+    reader.onerror = () => setError(t("home.readFileError"));
     reader.readAsText(file, "UTF-8");
   }
   function getUploadedFileExt(): "pdf" | "docx" | "text" | null {
@@ -1137,7 +1172,7 @@ export default function Optimize() {
     const ext = file.name.split(".").pop()?.toLowerCase();
     const allowed = [...RESUME_TEXT_EXTS];
     if (!ext || !allowed.includes(ext)) {
-      setError("Поддерживаются файлы: .txt, .md, .html, .tex, .pdf, .doc, .docx");
+      setError("Supported formats: .txt, .md, .html, .tex, .pdf, .doc, .docx");
       return;
     }
     void readResumeFile(file);
@@ -1244,7 +1279,7 @@ export default function Optimize() {
     setIsImprovingMore(true);
     setStage("loading");
     setLoadProgress(0);
-    setLoadMessage("Делаем резюме ещё лучше…");
+    setLoadMessage("Making your resume even better…");
     const improvedContent = result.optimized_resume_text?.trim() || resumeContent.trim();
     const params = {
       resume_content: improvedContent,
@@ -1421,9 +1456,9 @@ export default function Optimize() {
             </div>
           </div>
           {/* Расшифровка резюме */}
-          <div className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-6 flex flex-col gap-0 min-h-0 min-w-0 overflow-auto" aria-label="Расшифровка резюме">
+          <div className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-6 flex flex-col gap-0 min-h-0 min-w-0 overflow-auto" aria-label={t("optimize.resumeBreakdown")}>
             <p className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider shrink-0 mb-2">
-              Расшифровка резюме
+              {t("optimize.resumeBreakdown")}
             </p>
             <ResumePreviewContent
               rawContent={resumeContent}
@@ -1485,7 +1520,7 @@ export default function Optimize() {
                           {({ checked }) => (
                             <div className={`relative flex flex-col rounded-lg px-3 py-2.5 cursor-pointer transition-colors ${checked ? "bg-[#4578FC]/10 ring-1 ring-[#4578FC]/30" : "bg-[#EBEDF5] hover:bg-[#E0E4EE]"}`}>
                               <span className="text-[13px] font-medium text-[#181819]">Мягкое</span>
-                              <span className="mt-0.5 text-[11px] text-[var(--text-tertiary)] leading-snug">Переупорядочивание и акценты из вашего резюме</span>
+                              <span className="mt-0.5 text-[11px] text-[var(--text-tertiary)] leading-snug">{t("optimize.softDesc")}</span>
                             </div>
                           )}
                         </RadioGroup.Option>
@@ -1499,7 +1534,7 @@ export default function Optimize() {
                         </RadioGroup.Option>
                       </div>
                       <p className="text-[11px] text-[var(--text-tertiary)] leading-relaxed">
-                        {aggressiveTailoring ? "Добавит навыки из вакансии, где уместно. Проверьте результат перед отправкой." : "Только переупорядочивание и акценты из вашего резюме, без добавления навыков."}
+                        {aggressiveTailoring ? t("optimize.addSkillsNote") : t("optimize.softOnlyNote")}
                       </p>
                       {aggressiveTailoring && (
                         <p className="text-[11px] text-[var(--text-tertiary)] font-medium">Резюме может быть дополнено навыками из вакансии. Проверьте перед отправкой.</p>
@@ -1512,7 +1547,7 @@ export default function Optimize() {
                       className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-2xl text-[13px] font-semibold text-white bg-[#4578FC] hover:bg-[#3d6ae6] transition-colors focus:outline-none focus:ring-2 focus:ring-[#4578FC]/40 focus:ring-offset-2 focus:ring-offset-[#FAFAFC] disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <SparklesIcon className="w-5 h-5 shrink-0" />
-                      Улучшить резюме
+                      {t("optimize.improveResume")}
                     </button>
                 </div>
               </>
@@ -1531,7 +1566,7 @@ export default function Optimize() {
                       Режим оптимизации: <span className="font-medium text-[#181819]">{aggressiveTailoring ? "Жёсткий" : "Мягкий"}</span>
                     </p>
                 {result.pdf_filename && result.pdf_base64 && (
-                  <section aria-label="Скачать резюме" className="flex flex-wrap items-center gap-2">
+                  <section aria-label={t("optimize.downloadResume")} className="flex flex-wrap items-center gap-2">
                     <a href={`data:application/pdf;base64,${result.pdf_base64}`} download={result.pdf_filename} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-[#181819] text-sm font-medium hover:opacity-95 transition-opacity" style={{ background: "linear-gradient(128deg, #EAFCB6 0%, #d4f090 18%, #b0d8ff 52%, #5e8afc 88%, #4578FC 100%)" }}>
                       <ArrowDownTrayIcon className="w-4 h-4" />
                       Скачать PDF
@@ -1650,13 +1685,13 @@ export default function Optimize() {
           <section className="rounded-2xl border border-[#EBEDF5] bg-white overflow-hidden flex flex-col min-h-0" aria-labelledby="step1-heading">
             <div className="p-6 pb-4 text-center">
               <span className="inline-block rounded-lg border border-[#4578FC] px-3 py-1 text-xs font-medium text-[#4578FC] mb-3">
-                Шаг 1
+                {t("optimize.step1")}
               </span>
               <h1 id="step1-heading" className="text-xl font-bold tracking-tight text-[#181819] mb-1">
-                Добавьте резюме
+                {t("optimize.addResume")}
               </h1>
               <p className="text-sm text-[var(--text-tertiary)]">
-                Загрузите файл или вставьте текст
+                {t("optimize.addResumeHint")}
               </p>
             </div>
             <div className="flex-1 flex flex-col min-h-0 px-6 pb-6">
@@ -1666,7 +1701,7 @@ export default function Optimize() {
                 accept={RESUME_FILE_ACCEPT}
                 className="hidden"
                 onChange={handleResumeFileSelect}
-                aria-label="Выбрать файл резюме"
+                aria-label="Choose resume file"
               />
               <div
                 onDragOver={handleResumeDragOver}
@@ -1699,10 +1734,10 @@ export default function Optimize() {
                     <ArrowUpTrayIcon className="w-8 h-8 text-[#4578FC]" />
                   </div>
                   <p className="text-sm font-bold text-[#181819] uppercase tracking-wide">
-                    Перетащите файл сюда
+                    {t("optimize.dragHere")}
                   </p>
                   <p className="text-xs text-[var(--text-tertiary)]">
-                    Или PDF, Word, TXT, MD, HTML, TEX
+                    {t("optimize.orFormats")}
                   </p>
                   <div className="flex flex-wrap justify-center gap-2">
                     <button
@@ -1735,7 +1770,7 @@ export default function Optimize() {
                       value={resumeContent}
                       onChange={(e) => setResumeContent(e.target.value)}
                       onBlur={handleResumePaste}
-                      placeholder="Вставьте текст резюме…"
+                      placeholder={t("optimize.jobTextPlaceholder")}
                       className="w-full min-h-[5rem] max-w-md rounded-xl border border-[#c8cddc] bg-white/80 px-3 py-2.5 text-sm text-[#181819] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[#4578FC]/30 focus:border-[#4578FC]/50 resize-none"
                     />
                   )}
@@ -1756,17 +1791,17 @@ export default function Optimize() {
             {!hasResume && (
               <div className="absolute inset-0 rounded-2xl bg-[#F2F3F9]/95 flex items-center justify-center z-10" aria-hidden>
                 <p className="text-sm font-medium text-[var(--text-muted)] px-4 text-center">
-                  Сначала загрузите резюме в Шаг 1
+                  {t("optimize.uploadResumeFirst")}
                 </p>
               </div>
             )}
             <div className="relative flex-1 flex flex-col min-h-0">
             <div className="p-6 pb-4 text-center">
             <span className="inline-block rounded-lg border border-[#4578FC] px-3 py-1 text-xs font-medium text-[#4578FC] mb-3">
-              Шаг 2
+              {t("optimize.step2")}
             </span>
             <h1 id="step2-heading" className="text-xl font-bold tracking-tight text-[#181819] mb-1">
-              Загрузи вакансию
+              {t("optimize.addJobTitle")}
             </h1>
             <p className="text-sm text-[var(--text-tertiary)]">
               Ссылка или вставьте описание вручную
@@ -1802,7 +1837,7 @@ export default function Optimize() {
               {hasJob ? (
                 <>
                   <div className="flex items-center gap-2 mb-3 min-w-0" role="group" aria-label="Вакансия">
-                    <span className="shrink-0 flex items-center justify-center w-6 h-6 rounded bg-[#4578FC]/12" title="Ссылка на вакансию">
+                    <span className="shrink-0 flex items-center justify-center w-6 h-6 rounded bg-[#4578FC]/12" title={t("optimize.jobLinkPlaceholder")}>
                       <BriefcaseIcon className="w-3.5 h-3.5 text-[#4578FC]" aria-hidden />
                     </span>
                     <strong className="text-sm font-semibold text-[#181819] truncate min-w-0 max-w-[50vw]" title={jobInput.trim()}>
@@ -1828,7 +1863,7 @@ export default function Optimize() {
                     if (isPreviewLoading) {
                       return (
                         <div className="relative flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 w-full pl-6">
-                          <p className="text-xs text-[var(--text-tertiary)] min-w-0">Загружаем вакансию…</p>
+                          <p className="text-xs text-[var(--text-tertiary)] min-w-0">{t("optimize.loadingJob")}</p>
                           <span className="absolute left-0 top-2 h-4 w-4 border-2 border-[#EBEDF5] border-t-[#4578FC] rounded-full animate-spin sm:static sm:order-last" aria-hidden />
                         </div>
                       );
@@ -1853,7 +1888,7 @@ export default function Optimize() {
                         Проверить соответствие
                       </button>
                       <p className="mt-2 text-center text-[11px] text-[var(--text-tertiary)]">
-                        Запустит сканирование резюме и вакансии
+                        {t("optimize.willStartScan")}
                       </p>
                     </div>
                   )}
@@ -1869,7 +1904,7 @@ export default function Optimize() {
                     </div>
                   )}
                   <div className="space-y-1.5">
-                    <p className="text-sm text-[var(--text-muted)] font-medium">Как передать вакансию</p>
+                    <p className="text-sm text-[var(--text-muted)] font-medium">{t("optimize.howToAddJob")}</p>
                     <div className="flex flex-wrap gap-2">
                       <button
                         type="button"
@@ -1879,7 +1914,7 @@ export default function Optimize() {
                             ? "bg-[#4578FC]/12 text-[#4578FC] hover:bg-[#4578FC]/18"
                             : "bg-[#EBEDF5] text-[#181819] hover:bg-[#E0E4EE]"
                         }`}
-                        title="Вставьте ссылку на страницу вакансии"
+                        title={t("optimize.pasteJobLinkTitle")}
                       >
                         <LinkIcon className="w-4 h-4 shrink-0" aria-hidden />
                         URL
@@ -1892,7 +1927,7 @@ export default function Optimize() {
                             ? "bg-[#4578FC]/12 text-[#4578FC] hover:bg-[#4578FC]/18"
                             : "bg-[#EBEDF5] text-[#181819] hover:bg-[#E0E4EE]"
                         }`}
-                        title="Вставьте текст вакансии с сайта"
+                        title={t("optimize.pasteJobTextTitle")}
                       >
                         <ClipboardDocumentIcon className="w-4 h-4 shrink-0" aria-hidden />
                         Текст
@@ -1940,11 +1975,11 @@ export default function Optimize() {
                   )}
                 </div>
                 <p className="text-[#181819] font-medium">
-                  {stage === "scanning" ? "Сканирование…" : "Анализ резюме и вакансии…"}
+                  {stage === "scanning" ? t("optimize.scanningLabel") : t("optimize.analysisLabel")}
                 </p>
                 <p className="text-sm text-[var(--text-tertiary)]">
                   {stage === "scanning"
-                    ? "Анализируем резюме и вакансию"
+                    ? t("optimize.analyzingResume")
                     : "Получаем оценки ATS и ключевых слов"}
                 </p>
                 {stage === "scanning" ? (
@@ -1976,7 +2011,7 @@ export default function Optimize() {
                     aria-hidden
                   />
                 </div>
-                <p className="text-[#181819] font-medium">Улучшаем резюме…</p>
+                <p className="text-[#181819] font-medium">{t("optimize.improvingResume")}</p>
                 <p className="text-sm text-[var(--text-muted)] text-center max-w-sm">
                   {loadMessage || "Не закрывайте страницу"}
                 </p>

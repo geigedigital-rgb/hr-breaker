@@ -9,22 +9,22 @@ export const READINESS_STAGE_ICON_IMAGE: Partial<Record<string, string>> = {
 
 /** Stage labels and order for Market Readiness (match backend READINESS_STAGES). */
 export const READINESS_STAGE_LABEL: Record<string, string> = {
-  Emerging: "Начинающий кандидат",
-  Structured: "Осознанный кандидат",
-  Competitive: "Конкурентный кандидат",
-  Strong: "Сильный кандидат",
-  "Interview-Ready": "Приоритетный кандидат",
+  Emerging: "Emerging candidate",
+  Structured: "Structured candidate",
+  Competitive: "Competitive candidate",
+  Strong: "Strong candidate",
+  "Interview-Ready": "Interview-ready candidate",
 };
 
 export const READINESS_STAGE_ORDER = ["Emerging", "Structured", "Competitive", "Strong", "Interview-Ready"] as const;
 
 /** One-line meaning of each stage (for ladder "signature line"). */
 export const READINESS_STAGE_MEANING: Record<string, string> = {
-  Emerging: "Профиль только формируется",
-  Structured: "Структура и ключевые формулировки на месте",
-  Competitive: "Профиль читается и выглядит уверенно",
-  Strong: "Больше доказуемых результатов",
-  "Interview-Ready": "Готовность к приоритетному рассмотрению",
+  Emerging: "Profile is taking shape",
+  Structured: "Structure and key wording in place",
+  Competitive: "Profile reads confidently",
+  Strong: "More proven results",
+  "Interview-Ready": "Ready for priority consideration",
 };
 
 const STAR_MASK =

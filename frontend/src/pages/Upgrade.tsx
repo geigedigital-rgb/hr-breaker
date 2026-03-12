@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import * as api from "../api";
 import { useAuth } from "../contexts/AuthContext";
+import { t } from "../i18n";
 
 export default function Upgrade() {
   const { user, loading, refreshUser } = useAuth();
@@ -44,9 +45,9 @@ export default function Upgrade() {
         cancel_url: cancelUrl,
       });
       if (url) window.location.href = url;
-      else setError("Не удалось получить ссылку на оплату");
+      else setError(t("upgrade.getPaymentLinkError"));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка при создании сессии оплаты");
+      setError(e instanceof Error ? e.message : t("upgrade.checkoutError"));
     } finally {
       setLoadingTrial(false);
       setLoadingMonthly(false);
@@ -61,17 +62,17 @@ export default function Upgrade() {
             to="/"
             className="text-sm text-[var(--text-muted)] hover:text-[#181819] transition-colors"
           >
-            ← Главная
+            {t("upgrade.backHome")}
           </Link>
-          <h1 className="text-xl font-semibold text-[#181819] tracking-tight">Upgrade</h1>
+          <h1 className="text-xl font-semibold text-[#181819] tracking-tight">{t("upgrade.title")}</h1>
         </div>
 
         {hasPaidPlan && (
           <section className="rounded-2xl border border-green-200 bg-green-50/80 p-4 text-sm text-[#181819]">
-            <strong>Текущий план:</strong>{" "}
-            {plan === "trial" ? "Trial 7 дней" : plan === "monthly" ? "Monthly" : status}
+            <strong>{t("upgrade.currentPlan")}</strong>{" "}
+            {plan === "trial" ? t("upgrade.trial7days") : plan === "monthly" ? "Monthly" : status}
             {periodEnd && (
-              <span className="text-[var(--text-muted)]"> · Активен до {new Date(periodEnd).toLocaleDateString()}</span>
+              <span className="text-[var(--text-muted)]"> · {t("upgrade.activeUntil")} {new Date(periodEnd).toLocaleDateString()}</span>
             )}
           </section>
         )}

@@ -10,11 +10,13 @@ import hashlib
 import io
 import json
 import logging
+import secrets
 import tempfile
+import time
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Request, Query
+from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Request, Query, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -47,6 +49,8 @@ from hr_breaker.services.db import (
     user_get_id_by_stripe_customer_id,
     ensure_seed_user,
     backfill_user_id,
+    user_list_all,
+    db_list_all,
     READINESS_DELTA_ANALYSIS,
     READINESS_DELTA_OPTIMIZE,
 )
@@ -61,11 +65,15 @@ def _put_progress(queue: asyncio.Queue | None, percent: int, message: str) -> No
 
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="HR-Breaker API", version="0.1.0")
+# CORS: app frontend + landing (pitchcv.app)
+_cors_origins = ["http://localhost:5173", "http://127.0.0.1:5173"]
+if (get_settings().landing_allowed_origins or "").strip():
+    _cors_origins = _cors_origins + [o.strip() for o in get_settings().landing_allowed_origins.split(",") if o.strip()]
 
+app = FastAPI(title="HR-Breaker API", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -320,6 +328,17 @@ async def get_optional_user(
     return user
 
 
+async def get_admin_user(user: dict | None = Depends(get_current_user)) -> dict:
+    """Require current user and admin email; else 403."""
+    if not user:
+        raise HTTPException(403, "Not authenticated")
+    settings = get_settings()
+    admin_email = (settings.admin_email or "").strip().lower()
+    if (user.get("email") or "").strip().lower() != admin_email:
+        raise HTTPException(403, "Admin access required")
+    return user
+
+
 def _user_out(u: dict, subscription: dict | None = None) -> AuthUserOut:
     out = AuthUserOut(id=str(u["id"]), email=u["email"], name=u.get("name"))
     if subscription is not None:
@@ -340,6 +359,23 @@ class SettingsResponse(BaseModel):
 class HealthResponse(BaseModel):
     database: str  # "connected" | "disabled" | "error"
     detail: str | None = None
+
+
+class AdminStatsResponse(BaseModel):
+    users_count: int
+    resumes_count: int
+    database: str  # "connected" | "disabled" | "error"
+
+
+class AdminUserOut(BaseModel):
+    id: str
+    email: str
+    name: str | None
+    created_at: str
+
+
+class AdminUsersResponse(BaseModel):
+    items: list[AdminUserOut]
 
 
 class VacancyCard(BaseModel):
@@ -534,8 +570,8 @@ async def api_create_checkout_session(
     if not pool:
         raise HTTPException(503, "Database not configured")
     settings = get_settings()
-    if not settings.stripe_secret_key or not (settings.stripe_price_trial_id or settings.stripe_price_monthly_id):
-        raise HTTPException(503, "Stripe not configured")
+    if not settings.stripe_secret_key or not settings.stripe_price_monthly_id:
+        raise HTTPException(503, "Stripe not configured (STRIPE_PRICE_MONTHLY_ID required)")
     from hr_breaker.services.stripe_service import (
         create_checkout_session as stripe_create_checkout,
         PRICE_KEY_TRIAL,
@@ -593,6 +629,314 @@ async def api_stripe_webhook(request: Request) -> Response:
             user_update_subscription=user_update_subscription,
         )
     return Response(status_code=200)
+
+
+# --- Landing (pitchcv.app): public trial analysis, no auth ---
+# Rate limit: 1 request per IP per N hours (in-memory; for multi-instance use Redis)
+_landing_rate: dict[str, float] = {}
+_landing_rate_lock = asyncio.Lock()
+
+
+def _client_ip(request: Request) -> str:
+    """Client IP for rate limiting (X-Forwarded-For when behind proxy)."""
+    forwarded = request.headers.get("x-forwarded-for", "").strip()
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    if request.client:
+        return request.client.host or "unknown"
+    return "unknown"
+
+
+async def _landing_rate_limit(ip: str, limit_hours: int) -> None:
+    """Raise HTTP 429 if IP has already used the landing analysis within limit_hours."""
+    async with _landing_rate_lock:
+        now = time.time()
+        window = limit_hours * 3600
+        # Evict old entries
+        to_del = [k for k, v in _landing_rate.items() if now - v > window]
+        for k in to_del:
+            del _landing_rate[k]
+        if ip in _landing_rate and now - _landing_rate[ip] < window:
+            raise HTTPException(
+                429,
+                "One free check per 24 hours. Sign up at my.pitchcv.app for unlimited access.",
+            )
+        _landing_rate[ip] = now
+
+
+# --- Landing save → login → claim flow (pending uploads) ---
+_landing_pending: dict[str, dict] = {}  # token -> { resume_content, job_text, job_url, resume_filename, created_at }
+_landing_pending_lock = asyncio.Lock()
+
+
+def _landing_pending_cleanup(ttl_seconds: int) -> None:
+    now = time.time()
+    to_del = [k for k, v in _landing_pending.items() if now - v.get("created_at", 0) > ttl_seconds]
+    for k in to_del:
+        _landing_pending.pop(k, None)
+
+
+class LandingSaveResponse(BaseModel):
+    token: str
+    resume_filename: str
+    job_url: str | None = None
+    job_title: str | None = None  # from parsed job if job_url was used
+
+
+class LandingPendingResponse(BaseModel):
+    resume_filename: str
+    job_url: str | None = None
+    job_title: str | None = None
+
+
+class LandingClaimResponse(BaseModel):
+    resume_content: str
+    job_text: str | None = None
+    job_url: str | None = None
+    resume_filename: str
+
+
+@router.post("/landing/save", response_model=LandingSaveResponse)
+async def api_landing_save(
+    request: Request,
+    resume: UploadFile | None = File(None, description="Resume file (PDF, DOCX, or text)"),
+    resume_text: str | None = Form(None, description="Resume as plain text (alternative to file)"),
+    job_url: str | None = Form(None, description="URL of the job posting"),
+    job_text: str | None = Form(None, description="Job description text (alternative to URL)"),
+) -> LandingSaveResponse:
+    """
+    Save resume + job for landing→login→claim flow. No auth. Returns token for /login?pending=TOKEN.
+    CORS only from LANDING_ALLOWED_ORIGINS. Token TTL: LANDING_PENDING_TTL_SECONDS (default 15 min).
+    """
+    settings = get_settings()
+    ip = _client_ip(request)
+
+    resume_content = ""
+    resume_filename = "resume.txt"
+    if resume and resume.filename:
+        resume_filename = (resume.filename or "resume").split("/")[-1].strip() or "resume"
+        body = await resume.read()
+        if len(body) > 5 * 1024 * 1024:
+            raise HTTPException(400, "Resume file too large (max 5 MB).")
+        ext = (resume_filename or "").split(".")[-1].lower()
+        if ext == "pdf":
+            resume_content = await asyncio.to_thread(extract_text_from_pdf_bytes, body)
+        elif ext in ("docx", "doc"):
+            resume_content = await asyncio.to_thread(_extract_text_from_docx, body)
+        else:
+            resume_content = body.decode("utf-8", errors="replace")
+    elif resume_text is not None:
+        resume_content = resume_text
+    else:
+        raise HTTPException(400, "Provide resume file (resume) or resume text (resume_text).")
+
+    if len(resume_content) > settings.landing_max_resume_chars:
+        raise HTTPException(
+            400,
+            f"Resume text too long (max {settings.landing_max_resume_chars} characters).",
+        )
+    resume_content = resume_content.strip()
+    if not resume_content:
+        raise HTTPException(400, "Resume is empty or text could not be extracted.")
+
+    if job_url and len(job_url) > settings.landing_max_job_url_len:
+        raise HTTPException(400, "Job URL too long.")
+    if not job_url and not job_text:
+        raise HTTPException(400, "Provide job URL (job_url) or job text (job_text).")
+
+    job_text_resolved = job_text
+    job_title: str | None = None
+    if job_url and not job_text_resolved:
+        url = _sanitize_url(job_url)
+        if _is_job_list_url(url):
+            raise HTTPException(
+                422,
+                "This is a job search page link. Use a link to a single job posting.",
+            )
+        try:
+            job_text_resolved = await asyncio.to_thread(scrape_job_posting, url)
+        except CloudflareBlockedError:
+            raise HTTPException(422, "Could not load job from URL. Paste the job description text manually.")
+        except Exception as e:
+            logger.warning("Landing save job scrape failed for %s: %s", ip, e)
+            raise HTTPException(422, "Could not load job from URL.")
+        try:
+            job = await parse_job_posting(job_text_resolved)
+            job_title = job.title or None
+        except Exception:
+            pass
+    if not job_text_resolved or not job_text_resolved.strip():
+        raise HTTPException(400, "Job text is empty.")
+
+    token = secrets.token_urlsafe(32)
+    ttl = settings.landing_pending_ttl_seconds
+    async with _landing_pending_lock:
+        _landing_pending_cleanup(ttl)
+        _landing_pending[token] = {
+            "resume_content": resume_content,
+            "job_text": job_text_resolved.strip(),
+            "job_url": job_url.strip() if job_url else None,
+            "resume_filename": resume_filename,
+            "job_title": job_title,
+            "created_at": time.time(),
+        }
+    logger.info("Landing save OK ip=%s token=%s", ip, token[:8])
+    return LandingSaveResponse(
+        token=token,
+        resume_filename=resume_filename,
+        job_url=job_url.strip() if job_url else None,
+        job_title=job_title,
+    )
+
+
+@router.get("/landing/pending", response_model=LandingPendingResponse)
+async def api_landing_pending(token: str = Query(..., description="Pending token from /landing/save")) -> LandingPendingResponse:
+    """Return resume_filename and job_url for login page display. No auth. Token is not consumed."""
+    settings = get_settings()
+    ttl = settings.landing_pending_ttl_seconds
+    async with _landing_pending_lock:
+        _landing_pending_cleanup(ttl)
+        data = _landing_pending.get(token)
+    if not data:
+        raise HTTPException(404, "Link expired or invalid. Upload your files again on the home page.")
+    return LandingPendingResponse(
+        resume_filename=data["resume_filename"],
+        job_url=data.get("job_url"),
+        job_title=data.get("job_title"),
+    )
+
+
+@router.get("/landing/claim", response_model=LandingClaimResponse)
+async def api_landing_claim(
+    token: str = Query(..., description="Pending token"),
+    user: dict | None = Depends(get_current_user),
+) -> LandingClaimResponse:
+    """After login: claim pending upload and get resume_content + job for analysis. Consumes token."""
+    settings = get_settings()
+    ttl = settings.landing_pending_ttl_seconds
+    async with _landing_pending_lock:
+        _landing_pending_cleanup(ttl)
+        data = _landing_pending.pop(token, None)
+    if not data:
+        raise HTTPException(404, "Link expired or already used. Upload your files again.")
+    return LandingClaimResponse(
+        resume_content=data["resume_content"],
+        job_text=data.get("job_text"),
+        job_url=data.get("job_url"),
+        resume_filename=data["resume_filename"],
+    )
+
+
+@router.post("/landing/analyze", response_model=AnalyzeResponse)
+async def api_landing_analyze(
+    request: Request,
+    resume: UploadFile | None = File(None, description="Resume file (PDF, DOCX, or text)"),
+    resume_text: str | None = Form(None, description="Resume as plain text (alternative to file)"),
+    job_url: str | None = Form(None, description="URL of the job posting"),
+    job_text: str | None = Form(None, description="Job description text (alternative to URL)"),
+) -> AnalyzeResponse:
+    """
+    Public trial analysis for landing (pitchcv.app). No auth.
+    Returns: ATS score, keyword score, job preview, recommendations, improvement tips.
+    Rate limit: 1 request per IP per 24h (configurable). CORS allowed only for LANDING_ALLOWED_ORIGINS.
+    """
+    settings = get_settings()
+    if not settings.google_api_key:
+        raise HTTPException(503, "GOOGLE_API_KEY not set.")
+    ip = _client_ip(request)
+    await _landing_rate_limit(ip, settings.landing_rate_limit_hours)
+
+    # Resume: file or text
+    resume_content = ""
+    if resume and resume.filename:
+        body = await resume.read()
+        if len(body) > 5 * 1024 * 1024:  # 5 MB max file
+            raise HTTPException(400, "Resume file too large (max 5 MB).")
+        ext = (resume.filename or "").split(".")[-1].lower()
+        if ext == "pdf":
+            resume_content = await asyncio.to_thread(extract_text_from_pdf_bytes, body)
+        elif ext in ("docx", "doc"):
+            resume_content = await asyncio.to_thread(_extract_text_from_docx, body)
+        else:
+            resume_content = body.decode("utf-8", errors="replace")
+    elif resume_text is not None:
+        resume_content = resume_text
+    else:
+        raise HTTPException(400, "Provide resume file (resume) or resume text (resume_text).")
+
+    if len(resume_content) > settings.landing_max_resume_chars:
+        raise HTTPException(
+            400,
+            f"Resume text too long (max {settings.landing_max_resume_chars} characters).",
+        )
+    resume_content = resume_content.strip()
+    if not resume_content:
+        raise HTTPException(400, "Resume is empty or text could not be extracted.")
+
+    # Job: URL or text
+    if job_url and len(job_url) > settings.landing_max_job_url_len:
+        raise HTTPException(400, "Job URL too long.")
+    if not job_url and not job_text:
+        raise HTTPException(400, "Provide job URL (job_url) or job text (job_text).")
+
+    job_text_resolved = job_text
+    if job_url and not job_text_resolved:
+        url = _sanitize_url(job_url)
+        if _is_job_list_url(url):
+            raise HTTPException(
+                422,
+                "This is a job search page link. Use a link to a single job posting.",
+            )
+        try:
+            job_text_resolved = await asyncio.to_thread(scrape_job_posting, url)
+        except CloudflareBlockedError:
+            raise HTTPException(422, "Could not load job from URL. Paste the job description text manually.")
+        except Exception as e:
+            logger.warning("Landing job scrape failed for %s: %s", ip, e)
+            raise HTTPException(422, "Could not load job from URL.")
+    if not job_text_resolved or not job_text_resolved.strip():
+        raise HTTPException(400, "Job text is empty.")
+
+    try:
+        job = await parse_job_posting(job_text_resolved)
+    except Exception as e:
+        logger.exception("Landing analyze job parse failed: %s", e)
+        if _is_api_key_invalid(e):
+            raise HTTPException(503, _API_KEY_INVALID_MSG)
+        raise HTTPException(500, "Job parsing failed.")
+
+    kw_result = await asyncio.to_thread(check_keywords, resume_content, job)
+    ats_score, breakdown = await asyncio.gather(
+        score_resume_vs_job(resume_content, job),
+        get_breakdown_scores(resume_content, job),
+    )
+    job_out = JobPostingOut(
+        title=job.title,
+        company=job.company,
+        requirements=job.requirements,
+        keywords=job.keywords,
+        description=job.description,
+    )
+    recommendations = _build_recommendations(
+        ats_score=ats_score,
+        keyword_score=kw_result.score,
+        keyword_threshold=settings.filter_keyword_threshold,
+        missing_keywords=kw_result.missing_keywords,
+        job_keywords=job.keywords or [],
+        has_requirements=bool(job.requirements),
+    )
+    logger.info("Landing analyze OK ip=%s ats=%s", ip, ats_score)
+    return AnalyzeResponse(
+        ats_score=ats_score,
+        keyword_score=kw_result.score,
+        keyword_threshold=settings.filter_keyword_threshold,
+        job=job_out,
+        recommendations=recommendations,
+        skills_score=breakdown.skills,
+        experience_score=breakdown.experience,
+        portfolio_score=breakdown.portfolio,
+        improvement_tips=breakdown.improvement_tips,
+    )
 
 
 # --- Endpoints ---
@@ -729,7 +1073,7 @@ async def api_parse_job(req: JobParseRequest) -> JobPostingOut:
         if _is_job_list_url(url):
             raise HTTPException(
                 422,
-                "Это ссылка на страницу поиска вакансий. Вставьте ссылку на конкретную вакансию (например, indeed.com/viewjob?jk=...).",
+                "This is a job search page link. Use a link to a single job posting (e.g. indeed.com/viewjob?jk=...).",
             )
         try:
             job_text = await asyncio.to_thread(scrape_job_posting, url)
@@ -812,33 +1156,32 @@ def _build_recommendations(
     job_keywords: list[str],
     has_requirements: bool,
 ) -> list[RecommendationItem]:
-    """Всегда возвращаем три категории в одном порядке — стабильная структура при любом резюме."""
+    """Return three categories in a stable order."""
     meaningful = _filter_meaningful_keywords(missing_keywords, job_keywords or [])
     need_kw = keyword_score < keyword_threshold
     need_structure = ats_score < 70
     need_requirements = has_requirements and (ats_score < 80 or keyword_score < keyword_threshold)
 
     if need_kw:
-        # 2–5 ключевых слов отдельными лейблами (без длинной фразы, без обрезания)
-        kw_labels = meaningful[:5] if meaningful else ["Навыки из описания вакансии"]
+        kw_labels = meaningful[:5] if meaningful else ["Skills from job description"]
     else:
-        kw_labels = ["В порядке"]
+        kw_labels = ["OK"]
 
     structure_label = (
-        "Чётко выделите разделы (опыт, образование, навыки) и заголовки для прохождения ATS"
+        "Use clear sections (experience, education, skills) and headings for ATS"
         if need_structure
-        else "В порядке"
+        else "OK"
     )
     requirements_label = (
-        "Явно укажите соответствие требованиям вакансии в опыте и навыках"
+        "Explicitly match job requirements in experience and skills"
         if need_requirements
-        else "В порядке"
+        else "OK"
     )
 
     return [
-        RecommendationItem(category="Ключевые слова", labels=kw_labels),
-        RecommendationItem(category="Структура", labels=[structure_label]),
-        RecommendationItem(category="Требования", labels=[requirements_label]),
+        RecommendationItem(category="Keywords", labels=kw_labels),
+        RecommendationItem(category="Structure", labels=[structure_label]),
+        RecommendationItem(category="Requirements", labels=[requirements_label]),
     ]
 
 
@@ -855,7 +1198,7 @@ async def api_analyze(req: AnalyzeRequest, user: dict | None = Depends(get_optio
         if _is_job_list_url(url):
             raise HTTPException(
                 422,
-                "Это ссылка на страницу поиска вакансий. Вставьте ссылку на конкретную вакансию (например, indeed.com/viewjob?jk=...).",
+                "This is a job search page link. Use a link to a single job posting (e.g. indeed.com/viewjob?jk=...).",
             )
         try:
             job_text = await asyncio.to_thread(scrape_job_posting, url)
@@ -923,7 +1266,7 @@ async def _run_optimize(
     if not settings.google_api_key:
         raise HTTPException(503, "GOOGLE_API_KEY not set. Add it to .env and restart the backend.")
 
-    _put_progress(progress_queue, 0, "Старт…")
+    _put_progress(progress_queue, 0, "Starting…")
     job_text = req.job_text
     if req.job_url and not job_text:
         url = _sanitize_url(req.job_url)
@@ -932,12 +1275,12 @@ async def _run_optimize(
                 success=False,
                 validation=ValidationResultOut(passed=False, results=[]),
                 job=JobPostingOut(title="", company="", requirements=[], keywords=[], description=""),
-                error="Это ссылка на страницу поиска вакансий. Вставьте ссылку на конкретную вакансию (например, indeed.com/viewjob?jk=...).",
+                error="This is a job search page link. Use a link to a single job posting (e.g. indeed.com/viewjob?jk=...).",
             )
-        _put_progress(progress_queue, 2, "Загрузка вакансии по URL…")
+        _put_progress(progress_queue, 2, "Loading job from URL…")
         try:
             job_text = await asyncio.to_thread(scrape_job_posting, url)
-            _put_progress(progress_queue, 5, "Вакансия загружена")
+            _put_progress(progress_queue, 5, "Job loaded")
         except CloudflareBlockedError:
             return OptimizeResponse(
                 success=False,
@@ -956,12 +1299,12 @@ async def _run_optimize(
         raise HTTPException(400, "Provide job_text or job_url")
 
     source = ResumeSource(content=req.resume_content)
-    _put_progress(progress_queue, 7, "Извлечение имени из резюме…")
+    _put_progress(progress_queue, 7, "Extracting name from resume…")
     try:
         first_name, last_name = await extract_name(req.resume_content)
         source.first_name = first_name
         source.last_name = last_name
-        _put_progress(progress_queue, 10, "Имя извлечено")
+        _put_progress(progress_queue, 10, "Name extracted")
     except Exception as e:
         logger.exception("Optimize failed")
         err_msg = _API_KEY_INVALID_MSG if _is_api_key_invalid(e) else str(e)
@@ -1025,7 +1368,7 @@ async def _run_optimize(
     pdf_filename = None
     pdf_b64 = None
     optimized_resume_text: str | None = None
-    _put_progress(progress_queue, 85, "Сохранение PDF…")
+    _put_progress(progress_queue, 85, "Saving PDF…")
     can_export_pdf = True
     if user:
         pool_for_sub = await get_pool()
@@ -1088,7 +1431,7 @@ async def _run_optimize(
                 await user_increment_readiness(pool, user_id, delta=READINESS_DELTA_OPTIMIZE)
         pdf_filename = pdf_path.name
         pdf_b64 = base64.b64encode(optimized.pdf_bytes).decode()
-    _put_progress(progress_queue, 100, "Готово")
+    _put_progress(progress_queue, 100, "Done")
 
     return OptimizeResponse(
         success=validation.passed and bool(optimized and optimized.pdf_bytes),
@@ -1131,7 +1474,7 @@ async def api_optimize_stream(req: OptimizeRequest, user: dict | None = Depends(
                     yield f"data: {json.dumps({'percent': percent, 'message': message}, ensure_ascii=False)}\n\n"
                 elif item[0] == "done":
                     _, result = item
-                    payload = {"percent": 100, "message": "Готово", "result": result.model_dump(mode="json")}
+                    payload = {"percent": 100, "message": "Done", "result": result.model_dump(mode="json")}
                     yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
                     break
                 elif item[0] == "error":
@@ -1169,6 +1512,54 @@ async def api_health() -> HealthResponse:
     except Exception as e:
         logger.exception("Health check failed: %s", e)
         return HealthResponse(database="error", detail=str(e))
+
+
+# --- Admin (marichakgroup@gmail.com or ADMIN_EMAIL) ---
+
+@router.get("/admin/stats", response_model=AdminStatsResponse)
+async def api_admin_stats(
+    _admin: dict = Depends(get_admin_user),
+) -> AdminStatsResponse:
+    """Return counts and DB status for admin dashboard."""
+    pool = await get_pool()
+    db_status = "disabled"
+    users_count = 0
+    resumes_count = 0
+    if pool:
+        try:
+            async with pool.acquire() as conn:
+                await conn.fetchval("SELECT 1")
+            db_status = "connected"
+            users = await user_list_all(pool, limit=10_000)
+            users_count = len(users)
+            records = await pdf_storage.list_all_async(user_id=None)
+            resumes_count = len(records)
+        except Exception as e:
+            logger.exception("Admin stats failed: %s", e)
+            db_status = "error"
+    return AdminStatsResponse(users_count=users_count, resumes_count=resumes_count, database=db_status)
+
+
+@router.get("/admin/users", response_model=AdminUsersResponse)
+async def api_admin_users(
+    _admin: dict = Depends(get_admin_user),
+    limit: int = Query(500, ge=1, le=2000),
+) -> AdminUsersResponse:
+    """List all users (admin only)."""
+    pool = await get_pool()
+    if not pool:
+        raise HTTPException(503, "Database not configured")
+    users = await user_list_all(pool, limit=limit)
+    items = [
+        AdminUserOut(
+            id=str(u["id"]),
+            email=u["email"],
+            name=u.get("name"),
+            created_at=u["created_at"].isoformat() if u.get("created_at") else "",
+        )
+        for u in users
+    ]
+    return AdminUsersResponse(items=items)
 
 
 @router.get("/history", response_model=HistoryResponse)
@@ -1379,7 +1770,7 @@ async def api_vacancies_search(
     if not settings.adzuna_app_id or not settings.adzuna_app_key:
         raise HTTPException(
             503,
-            "Поиск вакансий не настроен. Добавьте ADZUNA_APP_ID и ADZUNA_APP_KEY в .env (ключи на https://developer.adzuna.com/).",
+            "Job search not configured. Add ADZUNA_APP_ID and ADZUNA_APP_KEY to .env (get keys at https://developer.adzuna.com/).",
         )
     country = "de"
     url = f"https://api.adzuna.com/v1/api/jobs/{country}/search/{page}"
@@ -1404,10 +1795,10 @@ async def api_vacancies_search(
             data = r.json()
     except httpx.HTTPStatusError as e:
         logger.warning("Adzuna API error: %s", e.response.text)
-        raise HTTPException(502, "Сервис поиска вакансий временно недоступен.")
+        raise HTTPException(502, "Job search service is temporarily unavailable.")
     except httpx.RequestError as e:
         logger.warning("Adzuna request failed: %s", e)
-        raise HTTPException(502, "Не удалось связаться с сервисом вакансий.")
+        raise HTTPException(502, "Could not reach job search service.")
     results = data.get("results") or []
     total = data.get("count") if isinstance(data.get("count"), int) else len(results)
     items = [_adzuna_job_to_card(j, country) for j in results]

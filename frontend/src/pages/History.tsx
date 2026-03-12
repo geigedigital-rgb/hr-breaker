@@ -12,18 +12,19 @@ import {
   LinkIcon,
 } from "@heroicons/react/24/outline";
 import * as api from "../api";
+import { t } from "../i18n";
 
 type PeriodFilter = "all" | "month" | "week";
 
 const PERIOD_OPTIONS: { value: PeriodFilter; label: string }[] = [
-  { value: "all", label: "Всё время" },
-  { value: "month", label: "Последний месяц" },
-  { value: "week", label: "Последняя неделя" },
+  { value: "all", label: t("history.allTime") },
+  { value: "month", label: t("history.lastMonth") },
+  { value: "week", label: t("history.lastWeek") },
 ];
 
 function formatDate(iso: string): string {
   const d = new Date(iso);
-  return d.toLocaleDateString("ru-RU", {
+  return d.toLocaleDateString("en-US", {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
@@ -68,7 +69,7 @@ function ScoresCell({ item }: { item: api.HistoryItem }) {
         <span className="truncate">ATS: {preAts}% → {postAts}%</span>
       )}
       {preKw != null && postKw != null && (
-        <span className="truncate text-[var(--text-muted)]">Ключ.: {preKw}% → {postKw}%</span>
+        <span className="truncate text-[var(--text-muted)]">Kw.: {preKw}% → {postKw}%</span>
       )}
     </div>
   );
@@ -119,7 +120,7 @@ export default function History() {
   }, [items, search, period]);
 
   const handleDelete = async (filename: string) => {
-    if (!confirm("Удалить запись из истории?")) return;
+    if (!confirm(t("history.deleteConfirm"))) return;
     setDeleting(filename);
     try {
       await api.deleteHistory(filename);
@@ -135,7 +136,7 @@ export default function History() {
     return (
       <div className="flex items-center gap-2 text-sm text-[var(--text-muted)]" role="status" aria-live="polite">
         <span className="h-4 w-4 animate-spin rounded-full border-2 border-[#4578FC] border-t-transparent" aria-hidden />
-        Загрузка…
+        {t("history.loading")}
       </div>
     );
   }
@@ -151,8 +152,8 @@ export default function History() {
     <div className="space-y-8">
       {latest.length > 0 && (
         <section aria-labelledby="latest-heading" className="space-y-4">
-          <h2 id="latest-heading" className="text-base font-semibold text-[var(--text)]">Последние резюме</h2>
-          <p className="text-sm text-[var(--text-muted)] mt-0.5">Только улучшенные резюме</p>
+          <h2 id="latest-heading" className="text-base font-semibold text-[var(--text)]">{t("history.latestResumes")}</h2>
+          <p className="text-sm text-[var(--text-muted)] mt-0.5">{t("history.improvedOnly")}</p>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {latest.map((item) => (
               <article
@@ -184,7 +185,7 @@ export default function History() {
                     className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-[#EBEDF5] bg-[#F5F6FA] px-3 py-2 text-sm font-medium text-[var(--text)] transition-colors hover:border-[#4578FC] hover:bg-[#4578FC]/10 hover:text-[#4578FC]"
                   >
                     <EyeIcon className="h-4 w-4" aria-hidden />
-                    Открыть
+                    {t("history.open")}
                   </a>
                 </div>
               </article>
@@ -194,20 +195,20 @@ export default function History() {
       )}
 
       <section aria-labelledby="all-history-heading" className="space-y-4">
-        <h2 id="all-history-heading" className="text-base font-semibold text-[var(--text)]">Вся история</h2>
+        <h2 id="all-history-heading" className="text-base font-semibold text-[var(--text)]">{t("history.allHistory")}</h2>
         <div className="rounded-2xl border border-[#EBEDF5] bg-white overflow-hidden">
           {/* Тулбар: поиск + период — в стиле сайта */}
           <div className="flex flex-wrap items-end justify-between gap-4 border-b border-[#EBEDF5] px-5 py-4 bg-[#F5F6FA]/50">
             <div className="min-w-0 flex-1 max-w-xs">
               <label htmlFor="history-search" className="mb-1.5 block text-xs font-medium text-[var(--text-muted)]">
-                Поиск
+                {t("history.search")}
               </label>
               <div className="relative">
                 <MagnifyingGlassIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]" aria-hidden />
                 <input
                   id="history-search"
                   type="search"
-                  placeholder="Компания или должность…"
+                  placeholder={t("history.searchPlaceholder")}
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   className="h-10 w-full rounded-xl border border-[#EBEDF5] bg-white py-2 pl-9 pr-3 text-sm text-[#181819] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[#4578FC]/30 focus:border-[#4578FC]"
@@ -219,7 +220,7 @@ export default function History() {
               <div className="flex flex-col">
                 <label className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-[var(--text-muted)]">
                   <CalendarDaysIcon className="h-3.5 w-3.5" />
-                  Период
+                  {t("history.period")}
                 </label>
                 <div className="relative">
                   <ListboxButton
@@ -256,12 +257,12 @@ export default function History() {
             aria-hidden
           >
             <span />
-            <span>Компания</span>
-            <span>Резюме</span>
-            <span>Должность</span>
-            <span>Дата</span>
-            <span>Показатели</span>
-            <span className="text-right">Действия</span>
+            <span>{t("history.company")}</span>
+            <span>{t("history.resume")}</span>
+            <span>{t("history.jobTitle")}</span>
+            <span>{t("history.date")}</span>
+            <span>{t("history.scores")}</span>
+            <span className="text-right">{t("history.actions")}</span>
           </div>
           <ul className="divide-y divide-[#EBEDF5]" aria-label="История сгенерированных резюме">
             {filtered.length > 0 ? (
@@ -309,8 +310,8 @@ export default function History() {
                               href={api.downloadUrl(item.filename, api.getStoredToken())}
                               download={item.filename}
                               className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-transparent text-[var(--text-muted)] hover:bg-[#EBEDF5] hover:text-[#181819] focus:outline-none focus:ring-2 focus:ring-[#4578FC]/30"
-                              title="Скачать PDF"
-                              aria-label="Скачать PDF"
+                              title={t("history.downloadPdf")}
+                              aria-label={t("history.downloadPdf")}
                             >
                               <ArrowDownTrayIcon className="h-3.5 w-3.5" />
                             </a>
@@ -319,8 +320,8 @@ export default function History() {
                               target="_blank"
                               rel="noopener noreferrer"
                               className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-transparent text-[var(--text-muted)] hover:bg-[#EBEDF5] hover:text-[#181819] focus:outline-none focus:ring-2 focus:ring-[#4578FC]/30"
-                              title="Открыть в браузере"
-                              aria-label="Открыть в браузере"
+                              title={t("history.openInBrowser")}
+                              aria-label={t("history.openInBrowser")}
                             >
                               <EyeIcon className="h-3.5 w-3.5" />
                             </a>
@@ -329,8 +330,8 @@ export default function History() {
                               onClick={(e) => { e.stopPropagation(); handleDelete(item.filename); }}
                               disabled={deleting === item.filename}
                               className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-transparent text-[var(--text-muted)] hover:bg-[#EBEDF5] hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-[#4578FC]/30 disabled:opacity-50"
-                              title="Удалить"
-                              aria-label="Удалить"
+                              title={t("history.delete")}
+                              aria-label={t("history.delete")}
                             >
                               <TrashIcon className="h-3.5 w-3.5" />
                             </button>
@@ -340,7 +341,7 @@ export default function History() {
                           <div className="flex flex-wrap items-center gap-2 text-sm">
                             {(item.first_name || item.last_name) && (
                               <span className="rounded-lg bg-[#EBEDF5] px-2.5 py-1.5 text-[#181819]">
-                                Кандидат: {[item.first_name, item.last_name].filter(Boolean).join(" ")}
+                                {t("history.candidate")}: {[item.first_name, item.last_name].filter(Boolean).join(" ")}
                               </span>
                             )}
                             {item.job_url && (
@@ -351,7 +352,7 @@ export default function History() {
                                 className="inline-flex items-center gap-1.5 rounded-lg border border-[#EBEDF5] bg-white px-2.5 py-1.5 text-[#181819] transition-colors hover:bg-[#F5F6FA] hover:border-[#E0E2E8] focus:outline-none focus:ring-2 focus:ring-[#4578FC]/30"
                               >
                                 <LinkIcon className="h-3.5 w-3.5 text-[var(--text-muted)]" />
-                                Вакансия
+                                {t("history.vacancy")}
                               </a>
                             )}
                             {item.source_checksum ? (
@@ -379,7 +380,7 @@ export default function History() {
                               className="inline-flex items-center gap-1.5 rounded-lg border border-[#EBEDF5] bg-white px-2.5 py-1.5 text-[#181819] transition-colors hover:bg-[#F5F6FA] hover:border-[#E0E2E8] focus:outline-none focus:ring-2 focus:ring-[#4578FC]/30"
                             >
                               <EyeIcon className="h-3.5 w-3.5 text-[var(--text-muted)]" />
-                              Открыть
+                              {t("history.open")}
                             </a>
                           </div>
                         </DisclosurePanel>

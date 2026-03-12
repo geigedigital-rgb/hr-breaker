@@ -11,6 +11,7 @@ import {
 } from "@heroicons/react/24/outline";
 import * as api from "../api";
 import { useAuth } from "../contexts/AuthContext";
+import { t, tFormat } from "../i18n";
 
 const ADD_RESUME_ACCEPT = ".txt,.md,.html,.htm,.tex,.pdf,.doc,.docx";
 const ADD_RESUME_EXTS = ["txt", "md", "html", "htm", "tex", "pdf", "doc", "docx"];
@@ -20,14 +21,14 @@ function formatRelative(iso: string): string {
   const now = new Date();
   const diffMs = now.getTime() - d.getTime();
   const diffDays = Math.floor(diffMs / (24 * 60 * 60 * 1000));
-  if (diffDays === 0) return "Сегодня";
-  if (diffDays === 1) return "Вчера";
-  if (diffDays < 30) return `${diffDays} дн. назад`;
+  if (diffDays === 0) return t("home.today");
+  if (diffDays === 1) return t("home.yesterday");
+  if (diffDays < 30) return tFormat(t("home.daysAgo"), { n: String(diffDays) });
   const diffMonths = Math.floor(diffDays / 30);
-  if (diffMonths === 1) return "1 мес. назад";
-  if (diffMonths < 12) return `${diffMonths} мес. назад`;
+  if (diffMonths === 1) return t("home.monthAgo");
+  if (diffMonths < 12) return tFormat(t("home.monthsAgo"), { n: String(diffMonths) });
   const diffYears = Math.floor(diffDays / 365);
-  return diffYears === 1 ? "1 год назад" : `${diffYears} г. назад`;
+  return diffYears === 1 ? t("home.yearAgo") : tFormat(t("home.yearsAgo"), { n: String(diffYears) });
 }
 
 /** Уникальные «исходные» резюме по source_checksum; при отсутствии checksum считаем каждый item отдельно */
@@ -42,7 +43,7 @@ function useResumeDocuments() {
     api
       .getHistory()
       .then((r) => setItems(Array.isArray(r.items) ? r.items : []))
-      .catch((e) => setError(e instanceof Error ? e.message : "Ошибка загрузки"))
+      .catch((e) => setError(e instanceof Error ? e.message : t("home.loadError")))
       .finally(() => setLoading(false));
   }, [refresh]);
 
@@ -55,11 +56,11 @@ function useResumeDocuments() {
   const allDocuments = Array.from(byChecksum.values()).sort(
     (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
   );
-  /** В блоке «Мои резюме» — только загруженные с компьютера (register-upload), без улучшенных */
+  /** In «My resumes» block — only uploaded PDFs (register-upload), not improved */
   const documents = allDocuments.filter(
     (d) => d.source_was_pdf === true && d.filename.startsWith("uploaded_")
   );
-  /** В блоке «История улучшений» — улучшенные/отредактированные резюме (всё остальное) */
+  /** In «Edit history» block — improved/tailored resumes */
   const editedDocuments = allDocuments.filter(
     (d) => !(d.source_was_pdf === true && d.filename.startsWith("uploaded_"))
   );
@@ -116,7 +117,7 @@ export default function Home() {
         content = await new Promise<string>((resolve, reject) => {
           const r = new FileReader();
           r.onload = () => resolve(typeof r.result === "string" ? r.result : "");
-          r.onerror = () => reject(new Error("Не удалось прочитать файл"));
+          r.onerror = () => reject(new Error(t("home.readFileError")));
           r.readAsText(file, "UTF-8");
         });
       }
@@ -133,37 +134,48 @@ export default function Home() {
 
   return (
     <div className="space-y-6">
-      {/* Карточка перехода к улучшению резюме */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <Link
-          to="/optimize"
-          className="rounded-2xl border border-[#EBEDF5] bg-white p-5 text-left transition-all duration-200 hover:border-[#c8cddc] hover:bg-[#FAFBFC]"
-        >
-          <div className="flex items-center gap-4">
-            <div className="shrink-0 w-11 h-11 rounded-xl flex items-center justify-center bg-[#F0F2F8] text-[#5e7acc]">
-              <ChartBarIcon className="w-5 h-5" strokeWidth={1.75} />
+      {/* Banner: Resume match score — full width, gradient, CTA */}
+      <Link
+        to="/optimize"
+        className="block w-full rounded-2xl border border-[#d8dcf0] overflow-hidden transition-all duration-200 hover:border-[#4578FC]/40 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#4578FC]/30 focus:ring-offset-2"
+        style={{
+          background: "linear-gradient(135deg, #f8f9fe 0%, #eef2fc 35%, #f4f6fd 70%, #fafbff 100%)",
+        }}
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-5 p-6 sm:p-8 min-h-[140px]">
+          <div className="flex items-start gap-4 min-w-0">
+            <div className="shrink-0 w-14 h-14 rounded-2xl flex items-center justify-center bg-white/80 shadow-sm border border-[#EBEDF5] text-[#4578FC]">
+              <ChartBarIcon className="w-7 h-7" strokeWidth={1.75} />
             </div>
             <div className="min-w-0">
-              <span className="block text-[15px] font-medium tracking-tight text-[#181819]">
-                Резюме метч скор
-              </span>
-              <span className="block text-[13px] text-[var(--text-muted)] mt-0.5 leading-snug">
-                Проверить шанс на интервью
-              </span>
+              <h2 className="text-lg font-semibold tracking-tight text-[#181819]">
+                {t("home.resumeMatchScore")}
+              </h2>
+              <p className="text-sm text-[var(--text-muted)] mt-1 leading-relaxed max-w-xl">
+                {t("home.resumeMatchDesc")}
+              </p>
             </div>
           </div>
-        </Link>
-      </div>
+          <div className="shrink-0">
+              <span className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-[#4578FC] text-white text-sm font-semibold shadow-sm hover:bg-[#3d6ae6] transition-colors">
+                {t("home.checkChance")}
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+              </svg>
+            </span>
+          </div>
+        </div>
+      </Link>
 
-      {/* Блок: Мои резюме — карточки с превью и кнопками + пунктирная карточка «Добавить» */}
+      {/* Section: My resumes — cards with preview and Add */}
       <section className="rounded-2xl border border-[#EBEDF5] bg-white overflow-hidden">
         <div className="px-5 py-4 border-b border-[#EBEDF5]">
-          <h2 className="text-base font-semibold text-[#181819]">Мои резюме</h2>
-          <p className="text-sm text-[var(--text-muted)] mt-0.5">Резюме, загруженные в формате PDF</p>
+          <h2 className="text-base font-semibold text-[#181819]">{t("home.myResumes")}</h2>
+          <p className="text-sm text-[var(--text-muted)] mt-0.5">{t("home.myResumesDesc")}</p>
         </div>
         <div className="p-5">
           {loading && (
-            <p className="text-sm text-[var(--text-muted)] py-8">Загрузка…</p>
+            <p className="text-sm text-[var(--text-muted)] py-8">{t("home.loading")}</p>
           )}
           {error && (
             <p className="text-sm text-red-600 py-8" role="alert">{error}</p>
@@ -171,7 +183,7 @@ export default function Home() {
           {!loading && !error && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               {documents.slice(0, 10).map((item) => {
-                const name = [item.first_name, item.last_name].filter(Boolean).join(" ") || "Без названия";
+                const name = [item.first_name, item.last_name].filter(Boolean).join(" ") || t("home.noName");
                 return (
                   <article
                     key={item.filename}
@@ -184,8 +196,8 @@ export default function Home() {
                         target="_blank"
                         rel="noopener noreferrer"
                         className="absolute inset-0 z-10 flex items-center justify-center bg-black/0 transition-colors group-hover/preview:bg-black/30 rounded-md"
-                        aria-label="Открыть резюме"
-                        title="Открыть"
+                        aria-label={t("home.open")}
+                        title={t("home.open")}
                       >
                         <span className="opacity-0 group-hover/preview:opacity-100 transition-opacity flex items-center justify-center w-7 h-7 rounded-full bg-white/95 text-[#181819] shadow-sm">
                           <EyeIcon className="w-4 h-4" />
@@ -226,7 +238,7 @@ export default function Home() {
                           className="inline-flex items-center gap-1 p-1 rounded text-[9px] font-medium text-[var(--text-muted)] hover:bg-[#EBEDF5] hover:text-[#181819] transition-colors"
                         >
                           <PencilSquareIcon className="w-2.5 h-2.5 shrink-0" />
-                          Улучшить
+                          {t("home.improve")}
                         </Link>
                         <a
                           href={api.downloadUrl(item.filename, api.getStoredToken())}
@@ -234,7 +246,7 @@ export default function Home() {
                           className="inline-flex items-center gap-1 p-1 rounded text-[9px] font-medium text-[var(--text-muted)] hover:bg-[#EBEDF5] hover:text-[#181819] transition-colors"
                         >
                           <ArrowDownTrayIcon className="w-2.5 h-2.5 shrink-0" />
-                          Скачать PDF
+                          {t("home.downloadPdf")}
                         </a>
                         <button
                           type="button"
@@ -242,21 +254,20 @@ export default function Home() {
                           className="inline-flex items-center gap-1 p-1 rounded text-[9px] font-medium text-[var(--text-muted)] hover:bg-[#EBEDF5] hover:text-red-600 transition-colors text-left"
                         >
                           <TrashIcon className="w-2.5 h-2.5 shrink-0" />
-                          Удалить
+                          {t("home.delete")}
                         </button>
                       </div>
                     </div>
                   </article>
                 );
               })}
-              {/* Карточка «Добавить» — сразу открывает выбор файла с компьютера; после загрузки редирект на оптимизацию, шаг 2 */}
               <input
                 ref={addFileInputRef}
                 type="file"
                 accept={ADD_RESUME_ACCEPT}
                 className="hidden"
                 onChange={handleAddFile}
-                aria-label="Загрузить резюме с компьютера"
+                aria-label={t("home.uploadResume")}
               />
               <button
                 type="button"
@@ -269,24 +280,24 @@ export default function Home() {
                 ) : (
                   <PlusIcon className="w-5 h-5 text-[#4578FC]" strokeWidth={2} />
                 )}
-                <span className="text-[10px] font-medium">{addUploading ? "Загрузка…" : "Добавить"}</span>
+                <span className="text-[10px] font-medium">{addUploading ? t("home.uploading") : t("home.add")}</span>
               </button>
             </div>
           )}
         </div>
       </section>
 
-      {/* Блок: История улучшений — отредактированные резюме с превью и должностью */}
+      {/* Section: Edit history — tailored resumes */}
       {editedDocuments.length > 0 && (
         <section className="rounded-2xl border border-[#EBEDF5] bg-white overflow-hidden" aria-labelledby="edited-heading">
           <div className="px-5 py-4 border-b border-[#EBEDF5]">
-            <h2 id="edited-heading" className="text-base font-semibold text-[#181819]">История улучшений</h2>
-            <p className="text-sm text-[var(--text-muted)] mt-0.5">Резюме, отредактированные под вакансии</p>
+            <h2 id="edited-heading" className="text-base font-semibold text-[#181819]">{t("home.editHistory")}</h2>
+            <p className="text-sm text-[var(--text-muted)] mt-0.5">{t("home.editHistoryDesc")}</p>
           </div>
           <div className="p-5">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               {editedDocuments.slice(0, 12).map((item) => {
-                const name = [item.first_name, item.last_name].filter(Boolean).join(" ") || "Резюме";
+                const name = [item.first_name, item.last_name].filter(Boolean).join(" ") || t("home.resume");
                 return (
                   <article
                     key={item.filename}
@@ -298,8 +309,8 @@ export default function Home() {
                         target="_blank"
                         rel="noopener noreferrer"
                         className="absolute inset-0 z-10 flex items-center justify-center bg-black/0 transition-colors group-hover/preview:bg-black/30 rounded-md"
-                        aria-label="Открыть резюме"
-                        title="Открыть"
+                        aria-label={t("home.open")}
+                        title={t("home.open")}
                       >
                         <span className="opacity-0 group-hover/preview:opacity-100 transition-opacity flex items-center justify-center w-7 h-7 rounded-full bg-white/95 text-[#181819] shadow-sm">
                           <EyeIcon className="w-4 h-4" />
@@ -343,7 +354,7 @@ export default function Home() {
                           className="inline-flex items-center gap-1 p-1 rounded text-[9px] font-medium text-[var(--text-muted)] hover:bg-[#EBEDF5] hover:text-[#181819] transition-colors"
                         >
                           <ArrowDownTrayIcon className="w-2.5 h-2.5 shrink-0" />
-                          Скачать PDF
+                          {t("home.downloadPdf")}
                         </a>
                         <button
                           type="button"
@@ -351,7 +362,7 @@ export default function Home() {
                           className="inline-flex items-center gap-1 p-1 rounded text-[9px] font-medium text-[var(--text-muted)] hover:bg-[#EBEDF5] hover:text-red-600 transition-colors text-left"
                         >
                           <TrashIcon className="w-2.5 h-2.5 shrink-0" />
-                          Удалить
+                          {t("home.delete")}
                         </button>
                       </div>
                     </div>
@@ -363,7 +374,7 @@ export default function Home() {
         </section>
       )}
 
-      {/* Попап подтверждения удаления */}
+      {/* Delete confirmation modal */}
       {deleteConfirm && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40"
@@ -377,10 +388,10 @@ export default function Home() {
             onClick={(e) => e.stopPropagation()}
           >
             <h3 id="delete-dialog-title" className="text-base font-semibold text-[#181819]">
-              Удалить резюме?
+              {t("home.deleteConfirmTitle")}
             </h3>
             <p className="mt-2 text-sm text-[var(--text-muted)]">
-              Резюме «{deleteConfirm.name}» будет удалено. Это действие нельзя отменить.
+              {tFormat(t("home.deleteConfirmBody"), { name: deleteConfirm.name })}
             </p>
             <div className="mt-5 flex gap-3 justify-end">
               <button
@@ -389,7 +400,7 @@ export default function Home() {
                 disabled={deleting}
                 className="px-4 py-2 rounded-xl border border-[#EBEDF5] bg-[#F5F6FA] text-sm font-medium text-[#181819] hover:bg-[#EBEDF5] transition-colors disabled:opacity-60"
               >
-                Отмена
+                {t("home.cancel")}
               </button>
               <button
                 type="button"
@@ -402,7 +413,7 @@ export default function Home() {
                 ) : (
                   <TrashIcon className="w-4 h-4" />
                 )}
-                Удалить
+                {t("home.delete")}
               </button>
             </div>
           </div>

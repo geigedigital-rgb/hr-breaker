@@ -7,8 +7,10 @@ import {
   UserPlusIcon,
   FireIcon,
   BellIcon,
+  ShieldCheckIcon,
 } from "@heroicons/react/24/outline";
 import { useAuth } from "./contexts/AuthContext";
+import { isAdminUser } from "./api";
 import { Tooltip } from "./components/Tooltip";
 import {
   READINESS_STAGE_LABEL,
@@ -16,10 +18,11 @@ import {
   READINESS_STAGE_ICON_IMAGE,
   READINESS_HERO_GRADIENT,
 } from "./readiness";
+import { t } from "./i18n";
 
 const nav = [
-  { to: "/", label: "Главная", icon: HomeIcon },
-  { to: "/history", label: "История", icon: DocumentTextIcon },
+  { to: "/", label: t("nav.home"), icon: HomeIcon },
+  { to: "/history", label: t("nav.history"), icon: DocumentTextIcon },
 ];
 
 export default function Layout() {
@@ -53,16 +56,30 @@ export default function Layout() {
               </Link>
             );
           })}
+          {user && isAdminUser(user) && (
+            <Link
+              to="/admin"
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${
+                location.pathname.startsWith("/admin")
+                  ? "bg-white/15 text-white shadow-sm"
+                  : "text-white/80 hover:bg-white/10 hover:text-white"
+              }`}
+              title={t("admin.nav.dashboard")}
+            >
+              <ShieldCheckIcon className="w-5 h-5 shrink-0 opacity-100" />
+              Admin
+            </Link>
+          )}
         </nav>
 
         <div className="mt-auto pt-4 border-t border-white/15 space-y-1">
           <button
             type="button"
             className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium text-white/80 hover:bg-white/10 hover:text-white transition-colors"
-            title="Скоро"
+            title={t("nav.inviteSoon")}
           >
             <UserPlusIcon className="w-4 h-4 shrink-0 opacity-90" />
-            <span className="truncate">Пригласить друзей</span>
+            <span className="truncate">{t("nav.inviteFriends")}</span>
           </button>
           <Link
             to="/settings"
@@ -73,7 +90,7 @@ export default function Layout() {
             }`}
           >
             <Cog6ToothIcon className="w-4 h-4 shrink-0 opacity-90" />
-            Настройки
+            {t("nav.settings")}
           </Link>
         </div>
 
@@ -93,8 +110,8 @@ export default function Layout() {
                 type="button"
                 onClick={logout}
                 className="shrink-0 p-1.5 rounded-lg text-white/80 hover:bg-white/15 hover:text-white transition-colors"
-                title="Выйти"
-                aria-label="Выйти"
+                title={t("nav.logout")}
+                aria-label={t("nav.logout")}
               >
                 <ArrowRightOnRectangleIcon className="w-5 h-5" />
               </button>
@@ -105,8 +122,8 @@ export default function Layout() {
                 👤
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-white">Локальный режим</p>
-                <p className="text-xs text-white/80">Без аккаунта</p>
+                <p className="text-sm font-semibold text-white">{t("nav.localMode")}</p>
+                <p className="text-xs text-white/80">{t("nav.noAccount")}</p>
               </div>
             </div>
           )}
@@ -114,11 +131,11 @@ export default function Layout() {
 
         {user && user.id !== "local" && user.readiness && (
           <div className="mt-5 space-y-2">
-            <h3 className="text-[11px] font-semibold text-white/90 uppercase tracking-wider px-1">Ваш прогресс</h3>
+            <h3 className="text-[11px] font-semibold text-white/90 uppercase tracking-wider px-1">{t("nav.yourProgress")}</h3>
             <Link
               to="/progress"
               className="block rounded-xl p-3.5 bg-white border border-transparent transition-all hover:opacity-95 focus:opacity-95 outline-none shadow-md group"
-              aria-label="Перейти на страницу Прогресс"
+              aria-label={t("nav.goToProgress")}
             >
               <div className="flex items-center gap-3 mb-2.5">
                 <div className="w-8 h-8 rounded-full bg-[#F5F6FA] flex items-center justify-center shrink-0">
@@ -137,7 +154,7 @@ export default function Layout() {
                 </div>
                 <div className="flex flex-col min-w-0">
                   <span className="text-[13px] font-bold text-[#181819] leading-tight truncate group-hover:text-[#4558ff] transition-colors">{READINESS_STAGE_LABEL[user.readiness.stage] ?? user.readiness.stage}</span>
-                  <span className="text-[11px] text-[var(--text-tertiary)] font-medium mt-0.5">До след. уровня: {Math.round(user.readiness.progress_to_next * 100)}%</span>
+                  <span className="text-[11px] text-[var(--text-tertiary)] font-medium mt-0.5">{t("nav.toNextLevel")} {Math.round(user.readiness.progress_to_next * 100)}%</span>
                 </div>
               </div>
               <div className="h-2 rounded-full bg-[#EBEDF5] overflow-hidden" role="progressbar" aria-valuenow={Math.round(user.readiness.progress_to_next * 100)} aria-valuemin={0} aria-valuemax={100}>
@@ -173,7 +190,7 @@ export default function Layout() {
               <div className="flex items-center gap-2">
                 <Tooltip
                   title={READINESS_STAGE_LABEL[user.readiness.stage] ?? user.readiness.stage}
-                  description="Уровень готовности к собеседованиям по результатам активности в приложении."
+                  description={t("nav.readinessTooltip")}
                   side="bottom"
                 >
                   <div className="flex items-center gap-2 rounded-full bg-[#F5F6FA] border border-[#EBEDF5] px-3 py-1.5 cursor-default hover:bg-[#EBEDF5] transition-colors">
@@ -194,8 +211,8 @@ export default function Layout() {
                 </Tooltip>
                 {user.readiness.streak_days > 0 && (
                   <Tooltip
-                    title="Серия дней"
-                    description="Сколько дней подряд вы заходили в приложение. Регулярность повышает уровень готовности."
+                  title={t("nav.streakDays")}
+                  description={t("nav.streakTooltip")}
                     side="bottom"
                   >
                     <div className="flex items-center gap-2 rounded-full bg-[#F5F6FA] border border-[#EBEDF5] px-3 py-1.5 cursor-default hover:bg-[#EBEDF5] transition-colors">
@@ -207,8 +224,8 @@ export default function Layout() {
                 <button
                   type="button"
                   className="p-1.5 rounded-full bg-[#F5F6FA] border border-[#EBEDF5] text-[var(--text-muted)] hover:bg-[#EBEDF5] hover:text-[#181819] transition-colors"
-                  title="Уведомления"
-                  aria-label="Уведомления"
+                title={t("nav.notifications")}
+                aria-label={t("nav.notifications")}
                 >
                   <BellIcon className="w-5 h-5" />
                 </button>

@@ -68,7 +68,7 @@ SCORES (required, integers 0-100):
 - experience: How relevant the candidate's work experience is to the role (titles, domains, seniority).
 - portfolio: How well projects, achievements, certifications, or education match what the job values.
 
-IMPROVEMENT_TIPS (optional): If the resume could be improved for this job, provide a short text in Russian (2-4 blocks). Each block: a clear header (e.g. "Ключевые слова", "Опыт", "Структура") and 1-2 short sentences with concrete tips for better match. Use line breaks between blocks. If the resume is already an excellent match (scores high), you may leave improvement_tips empty or null.
+IMPROVEMENT_TIPS (optional): If the resume could be improved for this job, provide a short text in English (2-4 blocks). Each block: a clear header (e.g. "Keywords", "Experience", "Structure") and 1-2 short sentences with concrete tips for better match. Use line breaks between blocks. If the resume is already an excellent match (scores high), you may leave improvement_tips empty or null.
 
 Be strict but fair. Output valid integers 0-100 for each score field."""
 

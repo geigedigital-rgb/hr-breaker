@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import * as api from "../api";
 import { useAuth } from "../contexts/AuthContext";
+import { t } from "../i18n";
 
 export default function Settings() {
   const { user, loading: authLoading, logout } = useAuth();
@@ -11,7 +12,7 @@ export default function Settings() {
     api
       .getSettings()
       .then(setSettings)
-      .catch((e) => setSettingsError(e instanceof Error ? e.message : "Не удалось загрузить статус сервиса"));
+      .catch((e) => setSettingsError(e instanceof Error ? e.message : t("settings.settingsLoadError")));
   }, []);
 
   const loading = authLoading && !user && !settings;
@@ -20,19 +21,19 @@ export default function Settings() {
     return (
       <div className="flex items-center gap-2 text-[var(--text-muted)] text-sm">
         <span className="inline-block w-4 h-4 border-2 border-[#4578FC] border-t-transparent rounded-full animate-spin" />
-        Загрузка…
+        {t("settings.loading")}
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-[#181819] tracking-tight">Настройки</h1>
+      <h1 className="text-2xl font-bold text-[#181819] tracking-tight">{t("settings.title")}</h1>
 
       <div className="grid gap-6 max-w-3xl md:grid-cols-2">
-        {/* Аккаунт */}
+        {/* Account */}
         <section className="rounded-2xl bg-[#FFFFFF] p-6 space-y-4">
-          <h2 className="text-base font-semibold text-[#181819]">Аккаунт</h2>
+          <h2 className="text-base font-semibold text-[#181819]">{t("settings.account")}</h2>
           {user && user.id !== "local" ? (
             <>
               <div>
@@ -46,32 +47,30 @@ export default function Settings() {
                 onClick={logout}
                 className="inline-flex items-center justify-center px-4 py-2 rounded-xl bg-[#EBEDF5] text-sm font-medium text-[#181819] hover:bg-[#E0E4EE] transition-colors"
               >
-                Выйти из аккаунта
+                {t("settings.logoutButton")}
               </button>
             </>
           ) : (
             <p className="text-sm text-[var(--text-muted)]">
-              Вы используете локальный режим без аккаунта. Войдите или зарегистрируйтесь, чтобы сохранять историю
-              улучшений между устройствами.
+              {t("settings.localModeNote")}
             </p>
           )}
         </section>
 
-        {/* Данные и приватность */}
+        {/* Resumes and data */}
         <section className="rounded-2xl bg-[#FFFFFF] p-6 space-y-3">
-          <h2 className="text-base font-semibold text-[#181819]">Резюме и данные</h2>
+          <h2 className="text-base font-semibold text-[#181819]">{t("settings.resumesAndData")}</h2>
           <p className="text-sm text-[var(--text-muted)]">
-            Загруженные резюме и сгенерированные PDF видны только вам. Вы можете удалить любой файл в разделах
-            «Мои резюме» и «История улучшений».
+            {t("settings.resumesDataNote")}
           </p>
           <p className="text-sm text-[var(--text-muted)]">
-            Удаление файла в истории полностью убирает его из списка и делает недоступным для скачивания.
+            {t("settings.deleteNote")}
           </p>
         </section>
 
-        {/* Статус сервиса */}
+        {/* Service status */}
         <section className="rounded-2xl bg-[#FFFFFF] p-6 space-y-3 md:col-span-2">
-          <h2 className="text-base font-semibold text-[#181819]">Статус сервиса</h2>
+          <h2 className="text-base font-semibold text-[#181819]">{t("settings.serviceStatus")}</h2>
           {settingsError && (
             <p className="text-sm text-red-600" role="alert">
               {settingsError}

@@ -10,6 +10,7 @@ import {
   ArrowTopRightOnSquareIcon,
 } from "@heroicons/react/24/outline";
 import * as api from "../api";
+import { t } from "../i18n";
 
 const POPULAR_QUERIES = [
   "Python Developer",
@@ -25,11 +26,11 @@ function formatPosted(iso: string | null | undefined): string {
   const d = new Date(iso);
   const now = new Date();
   const diffDays = Math.floor((now.getTime() - d.getTime()) / (24 * 60 * 60 * 1000));
-  if (diffDays === 0) return "Сегодня";
-  if (diffDays === 1) return "Вчера";
-  if (diffDays < 7) return `${diffDays} дн. назад`;
-  if (diffDays < 30) return `${Math.floor(diffDays / 7)} нед. назад`;
-  return `${Math.floor(diffDays / 30)} мес. назад`;
+  if (diffDays === 0) return "Today";
+  if (diffDays === 1) return "Yesterday";
+  if (diffDays < 7) return `${diffDays} days ago`;
+  if (diffDays < 30) return `${Math.floor(diffDays / 7)} wk ago`;
+  return `${Math.floor(diffDays / 30)} mo ago`;
 }
 
 export default function Vacancies() {
@@ -63,7 +64,7 @@ export default function Vacancies() {
         setResult(res);
         setPage(pageNum);
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Ошибка загрузки");
+        setError(e instanceof Error ? e.message : t("vacancies.loadError"));
         setResult(null);
       } finally {
         setLoading(false);

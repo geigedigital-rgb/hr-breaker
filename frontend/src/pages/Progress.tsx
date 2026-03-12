@@ -21,6 +21,7 @@ import {
 } from "../readiness";
 import { Dialog, Transition } from "@headlessui/react";
 import { Fragment } from "react";
+import { t as tStr } from "../i18n";
 
 /** Glow/shadow by level: 1 silver, 2 light purple, 3 silver+purple, 4 purple+gold, 5 gold+purple */
 const STAGE_GLOW: Record<string, { bg: string; shadow: string }> = {
@@ -49,26 +50,26 @@ const STAGE_GLOW: Record<string, { bg: string; shadow: string }> = {
 /** Mock event for "Что дало рост" (backend can replace with real feed later). */
 type GrowthEvent = { icon: typeof DocumentTextIcon; label: string; points: number };
 const MOCK_GROWTH_EVENTS: GrowthEvent[] = [
-  { icon: ChartBarIcon, label: "Анализ резюме завершён", points: 12 },
-  { icon: PencilSquareIcon, label: "Улучшена секция опыта", points: 18 },
-  { icon: ArrowUpTrayIcon, label: "Загружена новая версия", points: 6 },
-  { icon: DocumentTextIcon, label: "Резюме под вакансию оптимизировано", points: 10 },
-  { icon: ChartBarIcon, label: "Проверка соответствия пройдена", points: 5 },
+  { icon: ChartBarIcon, label: tStr("progress.growthResumeDone"), points: 12 },
+  { icon: PencilSquareIcon, label: tStr("progress.growthExperience"), points: 18 },
+  { icon: ArrowUpTrayIcon, label: tStr("progress.growthUpload"), points: 6 },
+  { icon: DocumentTextIcon, label: tStr("progress.growthOptimized"), points: 10 },
+  { icon: ChartBarIcon, label: tStr("progress.growthCheckPassed"), points: 5 },
 ];
 
 function getNextStep(stage: string): { title: string; description: string; cta: string; to: string } {
   if (stage === "Interview-Ready" || stage === "Strong") {
     return {
-      title: "Следующий шаг",
-      description: "Улучшите раздел «Опыт» — это чаще всего повышает отклики.",
-      cta: "Улучшить опыт",
+      title: tStr("progress.nextStep"),
+      description: tStr("progress.nextStepDescStrong"),
+      cta: tStr("progress.nextStepCtaStrong"),
       to: "/optimize",
     };
   }
   return {
-    title: "Следующий шаг",
-    description: "Сделайте ещё один анализ — найдём 3 правки с максимальным эффектом.",
-    cta: "Запустить анализ",
+    title: tStr("progress.nextStep"),
+    description: tStr("progress.nextStepDesc"),
+    cta: tStr("progress.nextStepCta"),
     to: "/optimize",
   };
 }
@@ -89,13 +90,13 @@ export default function Progress() {
   if (!readiness) {
     return (
       <div className="p-6 max-w-2xl mx-auto">
-        <p className="text-[var(--text-muted)] text-sm">Прогресс доступен в аккаунте. Войдите или зарегистрируйтесь.</p>
+        <p className="text-[var(--text-muted)] text-sm">Progress is available in your account. Sign in or sign up.</p>
         <button
           type="button"
           onClick={() => navigate("/settings")}
           className="mt-4 text-sm font-medium text-[#4578FC] hover:underline"
         >
-          Настройки
+          {tStr("nav.settings")}
         </button>
       </div>
     );
@@ -135,7 +136,7 @@ export default function Progress() {
                   type="button"
                   onClick={() => setInfoOpen(true)}
                   className="p-1 rounded-full text-[var(--text-muted)] hover:bg-[#EBEDF5] hover:text-[#181819] transition-colors"
-                  aria-label="Как начисляются очки"
+                  aria-label="How points are earned"
                 >
                   <InformationCircleIcon className="w-5 h-5" />
                 </button>
@@ -187,10 +188,10 @@ export default function Progress() {
           <div className="flex items-center gap-2 rounded-full bg-[#f5f3ff] px-3 py-2 w-fit mb-4">
             <FireIcon className="w-5 h-5 text-[#7c3aed]" />
             <span className="text-sm font-medium text-[#181819]">
-              {streak > 0 ? `${streak} дн. подряд` : "Пока нет серии"}
+              {streak > 0 ? `${streak} days in a row` : "No streak yet"}
             </span>
           </div>
-          <p className="text-xs text-[var(--text-muted)] mb-2">Прогресс до следующего уровня</p>
+          <p className="text-xs text-[var(--text-muted)] mb-2">Progress to next level</p>
           <div className="h-2 rounded-full bg-[#EBEDF5] overflow-hidden">
             <div
               className="h-full rounded-full transition-[width] duration-500 ease-out"
@@ -253,7 +254,7 @@ export default function Progress() {
           className="rounded-3xl p-6 border border-[#EBEDF5] bg-white shadow-md col-span-full"
           style={{ boxShadow: "0 4px 20px rgba(0,0,0,0.06)" }}
         >
-          <h2 className="text-sm font-semibold text-[#181819] mb-4">Что дало рост</h2>
+          <h2 className="text-sm font-semibold text-[#181819] mb-4">What drove growth</h2>
           <ul className="space-y-2">
             {MOCK_GROWTH_EVENTS.slice(0, 5).map((ev, i) => {
               const Icon = ev.icon;
@@ -302,16 +303,16 @@ export default function Progress() {
             >
               <Dialog.Panel className="w-full max-w-lg rounded-t-2xl bg-white p-6 shadow-xl border border-[#EBEDF5]">
                 <Dialog.Title className="text-lg font-semibold text-[#181819]">
-                  Как начисляются очки
+                  How points are earned
                 </Dialog.Title>
                 <div className="mt-3 space-y-2 text-sm text-[var(--text-muted)]">
-                  <p>Очки растут от действий, которые улучшают резюме.</p>
-                  <p>Мы не начисляем очки за случайные клики.</p>
+                  <p>Points increase from actions that improve your resume.</p>
+                  <p>We do not award points for random clicks.</p>
                   <ul className="list-disc list-inside space-y-1 mt-3">
-                    <li>Анализ резюме по вакансии</li>
-                    <li>Успешное улучшение (генерация PDF)</li>
-                    <li>Загрузка новой версии резюме</li>
-                    <li>Регулярный вход в приложение (раз в день)</li>
+                    <li>Resume analysis for a job</li>
+                    <li>Successful improvement (PDF generation)</li>
+                    <li>Uploading a new resume version</li>
+                    <li>Regular app sign-in (once per day)</li>
                   </ul>
                 </div>
                 <button
@@ -319,7 +320,7 @@ export default function Progress() {
                   onClick={() => setInfoOpen(false)}
                   className="mt-6 w-full rounded-xl bg-[#4578FC] text-white py-3 text-sm font-semibold hover:bg-[#3d6ae6] transition-colors"
                 >
-                  Понятно
+                  Got it
                 </button>
               </Dialog.Panel>
             </Transition.Child>

@@ -30,6 +30,9 @@ ENV/
 # Environment variables
 .env
 
+# Local notes (not for repo)
+note
+
 # Cache
 .cache/
 

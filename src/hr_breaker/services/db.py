@@ -417,6 +417,16 @@ async def backfill_user_id(pool, user_id: str) -> int:
         return 0
 
 
+async def user_list_all(pool, limit: int = 500) -> list[dict]:
+    """List all users (id, email, name, created_at). For admin only."""
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            f"SELECT id, email, name, created_at FROM {USERS_TABLE} ORDER BY created_at DESC LIMIT $1",
+            limit,
+        )
+    return [dict(r) for r in rows]
+
+
 # --- Market Readiness (status indicator, not gamification) ---
 # Этапы: первый 0–19 (20 очков), чтобы за 1 вход + анализ + оптимизацию (2+5+10=17) почти заполнить полоску.
 READINESS_STAGES = [

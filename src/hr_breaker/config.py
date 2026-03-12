@@ -105,6 +105,16 @@ class Settings(BaseModel):
     stripe_price_trial_id: str = ""   # One-time $2.99 trial 7-day access
     stripe_price_monthly_id: str = ""  # Recurring $29/month
 
+    # Landing (pitchcv.app): public trial analysis, no auth
+    landing_allowed_origins: str = ""  # Comma-separated, e.g. https://pitchcv.app,https://www.pitchcv.app
+    landing_rate_limit_hours: int = 24  # 1 request per IP per N hours
+    landing_max_resume_chars: int = 50_000  # Max resume text size (anti-fraud)
+    landing_max_job_url_len: int = 2048  # Max job_url length
+    landing_pending_ttl_seconds: int = 900  # Pending upload token TTL (15 min) for save→login→claim flow
+
+    # Admin: single admin user email (full access to admin panel)
+    admin_email: str = "marichakgroup@gmail.com"
+
 
 def get_settings() -> Settings:
     """Return settings from env. No cache so .env changes (e.g. MAX_ITERATIONS) apply without restart."""
@@ -167,6 +177,12 @@ def get_settings() -> Settings:
         stripe_publishable_key=os.getenv("STRIPE_PUBLISHABLE_KEY", ""),
         stripe_price_trial_id=os.getenv("STRIPE_PRICE_TRIAL_ID", ""),
         stripe_price_monthly_id=os.getenv("STRIPE_PRICE_MONTHLY_ID", ""),
+        landing_allowed_origins=os.getenv("LANDING_ALLOWED_ORIGINS", ""),
+        landing_rate_limit_hours=int(os.getenv("LANDING_RATE_LIMIT_HOURS", "24")),
+        landing_max_resume_chars=int(os.getenv("LANDING_MAX_RESUME_CHARS", "50000")),
+        landing_max_job_url_len=int(os.getenv("LANDING_MAX_JOB_URL_LEN", "2048")),
+        landing_pending_ttl_seconds=int(os.getenv("LANDING_PENDING_TTL_SECONDS", "900")),
+        admin_email=os.getenv("ADMIN_EMAIL", "marichakgroup@gmail.com").strip().lower() or "marichakgroup@gmail.com",
     )
 
 

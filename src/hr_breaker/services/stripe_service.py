@@ -1,8 +1,9 @@
 """
 Stripe checkout and webhook handling for HR-Breaker subscriptions.
 
-- Trial: one-time $2.99 (STRIPE_PRICE_TRIAL_ID) → set subscription_status=trial, current_period_end=now+7d
-- Monthly: recurring $29 (STRIPE_PRICE_MONTHLY_ID) → subscription from Stripe, period from invoice
+- Trial: subscription to monthly $29 with 7-day trial; at signup we charge $2.99 (invoice).
+  After 7 days Stripe automatically charges $29/month. Card required → protects from abuse.
+- Monthly: subscription $29/month, no trial.
 """
 
 from __future__ import annotations
@@ -18,6 +19,9 @@ logger = logging.getLogger(__name__)
 PRICE_KEY_TRIAL = "trial"
 PRICE_KEY_MONTHLY = "monthly"
 TRIAL_DAYS = 7
+# Amount charged at trial signup (cents)
+TRIAL_SIGNUP_CENTS = 299  # $2.99
+TRIAL_SIGNUP_CURRENCY = "usd"
 
 
 def _stripe():
@@ -32,7 +36,8 @@ def _stripe():
 def get_price_id(price_key: str) -> str:
     settings = get_settings()
     if price_key == PRICE_KEY_TRIAL:
-        pid = settings.stripe_price_trial_id
+        # Trial uses the monthly price with trial_period_days
+        pid = settings.stripe_price_monthly_id
     elif price_key == PRICE_KEY_MONTHLY:
         pid = settings.stripe_price_monthly_id
     else:
@@ -53,9 +58,9 @@ async def create_checkout_session(
     set_stripe_customer_id,
 ) -> str:
     """
-    Create Stripe Checkout session. Returns session URL to redirect to.
-    get_or_create_customer_id(pool, user_id) -> stripe_customer_id | None (existing or None to create).
-    set_stripe_customer_id(pool, user_id, stripe_customer_id) to persist new customer id.
+    Create Stripe Checkout session.
+    Trial = subscription to monthly price with 7-day trial (then we charge $2.99 in webhook).
+    Monthly = subscription to monthly price, no trial.
     """
     stripe = _stripe()
     price_id = get_price_id(price_key)
@@ -65,16 +70,19 @@ async def create_checkout_session(
         customer_id = customer.id
         await set_stripe_customer_id(pool, user_id, customer_id)
 
-    mode = "payment" if price_key == PRICE_KEY_TRIAL else "subscription"
-    session = stripe.checkout.Session.create(
-        customer=customer_id,
-        mode=mode,
-        line_items=[{"price": price_id, "quantity": 1}],
-        success_url=success_url,
-        cancel_url=cancel_url,
-        metadata={"hr_breaker_user_id": user_id, "price_key": price_key},
-        allow_promotion_codes=True,
-    )
+    is_trial = price_key == PRICE_KEY_TRIAL
+    session_params = {
+        "customer": customer_id,
+        "mode": "subscription",
+        "line_items": [{"price": price_id, "quantity": 1}],
+        "success_url": success_url,
+        "cancel_url": cancel_url,
+        "metadata": {"hr_breaker_user_id": user_id, "price_key": price_key},
+        "allow_promotion_codes": True,
+    }
+    if is_trial:
+        session_params["subscription_data"] = {"trial_period_days": TRIAL_DAYS}
+    session = stripe.checkout.Session.create(**session_params)
     return session.url or ""
 
 
@@ -93,7 +101,10 @@ async def handle_checkout_session_completed(
     pool,
     user_update_subscription,
 ) -> None:
-    """On successful payment: set trial (7d) for one-time trial; for subscription sync from Stripe."""
+    """
+    On successful checkout: for subscription (trial or monthly) sync DB.
+    For trial: also charge $2.99 now via invoice; if that fails, cancel the subscription.
+    """
     metadata = getattr(session, "metadata", None) or {}
     user_id = (metadata or {}).get("hr_breaker_user_id")
     price_key = (metadata or {}).get("price_key")
@@ -101,26 +112,61 @@ async def handle_checkout_session_completed(
         logger.warning("checkout.session.completed: no hr_breaker_user_id in metadata")
         return
 
-    if getattr(session, "mode", None) == "payment":
-        if price_key == PRICE_KEY_TRIAL:
-            period_end = datetime.now(timezone.utc) + timedelta(days=TRIAL_DAYS)
-            await user_update_subscription(
-                pool,
-                user_id,
-                subscription_status="trial",
-                subscription_plan="trial",
-                current_period_end=period_end,
-            )
-            logger.info("Trial activated for user %s until %s", user_id, period_end)
+    if getattr(session, "mode", None) != "subscription":
+        return
+    sub_id = getattr(session, "subscription", None)
+    if not sub_id:
         return
 
-    if getattr(session, "mode", None) == "subscription":
-        sub_id = getattr(session, "subscription", None)
-        if not sub_id:
-            return
-        stripe = _stripe()
-        sub = stripe.Subscription.retrieve(sub_id)
-        current_period_end = datetime.fromtimestamp(sub.current_period_end, tz=timezone.utc)
+    stripe = _stripe()
+    sub = stripe.Subscription.retrieve(sub_id)
+    trial_end_ts = getattr(sub, "trial_end", None)
+    current_period_end_ts = getattr(sub, "current_period_end", None)
+    current_period_end = datetime.fromtimestamp(current_period_end_ts, tz=timezone.utc) if current_period_end_ts else None
+    status = getattr(sub, "status", None)
+
+    # DB: trialing or active
+    if status == "trialing":
+        period_end = datetime.fromtimestamp(trial_end_ts, tz=timezone.utc) if trial_end_ts else current_period_end
+        await user_update_subscription(
+            pool,
+            user_id,
+            stripe_subscription_id=sub.id,
+            subscription_status="trial",
+            subscription_plan="trial",
+            current_period_end=period_end,
+        )
+        logger.info("Trial subscription created for user %s until %s", user_id, period_end)
+
+        # Charge $2.99 now (trial signup fee)
+        if price_key == PRICE_KEY_TRIAL:
+            try:
+                customer_id = getattr(session, "customer", None)
+                if customer_id:
+                    stripe.InvoiceItem.create(
+                        customer=customer_id,
+                        amount=TRIAL_SIGNUP_CENTS,
+                        currency=TRIAL_SIGNUP_CURRENCY,
+                        description="Trial 7 days — HR-Breaker",
+                    )
+                    inv = stripe.Invoice.create(
+                        customer=customer_id,
+                        collection_method="charge_automatically",
+                        auto_advance=True,
+                    )
+                    stripe.Invoice.pay(inv.id)
+                    logger.info("Trial signup fee $2.99 charged for user %s", user_id)
+            except Exception as e:
+                logger.exception("Failed to charge trial $2.99 for user %s: %s", user_id, e)
+                try:
+                    stripe.Subscription.modify(sub_id, cancel_at_period_end=True)
+                    logger.warning("Subscription set to cancel at period end after failed $2.99 charge")
+                except Exception as e2:
+                    logger.exception("Failed to cancel subscription: %s", e2)
+        return
+
+    # Active (no trial) — e.g. monthly signup
+    if status == "active" and current_period_end:
         await user_update_subscription(
             pool,
             user_id,
@@ -138,7 +184,7 @@ async def handle_subscription_updated(
     get_user_id_by_stripe_customer,
     user_update_subscription,
 ) -> None:
-    """Sync subscription status and current_period_end from Stripe."""
+    """Sync subscription status and current_period_end from Stripe. trialing → trial, active → monthly."""
     sub_id = getattr(subscription, "id", None)
     customer_id = getattr(subscription, "customer", None)
     if not customer_id or not sub_id:
@@ -152,16 +198,20 @@ async def handle_subscription_updated(
     if not user_id:
         logger.warning("subscription.updated: no user for customer %s", customer_id)
         return
-    if status in ("active", "trialing"):
-        status = "active"
+    if status == "trialing":
+        plan, sub_status = "trial", "trial"
+    elif status in ("active",):
+        plan, sub_status = "monthly", "active"
     elif status in ("canceled", "unpaid", "past_due", "incomplete_expired"):
-        status = "canceled"
+        plan, sub_status = "monthly", "canceled"
+    else:
+        plan, sub_status = "monthly", status or "canceled"
     await user_update_subscription(
         pool,
         user_id,
         stripe_subscription_id=sub_id,
-        subscription_status=status,
-        subscription_plan="monthly",
+        subscription_status=sub_status,
+        subscription_plan=plan,
         current_period_end=current_period_end,
     )
 

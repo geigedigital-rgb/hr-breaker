@@ -201,6 +201,34 @@ export async function analyze(params: {
   return data;
 }
 
+// --- Landing save → login → claim flow ---
+export type LandingPendingResponse = {
+  resume_filename: string;
+  job_url: string | null;
+  job_title: string | null;
+};
+
+export type LandingClaimResponse = {
+  resume_content: string;
+  job_text: string | null;
+  job_url: string | null;
+  resume_filename: string;
+};
+
+export async function getLandingPending(token: string): Promise<LandingPendingResponse> {
+  const r = await fetch(`${API}/landing/pending?token=${encodeURIComponent(token)}`);
+  const data = await parseJsonOrThrow<LandingPendingResponse & { detail?: string }>(r);
+  if (!r.ok) throw new Error(data.detail || r.statusText);
+  return data;
+}
+
+export async function claimLandingPending(token: string): Promise<LandingClaimResponse> {
+  const r = await fetch(`${API}/landing/claim?token=${encodeURIComponent(token)}`, { headers: authHeaders() });
+  const data = await parseJsonOrThrow<LandingClaimResponse & { detail?: string }>(r);
+  if (!r.ok) throw new Error(data.detail || r.statusText);
+  return data;
+}
+
 export async function optimize(params: {
   resume_content: string;
   job_text?: string;
@@ -450,6 +478,43 @@ export async function searchVacancies(params: VacancySearchParams): Promise<Vaca
   if (params.page_size != null) sp.set("page_size", String(params.page_size));
   const r = await fetch(`${API}/vacancies/search?${sp.toString()}`, { headers: authHeaders() });
   const data = await parseJsonOrThrow<VacancySearchResponse & { detail?: string }>(r);
+  if (!r.ok) throw new Error(data.detail || r.statusText);
+  return data;
+}
+
+// --- Admin (admin panel; backend enforces admin email) ---
+export const ADMIN_EMAIL = "marichakgroup@gmail.com";
+
+export function isAdminUser(user: AuthUser | null): boolean {
+  return (user?.email?.toLowerCase().trim() ?? "") === ADMIN_EMAIL.toLowerCase();
+}
+
+export type AdminStatsResponse = {
+  users_count: number;
+  resumes_count: number;
+  database: string;
+};
+
+export type AdminUserOut = {
+  id: string;
+  email: string;
+  name: string | null;
+  created_at: string;
+};
+
+export type AdminUsersResponse = { items: AdminUserOut[] };
+
+export async function getAdminStats(): Promise<AdminStatsResponse> {
+  const r = await fetch(`${API}/admin/stats`, { headers: authHeaders() });
+  const data = await parseJsonOrThrow<AdminStatsResponse & { detail?: string }>(r);
+  if (!r.ok) throw new Error(data.detail || r.statusText);
+  return data;
+}
+
+export async function getAdminUsers(limit?: number): Promise<AdminUsersResponse> {
+  const sp = limit != null ? `?limit=${limit}` : "";
+  const r = await fetch(`${API}/admin/users${sp}`, { headers: authHeaders() });
+  const data = await parseJsonOrThrow<AdminUsersResponse & { detail?: string }>(r);
   if (!r.ok) throw new Error(data.detail || r.statusText);
   return data;
 }
