@@ -362,7 +362,6 @@ function JobReadinessSemicircle({ percent, size = 140 }: { percent: number; size
   const segmentAngle = (totalAngle / numSegments) * (1 - gapFraction);
   const angleStep = totalAngle / numSegments;
   const startAngle = Math.PI;
-  const endAngle = Math.PI + totalAngle;
   const gradientId = getReadinessGradientId(pct);
   const filledCount = Math.round((pct / 100) * numSegments);
   const svgH = size * 0.72;
@@ -745,7 +744,7 @@ function ScoreCard({
   title,
   value,
   categoryLabel,
-  id,
+  id: _id,
 }: {
   title: string;
   value: number;
@@ -876,6 +875,8 @@ function ScoreGauge({
   );
 }
 
+export { ScoreCard, ScoreGauge };
+
 export default function Optimize() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -890,17 +891,17 @@ export default function Optimize() {
   const [error, setError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [parsedJob, setParsedJob] = useState<api.JobPostingOut | null>(null);
-  const [isParsingJob, setIsParsingJob] = useState(false);
+  const [_isParsingJob, _setIsParsingJob] = useState(false);
   const [scanProgress, setScanProgress] = useState(0);
   const [preScores, setPreScores] = useState<api.AnalyzeResponse | null>(null);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [_isAnalyzing, setIsAnalyzing] = useState(false);
   const [loadProgress, setLoadProgress] = useState(0);
   const [loadMessage, setLoadMessage] = useState("");
   const [aggressiveTailoring, setAggressiveTailoring] = useState(false);
   const [isImprovingMore, setIsImprovingMore] = useState(false);
   const [resumeSummaryFromApi, setResumeSummaryFromApi] = useState<api.ExtractResumeSummaryResponse | null>(null);
   const [isExtractingSummary, setIsExtractingSummary] = useState(false);
-  const [isFetchingJobUrl, setIsFetchingJobUrl] = useState(false);
+  const [isFetchingJobUrl, _setIsFetchingJobUrl] = useState(false);
   const [resumeInputMode, setResumeInputMode] = useState<"file" | "text">("file");
   const [resumeSourceWasPdf, setResumeSourceWasPdf] = useState(false);
   const [offerPasteAsText, setOfferPasteAsText] = useState(false);
@@ -910,7 +911,6 @@ export default function Optimize() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const step2SectionRef = useRef<HTMLDivElement>(null);
   const prevHadResumeRef = useRef(false);
-  const blockId = useId().replace(/:/g, "");
   const claimedPendingRef = useRef<string | null>(null);
 
   // Claim pending landing upload after login: подставляем резюме и вакансию и запускаем анализ
@@ -1186,30 +1186,6 @@ export default function Optimize() {
 
   function handleResumeDragLeave() {
     setIsDragging(false);
-  }
-
-  async function handleJobFetch() {
-    if (!jobInput.trim() || jobMode !== "url") return;
-    setError(null);
-    setOfferPasteAsText(false);
-    setIsFetchingJobUrl(true);
-    try {
-      const job = await api.parseJob({ url: jobInput.trim() });
-      setParsedJob(job);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Failed to fetch job";
-      if (!isOfferPasteAsTextError(msg)) setError(msg);
-      setParsedJob(null);
-      if (isOfferPasteAsTextError(msg)) {
-        setError(null);
-        setJobMode("text");
-        setJobInput("");
-        setParsedJob(null);
-        setOfferPasteAsText(true);
-      }
-    } finally {
-      setIsFetchingJobUrl(false);
-    }
   }
 
   function handleStartScan() {
@@ -1640,7 +1616,7 @@ export default function Optimize() {
             onImprove={handleImprove}
             canImprove={canImprove}
             result={result}
-            showImproveMore={showImproveMore}
+            showImproveMore={!!showImproveMore}
             isImprovingMore={isImprovingMore}
             onImproveMore={handleImproveMore}
           />

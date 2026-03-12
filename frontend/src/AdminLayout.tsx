@@ -1,4 +1,4 @@
-import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import {
   ChartBarIcon,
   UserGroupIcon,
@@ -20,7 +20,6 @@ const adminNav = [
 ];
 
 export default function AdminLayout() {
-  const location = useLocation();
   const navigate = useNavigate();
   const { user } = useAuth();
 
@@ -44,25 +43,22 @@ export default function AdminLayout() {
         </div>
 
         <nav className="space-y-1">
-          {adminNav.map(({ to, end, label, icon: Icon }) => {
-            const active = end ? location.pathname === to : location.pathname.startsWith(to);
-            return (
-              <Link
-                key={to}
-                to={to}
-                end={end}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${
-                  active
-                    ? "bg-white/20 text-white shadow-sm"
-                    : "text-white/85 hover:bg-white/10 hover:text-white"
-                }`}
-                aria-current={active ? "page" : undefined}
-              >
-                <Icon className="w-5 h-5 shrink-0 opacity-100" aria-hidden />
-                {label}
-              </Link>
-            );
-          })}
+          {adminNav.map(({ to, end, label, icon: Icon }) => (
+            <NavLink
+              key={to}
+              to={to}
+              end={end}
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${
+                  isActive ? "bg-white/20 text-white shadow-sm" : "text-white/85 hover:bg-white/10 hover:text-white"
+                }`
+              }
+              aria-current="page"
+            >
+              <Icon className="w-5 h-5 shrink-0 opacity-100" aria-hidden />
+              {label}
+            </NavLink>
+          ))}
         </nav>
 
         <div className="mt-auto pt-4 border-t border-white/15">

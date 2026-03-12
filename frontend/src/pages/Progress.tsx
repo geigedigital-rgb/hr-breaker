@@ -15,7 +15,6 @@ import { useAuth } from "../contexts/AuthContext";
 import {
   READINESS_STAGE_LABEL,
   READINESS_STAGE_ORDER,
-  READINESS_STAGE_MEANING,
   READINESS_STAGE_ICON_STYLE,
   READINESS_STAGE_ICON_IMAGE,
 } from "../readiness";
@@ -107,11 +106,7 @@ export default function Progress() {
   const stageLabel = READINESS_STAGE_LABEL[stage] ?? stage;
   const nextStep = getNextStep(stage);
   const currentIndex = READINESS_STAGE_ORDER.indexOf(stage as (typeof READINESS_STAGE_ORDER)[number]);
-  const nextStage = currentIndex >= 0 && currentIndex < READINESS_STAGE_ORDER.length - 1
-    ? READINESS_STAGE_ORDER[currentIndex + 1]
-    : null;
   const streak = readiness.streak_days ?? 0;
-  const activeToday = true; // placeholder: backend could expose last_visit_date
   const stageGlow = STAGE_GLOW[stage] ?? STAGE_GLOW.Emerging;
 
   return (

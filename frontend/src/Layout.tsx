@@ -16,7 +16,6 @@ import {
   READINESS_STAGE_LABEL,
   READINESS_STAGE_ICON_STYLE,
   READINESS_STAGE_ICON_IMAGE,
-  READINESS_HERO_GRADIENT,
 } from "./readiness";
 import { t } from "./i18n";
 
