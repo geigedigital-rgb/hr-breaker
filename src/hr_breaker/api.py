@@ -1909,8 +1909,10 @@ async def startup_seed_and_backfill() -> None:
 
 app.include_router(router)
 
-# Serve React SPA when frontend_dist is present (e.g. in Docker)
-_frontend_dist = Path(__file__).resolve().parent.parent / "frontend_dist"
+# Serve React SPA when frontend_dist is present (e.g. in Docker: /app/frontend_dist)
+_frontend_dist = Path.cwd() / "frontend_dist"
+if not _frontend_dist.is_dir():
+    _frontend_dist = Path(__file__).resolve().parent.parent / "frontend_dist"
 if _frontend_dist.is_dir():
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
