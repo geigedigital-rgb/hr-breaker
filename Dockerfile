@@ -5,7 +5,7 @@
 FROM node:20-slim AS frontend-build
 WORKDIR /app/frontend
 COPY frontend/package.json frontend/package-lock.json ./
-RUN --mount=type=cache,target=/root/.npm,id=npm \
+RUN --mount=type=cache,target=/root/.npm,id=cacheKey-npm \
     npm ci
 COPY frontend/ ./
 RUN npm run build
@@ -30,7 +30,7 @@ RUN apt-get update && apt-get install -y \
 # Python deps and app
 COPY pyproject.toml README.md ./
 COPY src/ ./src/
-RUN --mount=type=cache,target=/root/.cache/pip,id=pip \
+RUN --mount=type=cache,target=/root/.cache/pip,id=cacheKey-pip \
     pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir .
 
