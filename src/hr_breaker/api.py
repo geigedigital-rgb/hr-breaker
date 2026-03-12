@@ -51,6 +51,7 @@ from hr_breaker.services.db import (
     backfill_user_id,
     user_list_all,
     db_list_all,
+    db_recent_resumes_with_user,
     READINESS_DELTA_ANALYSIS,
     READINESS_DELTA_OPTIMIZE,
 )
@@ -372,10 +373,38 @@ class AdminUserOut(BaseModel):
     email: str
     name: str | None
     created_at: str
+    subscription_status: str | None = None
+    subscription_plan: str | None = None
 
 
 class AdminUsersResponse(BaseModel):
     items: list[AdminUserOut]
+
+
+class AdminConfigResponse(BaseModel):
+    """Read-only config for admin (no secrets)."""
+    database_configured: bool
+    jwt_configured: bool
+    google_oauth_configured: bool
+    stripe_configured: bool
+    landing_origins_count: int
+    landing_rate_limit_hours: int
+    landing_pending_ttl_seconds: int
+    max_iterations: int
+    frontend_url: str
+    adzuna_configured: bool
+
+
+class AdminActivityItem(BaseModel):
+    filename: str
+    company: str
+    job_title: str
+    created_at: str
+    user_email: str | None = None
+
+
+class AdminActivityResponse(BaseModel):
+    items: list[AdminActivityItem]
 
 
 class VacancyCard(BaseModel):
@@ -1556,10 +1585,68 @@ async def api_admin_users(
             email=u["email"],
             name=u.get("name"),
             created_at=u["created_at"].isoformat() if u.get("created_at") else "",
+            subscription_status=(u.get("subscription_status") or "free").lower() if u.get("subscription_status") is not None else "free",
+            subscription_plan=(u.get("subscription_plan") or "free").lower() if u.get("subscription_plan") is not None else "free",
         )
         for u in users
     ]
     return AdminUsersResponse(items=items)
+
+
+@router.get("/admin/config", response_model=AdminConfigResponse)
+async def api_admin_config(
+    _admin: dict = Depends(get_admin_user),
+) -> AdminConfigResponse:
+    """Return read-only config for admin (no secrets)."""
+    settings = get_settings()
+    origins = [o.strip() for o in (settings.landing_allowed_origins or "").split(",") if o.strip()]
+    return AdminConfigResponse(
+        database_configured=bool((settings.database_url or "").strip()),
+        jwt_configured=bool((settings.jwt_secret or "").strip()),
+        google_oauth_configured=bool((settings.google_oauth_client_id or "").strip()),
+        stripe_configured=bool((settings.stripe_secret_key or "").strip() and (settings.stripe_price_monthly_id or "").strip()),
+        landing_origins_count=len(origins),
+        landing_rate_limit_hours=settings.landing_rate_limit_hours,
+        landing_pending_ttl_seconds=settings.landing_pending_ttl_seconds,
+        max_iterations=settings.max_iterations,
+        frontend_url=settings.frontend_url or "",
+        adzuna_configured=bool((settings.adzuna_app_id or "").strip() and (settings.adzuna_app_key or "").strip()),
+    )
+
+
+@router.get("/admin/activity", response_model=AdminActivityResponse)
+async def api_admin_activity(
+    _admin: dict = Depends(get_admin_user),
+    limit: int = Query(50, ge=1, le=200),
+) -> AdminActivityResponse:
+    """Recent resume generations (admin only). With DB: includes user email. Without DB: list from index, no email."""
+    settings = get_settings()
+    pool = await get_pool()
+    items: list[AdminActivityItem] = []
+    if pool:
+        try:
+            rows = await db_recent_resumes_with_user(pool, settings.output_dir, limit=limit)
+            for r in rows:
+                items.append(AdminActivityItem(
+                    filename=r["filename"],
+                    company=r["company"],
+                    job_title=r["job_title"],
+                    created_at=r["created_at"].isoformat() if r.get("created_at") else "",
+                    user_email=r.get("user_email"),
+                ))
+        except Exception as e:
+            logger.exception("Admin activity failed: %s", e)
+    else:
+        records = await pdf_storage.list_all_async(user_id=None)
+        for r in records[:limit]:
+            items.append(AdminActivityItem(
+                filename=r.path.name,
+                company=r.company,
+                job_title=r.job_title or "",
+                created_at=r.timestamp.isoformat() if r.timestamp else "",
+                user_email=None,
+            ))
+    return AdminActivityResponse(items=items)
 
 
 @router.get("/history", response_model=HistoryResponse)
@@ -1821,6 +1908,18 @@ async def startup_seed_and_backfill() -> None:
 
 
 app.include_router(router)
+
+# Serve React SPA when frontend_dist is present (e.g. in Docker)
+_frontend_dist = Path(__file__).resolve().parent.parent / "frontend_dist"
+if _frontend_dist.is_dir():
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        if full_path.startswith("api/") or full_path == "api":
+            raise HTTPException(404)
+        path = _frontend_dist / full_path
+        if path.is_file():
+            return FileResponse(path)
+        return FileResponse(_frontend_dist / "index.html")
 
 
 def run_api(host: str = "0.0.0.0", port: int = 8000, reload: bool = False) -> None:

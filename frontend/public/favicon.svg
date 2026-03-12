@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Pitch My CV icon">
+  <defs>
+    <linearGradient id="topGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#ff0000"/>
+      <stop offset="100%" stop-color="#e3001a"/>
+    </linearGradient>
+    <linearGradient id="bottomGrad" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0%" stop-color="#0ea5ff"/>
+      <stop offset="100%" stop-color="#b61084"/>
+    </linearGradient>
+    <clipPath id="topClip">
+      <path d="M 42 104 L 276 104 C 336 104 374 142 374 206 L 98 206 Z"/>
+    </clipPath>
+    <clipPath id="bottomClip">
+      <path d="M 42 286 L 286 286 L 334 430 L 22 430 Z"/>
+    </clipPath>
+  </defs>
+
+  <rect width="512" height="512" fill="none"/>
+
+  <rect x="18" y="96" width="380" height="126" fill="url(#topGrad)" clip-path="url(#topClip)"/>
+  <path d="M 84 206 H 372 C 423 206 458 241 458 292 C 458 344 421 381 372 381 H 84 L 106 322 H 306 C 334 322 356 304 356 278 C 356 252 334 236 306 236 H 84 Z" fill="#ffffff"/>
+  <rect x="14" y="278" width="390" height="170" fill="url(#bottomGrad)" clip-path="url(#bottomClip)"/>
+  <path d="M 292 206 H 374 C 425 206 466 247 466 298 C 466 347 428 383 382 387 C 388 375 391 361 391 347 C 391 315 365 289 333 289 H 268 Z" fill="url(#bottomGrad)"/>
+  <circle cx="342" cy="348" r="54" fill="#ffffff"/>
+</svg>

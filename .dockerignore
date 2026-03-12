@@ -1,0 +1,26 @@
+# Git and env
+.git
+.gitignore
+.env
+.env.*
+
+# Frontend dev (rebuilt in Docker)
+frontend/node_modules
+frontend/dist
+
+# Python
+__pycache__
+*.pyc
+.venv
+venv
+
+# Output and cache
+output
+.cache
+*.log
+
+# IDE and docs (optional)
+.cursor
+docs
+*.md
+!README.md

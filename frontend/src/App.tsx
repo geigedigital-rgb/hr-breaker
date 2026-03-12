@@ -16,6 +16,8 @@ import AuthCallback from "./pages/AuthCallback";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminUsers from "./pages/admin/AdminUsers";
 import AdminApp from "./pages/admin/AdminApp";
+import AdminConfig from "./pages/admin/AdminConfig";
+import AdminActivity from "./pages/admin/AdminActivity";
 import { t } from "./i18n";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -83,6 +85,8 @@ function App() {
             <Route path="/admin" element={<RequireAuth><RequireAdmin><AdminLayout /></RequireAdmin></RequireAuth>}>
               <Route index element={<AdminDashboard />} />
               <Route path="users" element={<AdminUsers />} />
+              <Route path="activity" element={<AdminActivity />} />
+              <Route path="config" element={<AdminConfig />} />
               <Route path="app" element={<AdminApp />} />
             </Route>
           </Routes>

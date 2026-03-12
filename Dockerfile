@@ -1,8 +1,17 @@
+# Stage 1: build React frontend
+FROM node:20-slim AS frontend-build
+WORKDIR /app/frontend
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+COPY frontend/ ./
+RUN npm run build
+
+# Stage 2: Python backend + serve frontend
 FROM python:3.11-slim
 
 WORKDIR /app
 
-# Системные библиотеки для WeasyPrint и сборки
+# System deps for WeasyPrint and build
 RUN apt-get update && apt-get install -y \
     build-essential \
     curl \
@@ -14,21 +23,21 @@ RUN apt-get update && apt-get install -y \
     shared-mime-info \
     && rm -rf /var/lib/apt/lists/*
 
-# Сначала только метаданные для кэша слоёв
+# Python deps and app
 COPY pyproject.toml README.md ./
 COPY src/ ./src/
-
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir .
 
-# Установка браузеров Playwright (для скрапера)
+# Playwright for job scraper
 RUN python -m playwright install --with-deps
 
-# Переменная для облачных платформ (Heroku, Cloud Run и т.д.)
-ENV PORT=8501
+# Copy built frontend from stage 1 (so API can serve SPA at /)
+COPY --from=frontend-build /app/frontend/dist ./frontend_dist
 
-EXPOSE 8501
+# Railway/Cloud: use PORT from env (default 8080)
+ENV PORT=8080
+EXPOSE 8080
 
-CMD streamlit run src/hr_breaker/main.py \
-    --server.port=${PORT} \
-    --server.address=0.0.0.0
+# Run FastAPI (serves /api and SPA from /)
+CMD uvicorn hr_breaker.api:app --host 0.0.0.0 --port ${PORT}

@@ -418,13 +418,41 @@ async def backfill_user_id(pool, user_id: str) -> int:
 
 
 async def user_list_all(pool, limit: int = 500) -> list[dict]:
-    """List all users (id, email, name, created_at). For admin only."""
+    """List all users (id, email, name, created_at, subscription_status, subscription_plan). For admin only."""
     async with pool.acquire() as conn:
         rows = await conn.fetch(
-            f"SELECT id, email, name, created_at FROM {USERS_TABLE} ORDER BY created_at DESC LIMIT $1",
+            f"SELECT id, email, name, created_at, subscription_status, subscription_plan FROM {USERS_TABLE} ORDER BY created_at DESC LIMIT $1",
             limit,
         )
     return [dict(r) for r in rows]
+
+
+async def db_recent_resumes_with_user(pool, output_dir: Path, limit: int = 100) -> list[dict]:
+    """Recent resume records with user email (join users). For admin activity feed. Only records with existing PDF."""
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            f"""
+            SELECT r.filename, r.company, r.job_title, r.created_at, r.user_id, u.email as user_email
+            FROM {TABLE} r
+            LEFT JOIN {USERS_TABLE} u ON r.user_id = u.id
+            ORDER BY r.created_at DESC
+            LIMIT $1
+            """,
+            limit,
+        )
+    result = []
+    for r in rows:
+        rec = dict(r)
+        path = output_dir / rec["filename"]
+        if path.is_file():
+            result.append({
+                "filename": rec["filename"],
+                "company": rec["company"] or "",
+                "job_title": rec["job_title"] or "",
+                "created_at": rec["created_at"],
+                "user_email": rec.get("user_email") or None,
+            })
+    return result
 
 
 # --- Market Readiness (status indicator, not gamification) ---

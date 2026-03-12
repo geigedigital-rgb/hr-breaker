@@ -500,9 +500,34 @@ export type AdminUserOut = {
   email: string;
   name: string | null;
   created_at: string;
+  subscription_status?: string | null;
+  subscription_plan?: string | null;
 };
 
 export type AdminUsersResponse = { items: AdminUserOut[] };
+
+export type AdminConfigResponse = {
+  database_configured: boolean;
+  jwt_configured: boolean;
+  google_oauth_configured: boolean;
+  stripe_configured: boolean;
+  landing_origins_count: number;
+  landing_rate_limit_hours: number;
+  landing_pending_ttl_seconds: number;
+  max_iterations: number;
+  frontend_url: string;
+  adzuna_configured: boolean;
+};
+
+export type AdminActivityItem = {
+  filename: string;
+  company: string;
+  job_title: string;
+  created_at: string;
+  user_email: string | null;
+};
+
+export type AdminActivityResponse = { items: AdminActivityItem[] };
 
 export async function getAdminStats(): Promise<AdminStatsResponse> {
   const r = await fetch(`${API}/admin/stats`, { headers: authHeaders() });
@@ -515,6 +540,21 @@ export async function getAdminUsers(limit?: number): Promise<AdminUsersResponse>
   const sp = limit != null ? `?limit=${limit}` : "";
   const r = await fetch(`${API}/admin/users${sp}`, { headers: authHeaders() });
   const data = await parseJsonOrThrow<AdminUsersResponse & { detail?: string }>(r);
+  if (!r.ok) throw new Error(data.detail || r.statusText);
+  return data;
+}
+
+export async function getAdminConfig(): Promise<AdminConfigResponse> {
+  const r = await fetch(`${API}/admin/config`, { headers: authHeaders() });
+  const data = await parseJsonOrThrow<AdminConfigResponse & { detail?: string }>(r);
+  if (!r.ok) throw new Error(data.detail || r.statusText);
+  return data;
+}
+
+export async function getAdminActivity(limit?: number): Promise<AdminActivityResponse> {
+  const sp = limit != null ? `?limit=${limit}` : "";
+  const r = await fetch(`${API}/admin/activity${sp}`, { headers: authHeaders() });
+  const data = await parseJsonOrThrow<AdminActivityResponse & { detail?: string }>(r);
   if (!r.ok) throw new Error(data.detail || r.statusText);
   return data;
 }
