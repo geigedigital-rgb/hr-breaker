@@ -27,7 +27,7 @@ RUN apt-get update && apt-get install -y \
 COPY pyproject.toml README.md ./
 COPY src/ ./src/
 RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir .
+    && pip install --no-cache-dir '.[db]'
 
 # Playwright: only Chromium (no cache mount — browsers must be in image for runtime)
 RUN python -m playwright install chromium --with-deps
@@ -38,5 +38,5 @@ COPY --from=frontend-build /app/frontend/dist ./frontend_dist
 ENV PORT=8080
 EXPOSE 8080
 
-# Shell form so Railway's PORT env is applied
-CMD uvicorn hr_breaker.api:app --host 0.0.0.0 --port ${PORT}
+# Exec form with shell so Railway's PORT is applied (docs: wrap env vars in shell)
+CMD ["/bin/sh", "-c", "exec uvicorn hr_breaker.api:app --host 0.0.0.0 --port ${PORT:-8080}"]

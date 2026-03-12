@@ -72,6 +72,9 @@ async def get_pool():
     url = settings.database_url.strip()
     if not url:
         return None
+    # Neon and most cloud Postgres require SSL; asyncpg uses sslmode from URL
+    if "neon.tech" in url and "sslmode=" not in url:
+        url = url + ("&" if "?" in url else "?") + "sslmode=require"
     try:
         pool = await asyncpg.create_pool(url, min_size=0, max_size=4, command_timeout=10)
         await init_table(pool)
