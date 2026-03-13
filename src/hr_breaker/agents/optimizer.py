@@ -242,8 +242,20 @@ async def optimize_resume(
     job: JobPosting,
     context: IterationContext,
     no_shame: bool = False,
+    output_language: str | None = None,
 ) -> OptimizedResume:
-    """Optimize resume for job posting."""
+    """Optimize resume for job posting.
+    output_language: Preferred language for all LLM output (e.g. 'en', 'ru'). Default: English."""
+    lang_override = ""
+    out_lang = (output_language or "en").strip().lower() or "en"
+    if out_lang == "en":
+        lang_override = "\n\nLANGUAGE: Write ALL output (HTML body text, key changes categories, descriptions, item labels) in English.\n"
+    elif out_lang == "ru":
+        lang_override = """
+LANGUAGE OVERRIDE: Write ALL output (HTML body text, key changes categories, descriptions, item labels) in Russian only. Use Russian for section titles and labels (e.g. Структура, Опыт, Навыки, Ключевые слова). Do not use the job posting language for output.
+"""
+    else:
+        lang_override = f"\n\nLANGUAGE: Write ALL output in this language only: {out_lang}. Do not use the job posting language for output.\n"
     prompt = f"""## Original Resume:
 {context.original_resume}
 
@@ -253,7 +265,7 @@ Company: {job.company}
 Requirements: {', '.join(job.requirements)}
 Keywords: {', '.join(job.keywords)}
 Description: {job.description}
-"""
+{lang_override}"""
     if no_shame:
         prompt += """
 NOTE: The user has chosen "aggressive tailoring". You MAY add skills and technologies from the job posting (Requirements/Keywords above) into the resume where they are plausible given the candidate's experience (e.g. data/analytics role + job asks for SQL, Power BI → add them to skills). Still do not fabricate job titles, companies, or achievements. The user will verify the result before sending.

@@ -116,6 +116,7 @@ async def optimize_for_job(
     job: JobPosting | None = None,
     parallel: bool = False,
     no_shame: bool = False,
+    output_language: str | None = None,
 ) -> tuple[OptimizedResume, ValidationResult, JobPosting]:
     """
     Core optimization loop.
@@ -128,6 +129,7 @@ async def optimize_for_job(
         on_progress: Optional callback(percent: 0-100, message: str) for real progress
         job: Pre-parsed job posting (optional, skips parsing if provided)
         no_shame: If True, use lenient rules (add skills from job posting where plausible)
+        output_language: Preferred language for LLM output (e.g. "en", "ru"). Default: English.
 
     Returns:
         (optimized_resume, validation_result, job_posting)
@@ -174,7 +176,9 @@ async def optimize_for_job(
                 validation=validation,
             )
             with log_time("optimize_resume"):
-                optimized = await optimize_resume(source, job, ctx, no_shame=no_shame)
+                optimized = await optimize_resume(
+                    source, job, ctx, no_shame=no_shame, output_language=output_language
+                )
         finally:
             if heartbeat_task is not None:
                 heartbeat_task.cancel()

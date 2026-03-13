@@ -68,7 +68,7 @@ SCORES (required, integers 0-100):
 - experience: How relevant the candidate's work experience is to the role (titles, domains, seniority).
 - portfolio: How well projects, achievements, certifications, or education match what the job values.
 
-IMPROVEMENT_TIPS (optional): If the resume could be improved for this job, provide a short text in English (2-4 blocks). Each block: a clear header (e.g. "Keywords", "Experience", "Structure") and 1-2 short sentences with concrete tips for better match. Use line breaks between blocks. If the resume is already an excellent match (scores high), you may leave improvement_tips empty or null.
+IMPROVEMENT_TIPS (optional): If the resume could be improved for this job, provide a short text (2-4 blocks). Each block: a clear header (e.g. "Keywords", "Experience", "Structure") and 1-2 short sentences with concrete tips for better match. Use line breaks between blocks. Write improvement_tips in the language specified in the user message (default: English). If the resume is already an excellent match (scores high), you may leave improvement_tips empty or null.
 
 Be strict but fair. Output valid integers 0-100 for each score field."""
 
@@ -84,11 +84,17 @@ def get_breakdown_scorer_agent() -> Agent:
     )
 
 
-async def get_breakdown_scores(resume_text: str, job: JobPosting) -> BreakdownScores:
-    """Return independent Skills, Experience, Portfolio scores 0-100 and optional improvement_tips from LLM."""
+async def get_breakdown_scores(
+    resume_text: str, job: JobPosting, output_language: str | None = None
+) -> BreakdownScores:
+    """Return independent Skills, Experience, Portfolio scores 0-100 and optional improvement_tips from LLM.
+    output_language: e.g. 'en', 'ru'. Default English. Used for improvement_tips text."""
     agent = get_breakdown_scorer_agent()
     summary = _job_summary(job)
-    prompt = f"## Job:\n{summary}\n\n## Resume (text):\n{resume_text[:6000]}"
+    lang_instruction = ""
+    if output_language and output_language.lower() != "en":
+        lang_instruction = f"\n\nWrite improvement_tips in: {output_language}."
+    prompt = f"## Job:\n{summary}\n\n## Resume (text):\n{resume_text[:6000]}{lang_instruction}"
     result = await agent.run(prompt)
     out = result.output
     tips = getattr(out, "improvement_tips", None)

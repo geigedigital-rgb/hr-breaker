@@ -11,10 +11,19 @@ const LANGUAGES = [
   { id: "ru", name: "Русский" }
 ];
 
+function getInitialLanguage() {
+  const stored = typeof window !== "undefined" ? window.localStorage.getItem("app_output_language") : null;
+  return LANGUAGES.find((l) => l.id === stored) ?? LANGUAGES[0];
+}
+
 export default function Settings() {
   const { user, loading: authLoading, logout } = useAuth();
   const [settings, setSettings] = useState<api.SettingsResponse | null>(null);
-  const [language, setLanguage] = useState(LANGUAGES[0]);
+  const [language, setLanguage] = useState(getInitialLanguage);
+
+  useEffect(() => {
+    api.setOutputLanguage(language.id as "en" | "ru");
+  }, [language]);
 
   useEffect(() => {
     api
