@@ -62,7 +62,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const loginWithGoogle = useCallback(() => {
-    window.location.href = api.getGoogleLoginUrl();
+    const redirectUri = `${window.location.origin}/auth/callback`;
+    window.location.href = api.getGoogleLoginUrl(redirectUri);
   }, []);
 
   const logout = useCallback(() => {

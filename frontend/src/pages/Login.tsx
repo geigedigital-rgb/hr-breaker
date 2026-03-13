@@ -7,17 +7,6 @@ import { t } from "../i18n";
 
 const LANDING_PENDING_KEY = "landing_pending_token";
 
-function PendingLoader() {
-  return (
-    <span className="inline-flex items-center justify-center w-8 h-8 shrink-0" aria-hidden>
-      <span className="relative flex h-5 w-5">
-        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#4578FC]/40" />
-        <span className="relative inline-flex rounded-full h-5 w-5 border-2 border-[#4578FC] border-t-transparent animate-spin" />
-      </span>
-    </span>
-  );
-}
-
 export default function Login() {
   const { user, loading, login, register, loginWithGoogle, setUserFromToken } = useAuth();
   const [searchParams] = useSearchParams();
@@ -302,7 +291,6 @@ export default function Login() {
               </p>
               {pendingLoading && (
                 <div className="mt-4 flex items-center gap-3 rounded-xl bg-[#F5F6FA] border border-[#EBEDF5] px-4 py-3">
-                  <PendingLoader />
                   <span className="text-sm text-[var(--text-muted)]">{t("login.loading")}</span>
                 </div>
               )}
@@ -314,7 +302,6 @@ export default function Login() {
               {!pendingLoading && pendingData && (
                 <div className="mt-4 space-y-3">
                   <div className="flex items-center gap-3 rounded-xl bg-white border border-[#EBEDF5] shadow-sm px-4 py-3.5">
-                    <PendingLoader />
                     <div className="min-w-0 flex-1 flex items-center gap-2">
                       <DocumentTextIcon className="w-5 h-5 shrink-0 text-[#4578FC]" />
                       <span className="text-sm font-medium text-[#181819] truncate" title={pendingData.resume_filename}>
@@ -323,7 +310,6 @@ export default function Login() {
                     </div>
                   </div>
                   <div className="flex items-center gap-3 rounded-xl bg-white border border-[#EBEDF5] shadow-sm px-4 py-3.5">
-                    <PendingLoader />
                     <div className="min-w-0 flex-1 flex flex-col items-start gap-0.5">
                       {pendingData.job_title && (
                         <span className="text-sm font-medium text-[#181819]">{pendingData.job_title}</span>

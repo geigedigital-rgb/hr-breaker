@@ -438,15 +438,16 @@ export async function getMe(): Promise<AuthUser | null> {
 }
 
 /** Open Google OAuth in current window (user will be redirected to Google, then back to /auth/callback). */
-export function getGoogleLoginUrl(): string {
-  return `${API}/auth/google`;
+export function getGoogleLoginUrl(redirectUri?: string): string {
+  if (!redirectUri) return `${API}/auth/google`;
+  return `${API}/auth/google?redirect_uri=${encodeURIComponent(redirectUri)}`;
 }
 
-export async function exchangeGoogleCode(code: string): Promise<LoginResponse> {
+export async function exchangeGoogleCode(code: string, redirectUri?: string): Promise<LoginResponse> {
   const r = await fetch(`${API}/auth/google/callback`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
-    body: JSON.stringify({ code }),
+    body: JSON.stringify({ code, redirect_uri: redirectUri }),
   });
   const data = await parseJsonOrThrow<LoginResponse & { detail?: string }>(r);
   if (!r.ok) throw new Error(data.detail || r.statusText);

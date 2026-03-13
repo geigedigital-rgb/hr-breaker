@@ -506,16 +506,16 @@ async def api_me(user: dict | None = Depends(get_current_user)) -> AuthUserOut:
 
 
 @router.get("/auth/google")
-async def api_google_login():
+async def api_google_login(redirect_uri: str | None = Query(None, description="Optional OAuth redirect URI")):
     """Redirect to Google OAuth consent screen. Frontend should open this URL (e.g. window.location or popup)."""
     settings = get_settings()
     if not settings.google_oauth_client_id:
         raise HTTPException(503, "Google OAuth not configured. Set GOOGLE_OAUTH_CLIENT_ID in .env")
     from urllib.parse import urlencode
-    redirect_uri = f"{settings.frontend_url.rstrip('/')}/auth/callback"
+    effective_redirect_uri = (redirect_uri or "").strip() or f"{settings.frontend_url.rstrip('/')}/auth/callback"
     params = urlencode({
         "client_id": settings.google_oauth_client_id,
-        "redirect_uri": redirect_uri,
+        "redirect_uri": effective_redirect_uri,
         "response_type": "code",
         "scope": "openid email profile",
         "access_type": "offline",
@@ -526,6 +526,7 @@ async def api_google_login():
 
 class GoogleCallbackRequest(BaseModel):
     code: str
+    redirect_uri: str | None = None
 
 
 @router.post("/auth/google/callback", response_model=LoginResponse)
@@ -536,7 +537,7 @@ async def api_google_exchange(req: GoogleCallbackRequest) -> LoginResponse:
         raise HTTPException(503, "Database not configured")
     import httpx
     settings = get_settings()
-    redirect_uri = f"{settings.frontend_url.rstrip('/')}/auth/callback"
+    redirect_uri = (req.redirect_uri or "").strip() or f"{settings.frontend_url.rstrip('/')}/auth/callback"
     async with httpx.AsyncClient() as client:
         token_r = await client.post(
             "https://oauth2.googleapis.com/token",

@@ -20,7 +20,8 @@ export default function AuthCallback() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await api.exchangeGoogleCode(code);
+        const redirectUri = `${window.location.origin}/auth/callback`;
+        const res = await api.exchangeGoogleCode(code, redirectUri);
         if (cancelled) return;
         setStoredToken(res.access_token);
         const pending = sessionStorage.getItem(LANDING_PENDING_KEY);
