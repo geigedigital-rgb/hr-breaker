@@ -18,6 +18,17 @@ function isOfferPasteAsTextError(msg: string): boolean {
   return msg.includes(JOB_LIST_URL_MARKER) || msg.includes(SCRAPE_FAILED_PASTE_MARKER);
 }
 
+function isValidHttpUrl(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  try {
+    const parsed = new URL(trimmed);
+    return (parsed.protocol === "http:" || parsed.protocol === "https:") && !!parsed.hostname;
+  } catch {
+    return false;
+  }
+}
+
 /** Shared block: resume thumbnail image. */
 function ResumeThumbnailBlock({
   imageUrl,
@@ -386,442 +397,73 @@ function getKeywordsCategory(percent: number): { category: string; description: 
   return band ? { category: band.category, description: band.description } : KEYWORDS_BANDS[KEYWORDS_BANDS.length - 1];
 }
 
-function getScoreStrokeColor(pct: number): string {
+function getScoreTextColor(pct: number): string {
   if (pct < 55) return "#dc2626";
-  if (pct < 75) return "#eab308";
-  return "#16a34a";
+  if (pct < 75) return "#ca8a04";
+  return "#15803d";
 }
 
-const CIRCLE_STROKE = 5;
-
-/** Небольшая круговая диаграмма заполнения (0–100%). */
+/** Small circular progress (0–100%) with full 0–100 gradient and gray unrevealed part. */
 function CircleScore({ percent, size = 44 }: { percent: number; size?: number }) {
   const pct = Math.max(0, Math.min(100, percent));
-  const r = (size - 6) / 2;
-  const cx = size / 2;
-  const cy = size / 2;
-  const circumference = 2 * Math.PI * r;
-  const filled = (pct / 100) * circumference;
-  const stroke = getScoreStrokeColor(pct);
+  const angle = (pct / 100) * 360;
+  const stroke = Math.max(4, Math.round(size * 0.13));
+  const ringMask = `radial-gradient(farthest-side, transparent calc(100% - ${stroke}px), #000 calc(100% - ${stroke}px))`;
+  const unrevealedOverlay =
+    pct <= 0
+      ? "#E5E7EB"
+      : pct >= 100
+        ? "transparent"
+        : `conic-gradient(from -90deg, transparent 0deg ${angle}deg, #E5E7EB ${angle}deg 360deg)`;
   return (
-    <svg width={size} height={size} className="shrink-0" aria-hidden>
-      <circle
-        cx={cx}
-        cy={cy}
-        r={r}
-        fill="none"
-        stroke="#EBEDF5"
-        strokeWidth={CIRCLE_STROKE}
+    <div
+      className="relative shrink-0 rounded-full"
+      style={{ width: size, height: size }}
+      aria-hidden
+    >
+      <div
+        className="absolute inset-0 rounded-full"
+        style={{
+          background: SCORE_GRADIENT,
+          WebkitMaskImage: ringMask,
+          maskImage: ringMask,
+        }}
       />
-      <circle
-        cx={cx}
-        cy={cy}
-        r={r}
-        fill="none"
-        stroke={stroke}
-        strokeWidth={CIRCLE_STROKE}
-        strokeLinecap="round"
-        strokeDasharray={`${filled} ${circumference}`}
-        transform={`rotate(-90 ${cx} ${cy})`}
+      <div
+        className="absolute inset-0 rounded-full"
+        style={{
+          background: unrevealedOverlay,
+          WebkitMaskImage: ringMask,
+          maskImage: ringMask,
+        }}
       />
-    </svg>
+    </div>
   );
 }
 
-/** Одна ячейка в ряду: метка + полоска (loader) + процент. Цвет по уровню. compact = в один ряд с другими. */
+/** One row: label + bar (red→green gradient by %) + percent. Slightly thicker bar. */
+const SCORE_GRADIENT = "linear-gradient(90deg, #dc2626 0%, #eab308 50%, #16a34a 100%)";
+
 function BarScoreRow({ label, percent, compact }: { label: string; percent: number; compact?: boolean }) {
   const pct = Math.max(0, Math.min(100, percent));
-  const fillColor = getScoreStrokeColor(pct);
+  const fillColor = getScoreTextColor(pct);
   return (
     <div className={compact ? "flex flex-col gap-1 min-w-0 flex-1" : "flex items-center gap-2 w-full min-w-0"}>
       <span className="text-[11px] text-[var(--text)] font-medium shrink-0">{label}</span>
       <div className={compact ? "flex items-center gap-1.5" : "flex items-center gap-2 w-full min-w-0"}>
-        <div className={`${compact ? "flex-1 min-w-[52px]" : "flex-1 min-w-0"} h-1.5 rounded-full bg-[#EBEDF5] overflow-hidden`}>
+        <div className={`${compact ? "flex-1 min-w-[52px]" : "flex-1 min-w-0"} h-2 rounded-full bg-[#E5E7EB] overflow-hidden relative`}>
           <div
-            className="h-full rounded-full transition-all duration-300"
-            style={{ width: `${pct}%`, backgroundColor: fillColor }}
+            className="absolute inset-0 h-full rounded-full"
+            style={{ background: SCORE_GRADIENT }}
+          />
+          <div
+            className="absolute top-0 right-0 h-full bg-[#E5E7EB] transition-all duration-300"
+            style={{ width: `${100 - pct}%` }}
           />
         </div>
         <span className="text-[11px] font-semibold tabular-nums shrink-0" style={{ color: fillColor }}>
           {Math.round(pct)}%
         </span>
-      </div>
-    </div>
-  );
-}
-
-/* Мягкие градиенты для вида «Дополнительный»: близкие оттенки, плавный переход (на малых % не резкий контраст). */
-const PROGRESS_GRADIENT_BLUE = "linear-gradient(90deg, #a5bdf8 0%, #9eb6f7 20%, #8baaf6 45%, #7a9cf5 70%, #6a8ef4 100%)";
-const PROGRESS_GRADIENT_AMBER = "linear-gradient(90deg, #e5dbb5 0%, #dfd19f 25%, #d4c078 50%, #c9af5c 75%, #c0a34d 100%)";
-const PROGRESS_GRADIENT_RED = "linear-gradient(90deg, #e2b8b8 0%, #dca8a8 25%, #d09292 50%, #c47d7d 75%, #b86b6b 100%)";
-
-/** Яркая палитра от зелёного до красного: один градиент на все заполненные сегменты по результату. */
-const READINESS_GRADIENT_IDS = {
-  red: "readiness-grad-red",
-  orange: "readiness-grad-orange",
-  yellow: "readiness-grad-yellow",
-  green: "readiness-grad-green",
-} as const;
-
-function getReadinessGradientId(pct: number): string {
-  if (pct < 40) return READINESS_GRADIENT_IDS.red;
-  if (pct < 55) return READINESS_GRADIENT_IDS.orange;
-  if (pct < 75) return READINESS_GRADIENT_IDS.yellow;
-  return READINESS_GRADIENT_IDS.green;
-}
-
-/** Дуга 90° «Готовность к вакансии»: сегменты с закруглёнными краями и зазорами, пропорциональные; супер-яркие градиенты. */
-function JobReadinessSemicircle({ percent, size = 140 }: { percent: number; size?: number }) {
-  const pct = Math.max(0, Math.min(100, percent));
-  const strokeWidth = 12;
-  const r = size * 0.38;
-  const cx = size * 0.5;
-  const cy = size * 0.52;
-  const numSegments = 24;
-  const totalAngle = Math.PI / 2;
-  const gapFraction = 0.22;
-  const segmentAngle = (totalAngle / numSegments) * (1 - gapFraction);
-  const angleStep = totalAngle / numSegments;
-  const startAngle = Math.PI;
-  const gradientId = getReadinessGradientId(pct);
-  const filledCount = Math.round((pct / 100) * numSegments);
-  const svgH = size * 0.72;
-
-  return (
-    <div className="relative flex flex-col items-center justify-center" style={{ width: size, height: svgH + 24 }}>
-      <svg width={size} height={svgH} className="overflow-visible" aria-hidden viewBox={`0 0 ${size} ${svgH}`}>
-        <defs>
-          <linearGradient id={READINESS_GRADIENT_IDS.red} x1="0" y1="0" x2={size} y2="0" gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stopColor="#ff4444" />
-            <stop offset="50%" stopColor="#ff1744" />
-            <stop offset="100%" stopColor="#d50000" />
-          </linearGradient>
-          <linearGradient id={READINESS_GRADIENT_IDS.orange} x1="0" y1="0" x2={size} y2="0" gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stopColor="#ffab40" />
-            <stop offset="50%" stopColor="#ff9100" />
-            <stop offset="100%" stopColor="#ff6d00" />
-          </linearGradient>
-          <linearGradient id={READINESS_GRADIENT_IDS.yellow} x1="0" y1="0" x2={size} y2="0" gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stopColor="#ffee58" />
-            <stop offset="50%" stopColor="#ffeb3b" />
-            <stop offset="100%" stopColor="#ffc107" />
-          </linearGradient>
-          <linearGradient id={READINESS_GRADIENT_IDS.green} x1="0" y1="0" x2={size} y2="0" gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stopColor="#69f0ae" />
-            <stop offset="50%" stopColor="#00e676" />
-            <stop offset="100%" stopColor="#00c853" />
-          </linearGradient>
-        </defs>
-        {Array.from({ length: numSegments }, (_, i) => {
-          const a0 = startAngle + i * angleStep;
-          const a1 = a0 + segmentAngle;
-          const x0 = cx + r * Math.cos(a0);
-          const y0 = cy - r * Math.sin(a0);
-          const x1 = cx + r * Math.cos(a1);
-          const y1 = cy - r * Math.sin(a1);
-          const filled = i < filledCount;
-          return (
-            <path
-              key={i}
-              d={`M ${x0} ${y0} A ${r} ${r} 0 0 1 ${x1} ${y1}`}
-              fill="none"
-              stroke={filled ? `url(#${gradientId})` : "#E8EAEF"}
-              strokeWidth={strokeWidth}
-              strokeLinecap="round"
-            />
-          );
-        })}
-      </svg>
-      <span className="absolute text-[22px] font-bold text-[#181819] tabular-nums" style={{ top: svgH * 0.38 - 6 }}>
-        {Math.round(pct)}%
-      </span>
-      <span className="text-[12px] font-medium text-[var(--text-tertiary)] mt-1">{t("optimize.jobReadiness")}</span>
-    </div>
-  );
-}
-
-/** Одна строка навыка: название слева, толстая полоска с градиентом, процент справа (светлый текст). */
-function SkillBarRowAligned({ label, percent }: { label: string; percent: number }) {
-  const pct = Math.max(0, Math.min(100, percent));
-  const gradient = pct >= 75 ? PROGRESS_GRADIENT_BLUE : pct >= 55 ? PROGRESS_GRADIENT_AMBER : PROGRESS_GRADIENT_RED;
-  return (
-    <div className="flex items-center gap-3 w-full min-w-0">
-      <span className="text-[13px] font-normal text-[#181819] shrink-0 w-[100px]">{label}</span>
-      <div className="flex-1 min-w-0 h-3 rounded-full overflow-hidden" style={{ backgroundColor: "#E8EAEF" }}>
-        <div
-          className="h-full rounded-full transition-all duration-300"
-          style={{ width: `${pct}%`, background: gradient }}
-        />
-      </div>
-      <span className="text-[13px] font-normal text-[var(--text-tertiary)] tabular-nums shrink-0 w-9 text-right">
-        {Math.round(pct)}%
-      </span>
-    </div>
-  );
-}
-
-type SummaryData = {
-  atsPct: number;
-  kwPct: number;
-  atsCat: { category: string; description: string };
-  kwCat: { category: string; description: string };
-  overallPct: number;
-  skillsPct: number;
-  experiencePct: number;
-  portfolioPct: number;
-  displayName: string;
-  displaySpecialty: string;
-  displaySkills: string;
-};
-
-function getAssessmentTierLabel(pct: number): string {
-  if (pct <= 55) return t("optimize.levelCritical");
-  if (pct <= 65) return t("optimize.levelBorderline");
-  if (pct <= 75) return t("optimize.levelJunior");
-  if (pct <= 85) return t("optimize.levelStrong");
-  return t("optimize.levelExpert");
-}
-
-/** Дополнительный вид результатов: Assessment + Рекомендации + Готовность + Улучшение (стиль скриншота). */
-function AdditionalResultsView({
-  summaryData,
-  preScores,
-  stage,
-  aggressiveTailoring,
-  setAggressiveTailoring,
-  onImprove,
-  canImprove,
-  canOptimizeSubscription,
-  result,
-  showImproveMore,
-  isImprovingMore,
-  onImproveMore,
-}: {
-  summaryData: SummaryData;
-  preScores: api.AnalyzeResponse | null;
-  stage: Stage;
-  aggressiveTailoring: boolean;
-  setAggressiveTailoring: (v: boolean) => void;
-  onImprove: () => void;
-  canImprove: boolean;
-  canOptimizeSubscription: boolean;
-  result: api.OptimizeResponse | null;
-  showImproveMore: boolean;
-  isImprovingMore: boolean;
-  onImproveMore: () => void;
-}) {
-  const tierLabel = getAssessmentTierLabel(summaryData.overallPct);
-  const levelPos = Math.max(0, Math.min(100, summaryData.overallPct));
-  const strongCandidates = [
-    { name: t("optimize.skills"), pct: summaryData.skillsPct },
-    { name: t("optimize.experience"), pct: summaryData.experiencePct },
-    { name: t("optimize.portfolio"), pct: summaryData.portfolioPct },
-  ];
-  const strongAt = strongCandidates.filter((s) => s.pct >= 70).map((s) => s.name);
-  const strongAtDisplay = strongAt.length > 0 ? strongAt : [strongCandidates.reduce((a, b) => (a.pct >= b.pct ? a : b)).name];
-  const growthAreas = [
-    summaryData.skillsPct < 60 && t("optimize.skills"),
-    summaryData.experiencePct < 60 && t("optimize.experience"),
-    summaryData.portfolioPct < 60 && t("optimize.portfolio"),
-  ].filter(Boolean) as string[];
-  const skillRows = [
-    { label: t("optimize.skills"), percent: summaryData.skillsPct },
-    { label: t("optimize.experience"), percent: summaryData.experiencePct },
-    { label: t("optimize.portfolio"), percent: summaryData.portfolioPct },
-    { label: "ATS match", percent: summaryData.atsPct },
-    { label: t("optimize.keywords"), percent: summaryData.kwPct },
-  ];
-
-  return (
-    <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] gap-4 w-full flex-1 min-h-0 content-start items-stretch overflow-auto">
-      {/* Левая колонка: Assessment + Расшифровка */}
-      <div className="flex flex-col gap-4 min-h-0 min-w-0">
-        <div className="rounded-2xl bg-white border border-[#EBEDF5] shadow-sm overflow-hidden flex flex-col gap-4 p-5 shrink-0">
-          <h2 className="text-base font-bold text-[#181819]">{tierLabel}</h2>
-          <p className="text-[13px] text-[var(--text-muted)] leading-relaxed">
-            {summaryData.atsCat.description.slice(0, 180)}
-            {summaryData.atsCat.description.length > 180 ? "…" : ""}
-          </p>
-          <div className="flex flex-col gap-2">
-            <div className="flex justify-between text-[11px] font-medium text-[var(--text-tertiary)]">
-              <span>Easy Level</span>
-              <span>Mid Level</span>
-              <span>Senior Level</span>
-            </div>
-            <div className="h-2 rounded-full overflow-hidden" style={{ backgroundColor: "#E8EAEF" }}>
-              <div
-                className="h-full rounded-full transition-all duration-300"
-                style={{
-                  width: `${levelPos}%`,
-                  background: summaryData.overallPct >= 75 ? PROGRESS_GRADIENT_BLUE : summaryData.overallPct >= 55 ? PROGRESS_GRADIENT_AMBER : PROGRESS_GRADIENT_RED,
-                }}
-              />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4 pt-2 border-t border-[#EBEDF5]">
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center gap-1.5">
-                <CheckCircleIcon className="w-5 h-5 text-[var(--text-tertiary)] shrink-0" aria-hidden />
-                <span className="text-[13px] font-semibold text-[#181819]">{t("optimize.strongSides")}</span>
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {strongAtDisplay.map((s) => (
-                  <span key={s} className="inline-flex px-2.5 py-1 rounded-lg bg-[#F2F3F9] text-[12px] font-medium text-[var(--text-muted)]">
-                    {s}
-                  </span>
-                ))}
-              </div>
-            </div>
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center gap-1.5">
-                <span className="flex items-center justify-center w-5 h-5 rounded-full bg-[#F2F3F9] shrink-0" aria-hidden>
-                  <span className="text-[var(--text-tertiary)] text-[10px] font-bold">!</span>
-                </span>
-                <span className="text-[13px] font-semibold text-[#181819]">{t("optimize.growthAreas")}</span>
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {growthAreas.length > 0 ? growthAreas.map((s) => (
-                  <span key={s} className="inline-flex px-2.5 py-1 rounded-lg bg-[#F2F3F9] text-[12px] font-medium text-[var(--text-muted)]">
-                    {s}
-                  </span>
-                )) : (
-                  <span className="text-[12px] text-[var(--text-tertiary)]">—</span>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-        <div className="rounded-2xl bg-white border border-[#EBEDF5] shadow-sm p-5 flex flex-col gap-0 min-h-0 min-w-0 overflow-auto flex-1">
-          <p className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider shrink-0 mb-2">
-            {t("optimize.recommendationsTitle")}
-          </p>
-          {preScores?.improvement_tips ? (
-            <div className="text-[13px] text-[var(--text-muted)] leading-relaxed whitespace-pre-wrap space-y-3">
-              {preScores.improvement_tips.split(/\n\n+/).filter(Boolean).map((block, i) => {
-                const firstLine = block.split("\n")[0] ?? "";
-                const rest = block.includes("\n") ? block.slice(block.indexOf("\n") + 1).trim() : "";
-                const isHeader = firstLine.length < 60 && (firstLine.endsWith(":") || !firstLine.includes("."));
-                return (
-                  <section key={i}>
-                    {isHeader ? <p className="font-semibold text-[#181819] mb-1">{firstLine.replace(/:$/, "")}</p> : <p className="mb-1">{firstLine}</p>}
-                    {rest && <p className="text-[var(--text-tertiary)]">{rest}</p>}
-                    {!isHeader && !rest && <p className="text-[var(--text-tertiary)]">{block}</p>}
-                  </section>
-                );
-              })}
-            </div>
-          ) : preScores?.recommendations && preScores.recommendations.length > 0 ? (
-            <ul className="space-y-3">
-              {preScores.recommendations
-                .filter((rec) => !rec.labels.every((l) => l === "OK"))
-                .map((rec, i) => (
-                  <li key={i}>
-                    <p className="font-semibold text-[#181819] text-[13px] mb-1">{rec.category}</p>
-                    <ul className="list-disc list-inside space-y-0.5 text-[13px] text-[var(--text-tertiary)]">
-                      {rec.labels.map((label, j) => (
-                        <li key={j}>{label}</li>
-                      ))}
-                    </ul>
-                  </li>
-                ))}
-            </ul>
-          ) : (
-            <p className="text-[13px] text-[var(--text-tertiary)]">{t("optimize.runAnalysisForRec")}</p>
-          )}
-        </div>
-      </div>
-      {/* Правая колонка: Готовность к вакансии (полукруг + полосы) + Улучшение */}
-      <div className="flex flex-col gap-4 min-h-0 min-w-0">
-        <div className="rounded-2xl bg-white border border-[#EBEDF5] shadow-sm p-5 flex flex-col gap-4 shrink-0">
-          <h2 className="text-base font-bold text-[#181819] w-full">{t("optimize.jobReadiness")}</h2>
-          <div className="flex flex-row items-start gap-6 w-full">
-            <JobReadinessSemicircle percent={summaryData.overallPct} size={140} />
-            <div className="flex-1 min-w-0 flex flex-col justify-center gap-3 pt-2">
-              {skillRows.map((row) => (
-                <SkillBarRowAligned key={row.label} label={row.label} percent={row.percent} />
-              ))}
-            </div>
-          </div>
-        </div>
-        <div className="rounded-2xl bg-white border border-[#EBEDF5] shadow-sm p-5 flex flex-col gap-3 shrink-0">
-          <RadioGroup
-            value={aggressiveTailoring ? "strict" : "soft"}
-            onChange={(v) => setAggressiveTailoring(v === "strict")}
-            className="space-y-2"
-          >
-            <RadioGroup.Label className="block text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider">
-              {t("optimize.autoImprove")}
-            </RadioGroup.Label>
-            <div className="grid grid-cols-1 gap-2">
-              <RadioGroup.Option value="soft" className="rounded-xl outline-none focus:ring-2 focus:ring-[#4578FC]/30 focus:ring-offset-2">
-                {({ checked }) => (
-                  <div className={`relative flex flex-col rounded-lg px-3 py-2.5 cursor-pointer transition-colors ${checked ? "bg-[#4578FC]/10 ring-1 ring-[#4578FC]/30" : "bg-[#EBEDF5] hover:bg-[#E0E4EE]"}`}>
-                    <span className="text-[13px] font-medium text-[#181819]">{t("optimize.soft")}</span>
-                    <span className="mt-0.5 text-[11px] text-[var(--text-tertiary)] leading-snug">{t("optimize.softDesc")}</span>
-                  </div>
-                )}
-              </RadioGroup.Option>
-              <RadioGroup.Option value="strict" className="rounded-lg outline-none focus:ring-2 focus:ring-[#4578FC]/30 focus:ring-offset-2">
-                {({ checked }) => (
-                  <div className={`relative flex flex-col rounded-lg px-3 py-2.5 cursor-pointer transition-colors ${checked ? "bg-[#4578FC]/10 ring-1 ring-[#4578FC]/30" : "bg-[#EBEDF5] hover:bg-[#E0E4EE]"}`}>
-                    <span className="text-[13px] font-medium text-[#181819]">{t("optimize.aggressive")}</span>
-                    <span className="mt-0.5 text-[11px] text-[var(--text-tertiary)] leading-snug">{t("optimize.aggressiveDesc")}</span>
-                  </div>
-                )}
-              </RadioGroup.Option>
-            </div>
-          </RadioGroup>
-          <button
-            type="button"
-            onClick={onImprove}
-            disabled={!canImprove || !canOptimizeSubscription}
-            className={`w-full flex items-center justify-center gap-2 py-3 px-4 rounded-2xl text-[13px] font-semibold text-white transition-colors focus:outline-none focus:ring-2 focus:ring-[#4578FC]/40 focus:ring-offset-2 ${
-              canOptimizeSubscription
-                ? "bg-[#4578FC] hover:bg-[#3d6ae6] disabled:opacity-50 disabled:cursor-not-allowed"
-                : "bg-gray-400 cursor-not-allowed"
-            }`}
-          >
-            <SparklesIcon className="w-5 h-5 shrink-0" />
-            {t("optimize.improveResume")}
-          </button>
-          {!canOptimizeSubscription && (
-            <p className="text-[11px] text-center text-[var(--text-muted)] mt-1">
-              {t("optimize.upgradeToOptimize")}
-            </p>
-          )}
-        </div>
-        {stage === "result" && result && (
-          <div className="rounded-2xl bg-white border border-[#EBEDF5] shadow-sm p-5 space-y-4 shrink-0">
-            <h2 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">{t("optimize.result")}</h2>
-            {result.error ? (
-              <p className="text-sm text-[var(--text-tertiary)]">{result.error}</p>
-            ) : (
-              <>
-                <p className="text-[13px] text-[var(--text-muted)]">
-                  {t("optimize.mode")}: <span className="font-medium text-[#181819]">{aggressiveTailoring ? t("optimize.aggressiveMode") : t("optimize.softMode")}</span>
-                </p>
-                {result.pdf_filename && result.pdf_base64 && (
-                  <div className="flex flex-wrap gap-2">
-                    <a href={`data:application/pdf;base64,${result.pdf_base64}`} download={result.pdf_filename} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-[#181819] text-sm font-medium hover:opacity-95 transition-opacity" style={{ background: "linear-gradient(128deg, #EAFCB6 0%, #d4f090 18%, #b0d8ff 52%, #5e8afc 88%, #4578FC 100%)" }}>
-                      <ArrowDownTrayIcon className="w-4 h-4" />
-                      {t("optimize.downloadPdf")}
-                    </a>
-                    {showImproveMore && (
-                      <button type="button" onClick={onImproveMore} disabled={isImprovingMore} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#F5F6FA] text-[#181819] text-sm font-medium hover:bg-[#EBEDF5] transition-colors disabled:opacity-50">
-                        {isImprovingMore ? t("optimize.improving") : t("optimize.improveMore")}
-                      </button>
-                    )}
-                  </div>
-                )}
-                {result.success && !result.pdf_base64 && (
-                  <p className="text-sm text-[var(--text-muted)]">
-                    {t("optimize.subscribeToDownload")} <Link to="/upgrade" className="text-[#4578FC] font-medium hover:underline">{t("optimize.subscribeLink")}</Link>
-                  </p>
-                )}
-              </>
-            )}
-          </div>
-        )}
       </div>
     </div>
   );
@@ -869,6 +511,169 @@ function getResumeSummary(
     specialty: specialty || "—",
     skillsLine: skillsLine ? `${skillsLine}${skillsLine.length >= 120 ? "…" : ""}` : "—",
   };
+}
+
+function normalizeScorePercent(raw: number | null | undefined): number | null {
+  if (raw == null || Number.isNaN(raw)) return null;
+  if (raw <= 1) return Math.round(raw * 100);
+  return Math.round(raw);
+}
+
+function normalizeCategoryKey(category: string): string {
+  const c = (category || "").trim().toLowerCase();
+  if (c.includes("keyword")) return "keywords";
+  if (c.includes("requirement")) return "requirements";
+  if (c.includes("structure")) return "structure";
+  if (c.includes("skill")) return "skills";
+  if (c.includes("experience")) return "experience";
+  if (c.includes("portfolio")) return "portfolio";
+  if (c.includes("ats") || c.includes("match")) return "ats";
+  return "general";
+}
+
+function fallbackLabelsByCategory(categoryKey: string, scorePct: number | null): string[] {
+  const low = scorePct != null && scorePct < 60;
+  const mid = scorePct != null && scorePct >= 60 && scorePct < 75;
+  switch (categoryKey) {
+    case "keywords":
+      if (low) return ["Add role-specific hard skills", "Mirror exact vacancy terminology", "Mention stack/tools in achievements"];
+      if (mid) return ["Strengthen keyword coverage in experience bullets", "Add missing tools from requirements"];
+      return ["Maintain keyword consistency", "Keep strongest terms in top sections"];
+    case "requirements":
+      if (low) return ["Address must-have requirements explicitly", "Add measurable outcomes relevant to the role", "Show domain-specific practice"];
+      if (mid) return ["Tighten alignment with core requirements", "Prioritize matching responsibilities first"];
+      return ["Keep requirement alignment explicit", "Preserve evidence-based claims"];
+    case "structure":
+      if (low) return ["Use clear section headings", "Shorten long paragraphs into bullets", "Move strongest impact points to top"];
+      if (mid) return ["Improve section flow and ordering", "Keep bullets concise and specific"];
+      return ["Keep current section clarity", "Preserve readable layout and hierarchy"];
+    case "skills":
+      if (low) return ["Highlight core technical skills first", "Tie skills to real project outcomes"];
+      return ["Keep skills prioritized by relevance", "Support skills with practical examples"];
+    case "experience":
+      if (low) return ["Emphasize measurable business impact", "Prioritize recent and relevant roles"];
+      return ["Keep achievements outcome-focused", "Maintain role relevance by job target"];
+    case "portfolio":
+      if (low) return ["Add strongest projects with outcomes", "Show tech stack and your contribution clearly"];
+      return ["Keep project descriptions concise", "Maintain links and measurable results"];
+    case "ats":
+      if (low) return ["Align wording with ATS-parsed fields", "Use standard section names and chronology"];
+      return ["Keep ATS-friendly structure", "Maintain clear, parseable formatting"];
+    default:
+      if (low) return ["Focus on role relevance first", "Replace generic claims with evidence"];
+      return ["Keep content focused and specific", "Maintain concise, evidence-driven phrasing"];
+  }
+}
+
+function isPositiveRecommendationLabel(label: string): boolean {
+  const normalized = label.trim().toLowerCase();
+  if (!normalized) return false;
+  const positivePrefixes = ["ok", "clear", "match", "maintain", "keep", "preserve", "well-structured", "aligned"];
+  return positivePrefixes.some((prefix) => normalized.startsWith(prefix));
+}
+
+function buildScanResultParagraphs(params: {
+  aiTips?: string | null;
+  fallbackAts: string;
+  fallbackKeywords: string;
+  addImproveNotice: boolean;
+}): string[] {
+  const baseFallback = `${params.fallbackAts} ${params.fallbackKeywords}`.trim();
+  const source = (params.aiTips || "").trim() || baseFallback;
+  const normalized = source.replace(/\s+/g, " ").trim();
+  if (!normalized) return [];
+
+  const sentences = normalized
+    .split(/(?<=[.!?])\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  // Keep the output concise: around 3x shorter, capped to 4-5 sentences.
+  const byRatioCap = Math.max(4, Math.min(5, Math.floor(sentences.length / 3)));
+  const maxSentences = Math.min(5, byRatioCap);
+  const picked = sentences.slice(0, maxSentences);
+
+  const result: string[] = [];
+  for (let i = 0; i < picked.length; i += 2) {
+    result.push(picked.slice(i, i + 2).join(" "));
+  }
+
+  if (params.addImproveNotice) {
+    result.push(t("optimize.lowScoreNeedsImprovement"));
+  }
+  return result.slice(0, 3);
+}
+
+function groupRecommendations(
+  items: api.RecommendationItem[] | undefined,
+  scores: {
+    ats: number | null;
+    keywords: number | null;
+    skills: number | null;
+    experience: number | null;
+    portfolio: number | null;
+  }
+): { category: string; labels: string[] }[] {
+  if (!items || items.length === 0) return [];
+  const overall = (() => {
+    const values = [scores.ats, scores.keywords, scores.skills, scores.experience, scores.portfolio].filter(
+      (v): v is number => v != null
+    );
+    if (values.length === 0) return null;
+    return Math.round(values.reduce((a, b) => a + b, 0) / values.length);
+  })();
+
+  const pickScoreForCategory = (categoryKey: string): number | null => {
+    if (categoryKey === "ats") return scores.ats ?? overall;
+    if (categoryKey === "keywords") return scores.keywords ?? overall;
+    if (categoryKey === "skills") return scores.skills ?? overall;
+    if (categoryKey === "experience") return scores.experience ?? overall;
+    if (categoryKey === "portfolio") return scores.portfolio ?? overall;
+    if (categoryKey === "requirements") return scores.keywords ?? scores.ats ?? overall;
+    if (categoryKey === "structure") return scores.ats ?? overall;
+    return overall;
+  };
+
+  const groups = new Map<string, string[]>();
+  for (const rec of items) {
+    const category = (rec.category || "").trim() || "General";
+    if (!groups.has(category)) groups.set(category, []);
+    const existing = groups.get(category)!;
+    for (const raw of rec.labels || []) {
+      const label = (raw || "").trim();
+      if (!label) continue;
+      if (!existing.includes(label)) existing.push(label);
+    }
+  }
+  return Array.from(groups.entries()).map(([category, labels]) => {
+    const categoryKey = normalizeCategoryKey(category);
+    const categoryScore = pickScoreForCategory(categoryKey);
+    const allowOk = categoryScore == null || categoryScore >= 75;
+    const cleaned = labels.filter((label) => {
+      const normalized = label.trim().toLowerCase();
+      if (!allowOk && (normalized === "ok" || normalized === t("optimize.filterOk").toLowerCase())) {
+        return false;
+      }
+      return true;
+    });
+
+    const merged = [...cleaned];
+    const fallback = fallbackLabelsByCategory(categoryKey, categoryScore);
+    for (const fb of fallback) {
+      if (merged.length >= 5) break;
+      if (!merged.some((x) => x.toLowerCase() === fb.toLowerCase())) merged.push(fb);
+    }
+
+    const limited = merged.slice(0, 5);
+    if (limited.length < 2) {
+      for (const fb of fallback) {
+        if (limited.length >= 2) break;
+        if (!limited.some((x) => x.toLowerCase() === fb.toLowerCase())) limited.push(fb);
+      }
+    }
+
+    return { category, labels: limited };
+  });
 }
 
 /** Block 3: title, horizontal bar with gradient, percent, category label (no ring) */
@@ -1031,6 +836,7 @@ export default function Optimize() {
   const [loadMessage, setLoadMessage] = useState("");
   const [aggressiveTailoring, setAggressiveTailoring] = useState(false);
   const [isImprovingMore, setIsImprovingMore] = useState(false);
+  const [loadingHintIndex, setLoadingHintIndex] = useState(0);
   const [resumeSummaryFromApi, setResumeSummaryFromApi] = useState<api.ExtractResumeSummaryResponse | null>(null);
   const [isExtractingSummary, setIsExtractingSummary] = useState(false);
   const [isFetchingJobUrl, _setIsFetchingJobUrl] = useState(false);
@@ -1041,7 +847,6 @@ export default function Optimize() {
   const [lastUploadedPdfFile, setLastUploadedPdfFile] = useState<File | null>(null);
   /** Keeps thumbnail URL after lastUploadedPdfFile is cleared (e.g. after register), so we still show real image. */
   const [resumeThumbnailUrl, setResumeThumbnailUrl] = useState<string | null>(null);
-  const [resultsViewMode, setResultsViewMode] = useState<"main" | "additional">("main");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const step2SectionRef = useRef<HTMLDivElement>(null);
   const prevHadResumeRef = useRef(false);
@@ -1049,6 +854,7 @@ export default function Optimize() {
 
   const plan = user?.subscription?.plan || "free";
   const subStatus = user?.subscription?.status || "free";
+  const canUseJobUrl = api.isAdminUser(user);
   const hasPaidPlan = (plan === "trial" || plan === "monthly") && (subStatus === "active" || subStatus === "trial");
   const freeAnalysesCount = user?.subscription?.free_analyses_count || 0;
   const canAnalyzeSubscription = hasPaidPlan || freeAnalysesCount < 1;
@@ -1069,10 +875,7 @@ export default function Optimize() {
       .then((data) => {
         setResumeContent(data.resume_content);
         setUploadedFileName(data.resume_filename);
-        if (data.job_url) {
-          setJobInput(data.job_url);
-          setJobMode("url");
-        } else if (data.job_text) {
+        if (data.job_text) {
           setJobInput(data.job_text);
           setJobMode("text");
         }
@@ -1101,7 +904,10 @@ export default function Optimize() {
   }, [location.state, location.pathname, navigate]);
 
   const hasResume = !!resumeContent.trim();
-  const hasJob = !!jobInput.trim();
+  const hasJobInput = !!jobInput.trim();
+  const isValidJobUrl = jobMode !== "url" || isValidHttpUrl(jobInput);
+  const hasJob = hasJobInput && isValidJobUrl;
+  const showInvalidUrlHint = jobMode === "url" && hasJobInput && !isValidJobUrl;
   const canImprove = hasResume && hasJob && stage === "assessment" && result === null;
 
   // Сброс при неполных данных
@@ -1125,6 +931,16 @@ export default function Optimize() {
   useEffect(() => {
     if (!resumeContent.trim()) setResumeSummaryFromApi(null);
   }, [resumeContent]);
+
+  // Job URL mode is admin-only in step 2. Non-admin users use text mode.
+  useEffect(() => {
+    if (!canUseJobUrl && jobMode === "url") {
+      setJobMode("text");
+      setJobInput("");
+      setParsedJob(null);
+      setOfferPasteAsText(false);
+    }
+  }, [canUseJobUrl, jobMode]);
 
   // Прокрутка к полю вакансии при показе подсказки «вставьте текстом»
   useEffect(() => {
@@ -1186,7 +1002,7 @@ export default function Optimize() {
     setPreScores(null);
     const jobPayload = jobMode === "text" ? { job_text: jobInput.trim() } : { job_url: jobInput.trim() };
     api
-      .analyze({ resume_content: resumeContent.trim(), ...jobPayload })
+      .analyze({ resume_content: resumeContent.trim(), ...jobPayload, output_language: api.getOutputLanguage() })
       .then((data) => {
         if (!analyzeMountedRef.current) return;
         setPreScores(data);
@@ -1336,6 +1152,10 @@ export default function Optimize() {
 
   function handleStartScan() {
     if (!hasResume || !hasJob) return;
+    if (jobMode === "url" && !isValidJobUrl) {
+      setError(t("optimize.jobUrlInvalid"));
+      return;
+    }
     if (!canAnalyzeSubscription && user?.id !== "local") {
       setError("Free plan limit reached (1 scan). Please upgrade to a paid plan for unlimited ATS scans.");
       return;
@@ -1352,7 +1172,7 @@ export default function Optimize() {
     setError(null);
     setStage("loading");
     setLoadProgress(0);
-    setLoadMessage("Старт…");
+    setLoadMessage(t("optimize.starting"));
     const params = {
       resume_content: resumeContent.trim(),
       job_text: jobMode === "text" ? jobInput.trim() : undefined,
@@ -1362,6 +1182,7 @@ export default function Optimize() {
       pre_ats_score: preScores?.ats_score ?? undefined,
       pre_keyword_score: preScores?.keyword_score ?? undefined,
       source_was_pdf: resumeSourceWasPdf,
+      output_language: api.getOutputLanguage(),
     };
     try {
       let res: api.OptimizeResponse;
@@ -1371,12 +1192,12 @@ export default function Optimize() {
           setLoadMessage(message);
         });
       } catch (streamErr) {
-        setLoadMessage("Ожидание ответа…");
+        setLoadMessage(t("optimize.waitingResponse"));
         res = await api.optimize(params);
       }
       setResult(res);
       setLoadProgress(100);
-      setLoadMessage("Готово");
+      setLoadMessage(t("optimize.done"));
       if (res.error && isOfferPasteAsTextError(res.error)) {
         setError(null);
         setStage("assessment");
@@ -1421,6 +1242,7 @@ export default function Optimize() {
       pre_ats_score: preScores?.ats_score ?? undefined,
       pre_keyword_score: preScores?.keyword_score ?? undefined,
       source_was_pdf: resumeSourceWasPdf,
+      output_language: api.getOutputLanguage(),
     };
     try {
       let res: api.OptimizeResponse;
@@ -1430,12 +1252,12 @@ export default function Optimize() {
           setLoadMessage(message);
         });
       } catch {
-        setLoadMessage("Ожидание ответа…");
+        setLoadMessage(t("optimize.waitingResponse"));
         res = await api.optimize(params);
       }
       setResult(res);
       setLoadProgress(100);
-      setLoadMessage("Готово");
+      setLoadMessage(t("optimize.done"));
       setStage("result");
       await refreshUser();
     } catch (e) {
@@ -1455,6 +1277,38 @@ export default function Optimize() {
       (keywordsValue != null && Math.round(keywordsValue.score * 100) < 85));
 
   const showSummaryBlocks = (stage === "assessment" && preScores != null) || stage === "result";
+  const recommendationGroups = groupRecommendations(preScores?.recommendations, {
+    ats: normalizeScorePercent(preScores?.ats_score),
+    keywords: normalizeScorePercent(preScores?.keyword_score),
+    skills: normalizeScorePercent(preScores?.skills_score),
+    experience: normalizeScorePercent(preScores?.experience_score),
+    portfolio: normalizeScorePercent(preScores?.portfolio_score),
+  });
+  const isLoadingAssessment = stage === "scanning" || (stage === "assessment" && preScores == null);
+  const loadingHints =
+    stage === "scanning"
+      ? [
+          t("optimize.loadingHintScan1"),
+          t("optimize.loadingHintScan2"),
+          t("optimize.loadingHintScan3"),
+          t("optimize.loadingHintScan4"),
+        ]
+      : [
+          t("optimize.loadingHintAnalyze1"),
+          t("optimize.loadingHintAnalyze2"),
+          t("optimize.loadingHintAnalyze3"),
+          t("optimize.loadingHintAnalyze4"),
+        ];
+  const activeLoadingHint = loadingHints[loadingHintIndex % loadingHints.length];
+
+  useEffect(() => {
+    if (!isLoadingAssessment) {
+      setLoadingHintIndex(0);
+      return;
+    }
+    const timer = setInterval(() => setLoadingHintIndex((idx) => idx + 1), 1800);
+    return () => clearInterval(timer);
+  }, [isLoadingAssessment]);
 
   const summaryData = showSummaryBlocks
     ? (() => {
@@ -1473,6 +1327,14 @@ export default function Optimize() {
         return { atsPct, kwPct, atsCat, kwCat, overallPct, skillsPct, experiencePct, portfolioPct, displayName, displaySpecialty, displaySkills };
       })()
     : null;
+  const scanResultParagraphs = summaryData
+    ? buildScanResultParagraphs({
+        aiTips: preScores?.improvement_tips,
+        fallbackAts: getAtsCategory(summaryData.atsPct).description,
+        fallbackKeywords: getKeywordsCategory(summaryData.kwPct).description,
+        addImproveNotice: summaryData.overallPct < 60,
+      })
+    : [];
 
   return (
     <div className="flex flex-col gap-5 h-full min-h-0 overflow-auto">
@@ -1485,94 +1347,63 @@ export default function Optimize() {
 
       {showSummaryBlocks && summaryData ? (
         <div className="relative w-full flex-1 min-h-0 flex flex-col">
-          {/* Переключатель вида: поверх контента, прижат к правому краю */}
-          <div className="absolute top-0 right-0 z-10 flex rounded-xl overflow-hidden border border-[#EBEDF5] bg-white shadow-sm" role="tablist" aria-label="Вариант отображения">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={resultsViewMode === "main"}
-              onClick={() => setResultsViewMode("main")}
-              className={`px-3 py-2 text-[12px] font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-[#4578FC]/40 focus:ring-offset-1 ${
-                resultsViewMode === "main"
-                  ? "bg-[#4578FC] text-white"
-                  : "bg-white text-[var(--text)] hover:bg-[#F5F6FA] border-r border-[#EBEDF5]"
-              }`}
-            >
-              Основной
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={resultsViewMode === "additional"}
-              onClick={() => setResultsViewMode("additional")}
-              className={`px-3 py-2 text-[12px] font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-[#4578FC]/40 focus:ring-offset-1 ${
-                resultsViewMode === "additional"
-                  ? "bg-[#4578FC] text-white"
-                  : "bg-white text-[var(--text)] hover:bg-[#F5F6FA]"
-              }`}
-            >
-              Дополнительный
-            </button>
-          </div>
-
-          {resultsViewMode === "main" ? (
-        /* Единая сетка: результаты после сканирования */
+          {/* Results after scan */}
         <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-3 w-full flex-1 min-h-0 content-start items-stretch">
-          {/* Результаты сканирования */}
+          {/* Scan results */}
           <div className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-6 flex flex-col gap-0 min-h-0 relative">
             {(() => {
               const desc = [getAtsCategory(summaryData.atsPct).description, getKeywordsCategory(summaryData.kwPct).description].filter(Boolean).join(" ");
-              const is90Rejection = /90%|отказ\s*—\s*90|90\s*%/.test(desc);
+              const is90Rejection = /90%|rejection|90\s*%/.test(desc);
               return is90Rejection ? (
                 <span className="absolute top-2.5 right-2.5 text-[10px] font-semibold text-[var(--text-tertiary)] uppercase tracking-wider">
-                  Отказ гарантирован
+                  {t("optimize.rejectionGuaranteed")}
                 </span>
               ) : null;
             })()}
             <p className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider shrink-0 mb-1.5">
-              Результаты сканирования
+              {t("optimize.scanResults")}
             </p>
-            <div className="rounded-lg bg-[#F5F6FA] px-2.5 py-2 min-w-0">
-              <p className="text-[11px] leading-snug text-[var(--text-tertiary)] min-w-0">
-                {[getAtsCategory(summaryData.atsPct).description, getKeywordsCategory(summaryData.kwPct).description].filter(Boolean).join(" ")}
-              </p>
+            <div className="rounded-lg bg-[#EEF0F5] px-3 py-2.5 min-w-0 border border-[#E2E6EE]">
+              <div className="space-y-1.5">
+                {scanResultParagraphs.map((paragraph, idx) => (
+                  <p key={idx} className="text-[13px] leading-snug text-[#334155] min-w-0 font-medium">
+                    {paragraph}
+                  </p>
+                ))}
+              </div>
             </div>
           </div>
           {/* ATS + Ключевые слова + Общий балл + Skills / Experience / Portfolio */}
           <div className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-6 flex flex-col gap-2.5 min-h-0 min-w-0">
-            <div className="flex flex-col sm:flex-row gap-3 min-h-0 min-w-0">
-              <div className="flex flex-col sm:flex-row items-stretch gap-3 min-w-0 flex-1">
-                <div className="flex flex-col gap-1 min-w-0 flex-1 min-h-0">
-                  <p className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider shrink-0 mb-1">ATS match</p>
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <CircleScore percent={summaryData.atsPct} size={44} />
-                    <div className="flex flex-col gap-0 min-w-0">
-                      <p className="text-lg font-bold text-[#181819] tabular-nums">{Math.round(summaryData.atsPct)}%</p>
-                      <p className="text-[11px] text-[var(--text-tertiary)] leading-tight">{summaryData.atsCat.category}</p>
-                    </div>
-                  </div>
-                </div>
-                <div className="hidden sm:block w-px self-stretch bg-[#EBEDF5] shrink-0 min-h-[40px]" aria-hidden />
-                <div className="flex flex-col gap-1 min-w-0 flex-1 min-h-0">
-                  <p className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider shrink-0 mb-1">Ключевые слова</p>
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <CircleScore percent={summaryData.kwPct} size={44} />
-                    <div className="flex flex-col gap-0 min-w-0">
-                      <p className="text-lg font-bold text-[#181819] tabular-nums">{Math.round(summaryData.kwPct)}%</p>
-                      <p className="text-[11px] text-[var(--text-tertiary)] leading-tight">{summaryData.kwCat.category}</p>
-                    </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 min-h-0 min-w-0">
+              <div className="flex flex-col gap-1 min-w-0 min-h-0">
+                <p className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider shrink-0 mb-1">ATS match</p>
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <CircleScore percent={summaryData.atsPct} size={44} />
+                  <div className="flex flex-col gap-0 min-w-0">
+                    <p className="text-lg font-bold text-[#181819] tabular-nums">{Math.round(summaryData.atsPct)}%</p>
+                    <p className="text-[11px] text-[var(--text-tertiary)] leading-tight">{summaryData.atsCat.category}</p>
                   </div>
                 </div>
               </div>
-              <div className="hidden sm:block w-px self-stretch bg-[#EBEDF5] shrink-0 min-h-[40px]" aria-hidden />
-              <div className="flex flex-col gap-1 min-w-0 shrink-0 sm:w-[160px]">
-                <p className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider shrink-0 mb-1">Общий балл match</p>
+              <div className="flex flex-col gap-1 min-w-0 min-h-0">
+                <p className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider shrink-0 mb-1">{t("optimize.keywords")}</p>
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <CircleScore percent={summaryData.kwPct} size={44} />
+                  <div className="flex flex-col gap-0 min-w-0">
+                    <p className="text-lg font-bold text-[#181819] tabular-nums">{Math.round(summaryData.kwPct)}%</p>
+                    <p className="text-[11px] text-[var(--text-tertiary)] leading-tight">{summaryData.kwCat.category}</p>
+                  </div>
+                </div>
+              </div>
+              <div className="flex flex-col gap-1 min-w-0 min-h-0">
+                <p className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider shrink-0 mb-1">{t("optimize.overallMatchScore")}</p>
                 <div className="flex items-center gap-2.5 min-w-0 w-full">
                   <CircleScore percent={summaryData.overallPct} size={40} />
                   <div className="flex flex-col gap-0 min-w-0">
                     <p className="text-lg font-bold text-[#181819] tabular-nums">{summaryData.overallPct}%</p>
                     <p className="text-[11px] text-[var(--text-tertiary)] leading-tight">
-                      {summaryData.overallPct <= 55 ? "Высокий риск отказа" : summaryData.overallPct <= 75 ? "Средние шансы на скрининг" : "Высокие шансы прохождения"}
+                      {summaryData.overallPct <= 55 ? t("optimize.highRiskRejection") : summaryData.overallPct <= 75 ? t("optimize.mediumChancesScreening") : t("optimize.highChancesPassing")}
                     </p>
                   </div>
                 </div>
@@ -1602,40 +1433,38 @@ export default function Optimize() {
           <div className="flex flex-col gap-3 min-h-0 min-w-0 overflow-auto">
             {stage === "assessment" && (
               <>
-                {preScores?.recommendations && (() => {
-                  const toShow = preScores.recommendations.filter(
-                    (rec) => !rec.labels.every((l) => l === "В порядке")
-                  );
-                  return toShow.length > 0 ? (
-                    <div className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-6 shrink-0">
-                      <p className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider shrink-0 mb-2">
-                        Рекомендации по улучшению
-                      </p>
-                      <ul className="space-y-2">
-                        {toShow.map((rec, i) => (
-                          <li key={i} className="flex flex-wrap items-center gap-2 text-[13px]">
-                            <span className="font-medium text-[#181819] shrink-0">{rec.category}</span>
-                            <span className="text-[var(--text-tertiary)] shrink-0">—</span>
-                            <span className="flex flex-wrap gap-1.5">
-                              {rec.labels.map((label, j) => (
-                                <span
-                                  key={j}
-                                  className={
-                                    rec.category === "Ключевые слова" || label.length <= 25
-                                      ? "inline-flex items-center rounded-full bg-[#F5F6FA] text-[var(--text)] px-2 py-0.5 text-[11px] font-medium"
-                                      : "text-[var(--text)]"
-                                  }
-                                >
+                {recommendationGroups.length > 0 && (
+                  <div className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-6 shrink-0">
+                    <p className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider shrink-0 mb-3">
+                      {t("optimize.recommendationsTitle")}
+                    </p>
+                    <div className="space-y-3">
+                      {recommendationGroups.map((group) => (
+                        <section key={group.category} className="space-y-1.5">
+                          <p className="text-[12px] font-semibold text-[#181819]">{group.category}</p>
+                          <ul className="flex flex-wrap gap-2">
+                            {group.labels.map((label) => (
+                              <li key={`${group.category}-${label}`} className="list-none">
+                                <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-medium text-[#374151] bg-[#F2F4F8]">
+                                  {isPositiveRecommendationLabel(label) ? (
+                                    <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-[#EAF9EF] text-[#15803D] shrink-0" aria-hidden>
+                                      <CheckCircleIcon className="w-3 h-3" />
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-[#FFF3E0] text-[#B45309] shrink-0" aria-hidden>
+                                      <ExclamationTriangleIcon className="w-3 h-3" />
+                                    </span>
+                                  )}
                                   {label}
                                 </span>
-                              ))}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
+                              </li>
+                            ))}
+                          </ul>
+                        </section>
+                      ))}
                     </div>
-                  ) : null;
-                })()}
+                  </div>
+                )}
                 <div className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-6 space-y-3 shrink-0">
                   <RadioGroup
                       value={aggressiveTailoring ? "strict" : "soft"}
@@ -1643,13 +1472,13 @@ export default function Optimize() {
                       className="space-y-2"
                     >
                       <RadioGroup.Label className="block text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider">
-                        Автоматическое улучшение
+                        {t("optimize.autoImproveLabel")}
                       </RadioGroup.Label>
                       <div className="grid grid-cols-2 gap-2">
                         <RadioGroup.Option value="soft" className="rounded-xl outline-none focus:ring-2 focus:ring-[#4578FC]/30 focus:ring-offset-2 focus:ring-offset-[#FAFAFC]">
                           {({ checked }) => (
                             <div className={`relative flex flex-col rounded-lg px-3 py-2.5 cursor-pointer transition-colors ${checked ? "bg-[#4578FC]/10 ring-1 ring-[#4578FC]/30" : "bg-[#EBEDF5] hover:bg-[#E0E4EE]"}`}>
-                              <span className="text-[13px] font-medium text-[#181819]">Мягкое</span>
+                              <span className="text-[13px] font-medium text-[#181819]">{t("optimize.softLabel")}</span>
                               <span className="mt-0.5 text-[11px] text-[var(--text-tertiary)] leading-snug">{t("optimize.softDesc")}</span>
                             </div>
                           )}
@@ -1657,36 +1486,50 @@ export default function Optimize() {
                         <RadioGroup.Option value="strict" className="rounded-lg outline-none focus:ring-2 focus:ring-[#4578FC]/30 focus:ring-offset-2 focus:ring-offset-[#FAFAFC]">
                           {({ checked }) => (
                             <div className={`relative flex flex-col rounded-lg px-3 py-2.5 cursor-pointer transition-colors ${checked ? "bg-[#4578FC]/10 ring-1 ring-[#4578FC]/30" : "bg-[#EBEDF5] hover:bg-[#E0E4EE]"}`}>
-                              <span className="text-[13px] font-medium text-[#181819]">Жёсткое</span>
-                              <span className="mt-0.5 text-[11px] text-[var(--text-tertiary)] leading-snug">Может добавить навыки из вакансии</span>
+<span className="text-[13px] font-medium text-[#181819]">{t("optimize.strictLabel")}</span>
+              <span className="mt-0.5 text-[11px] text-[var(--text-tertiary)] leading-snug">{t("optimize.aggressiveDesc")}</span>
                             </div>
                           )}
                         </RadioGroup.Option>
                       </div>
-                      <p className="text-[11px] text-[var(--text-tertiary)] leading-relaxed">
-                        {aggressiveTailoring ? t("optimize.addSkillsNote") : t("optimize.softOnlyNote")}
-                      </p>
-                      {aggressiveTailoring && (
-                        <p className="text-[11px] text-[var(--text-tertiary)] font-medium">Резюме может быть дополнено навыками из вакансии. Проверьте перед отправкой.</p>
+                      {aggressiveTailoring ? (
+                        <div className="flex gap-2 rounded-xl bg-[#FFF7E8] px-3 py-2.5">
+                          <ExclamationTriangleIcon className="w-4 h-4 shrink-0 text-[#B45309] mt-0.5" aria-hidden />
+                          <div className="text-[11px] leading-relaxed text-[#92400E]">
+                            <p className="font-semibold">{t("optimize.strictWarningTitle")}</p>
+                            <p>{t("optimize.strictNote")}</p>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-[11px] text-[var(--text-tertiary)] leading-relaxed">
+                          {t("optimize.softOnlyNote")}
+                        </p>
                       )}
                     </RadioGroup>
-                    <button
-                      type="button"
-                      onClick={handleImprove}
-                      disabled={!canImprove || !canOptimizeSubscription}
-                      className={`w-full flex items-center justify-center gap-2 py-3 px-4 rounded-2xl text-[13px] font-semibold text-white transition-colors focus:outline-none focus:ring-2 focus:ring-[#4578FC]/40 focus:ring-offset-2 focus:ring-offset-[#FAFAFC] ${
-                        canOptimizeSubscription
-                          ? "bg-[#4578FC] hover:bg-[#3d6ae6] disabled:opacity-50 disabled:cursor-not-allowed"
-                          : "bg-gray-400 cursor-not-allowed"
-                      }`}
-                    >
-                      <SparklesIcon className="w-5 h-5 shrink-0" />
-                      {t("optimize.improveResume")}
-                    </button>
-                    {!canOptimizeSubscription && (
-                      <p className="text-[11px] text-center text-[var(--text-muted)] mt-1">
-                        {t("optimize.upgradeToOptimize")}
-                      </p>
+                    {canOptimizeSubscription ? (
+                      <button
+                        type="button"
+                        onClick={handleImprove}
+                        disabled={!canImprove}
+                        className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-2xl text-[13px] font-semibold text-white bg-[#4578FC] hover:bg-[#3d6ae6] disabled:opacity-50 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-[#4578FC]/40 focus:ring-offset-2 focus:ring-offset-[#FAFAFC]"
+                      >
+                        <SparklesIcon className="w-5 h-5 shrink-0" />
+                        {t("optimize.improveResume")}
+                      </button>
+                    ) : (
+                      <div className="flex flex-wrap items-center justify-center gap-2">
+                        <Link
+                          to="/upgrade"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center justify-center py-3 px-5 rounded-2xl text-[13px] font-semibold text-white bg-[#4578FC] hover:bg-[#3d6ae6] transition-colors focus:outline-none focus:ring-2 focus:ring-[#4578FC]/40 focus:ring-offset-2 focus:ring-offset-[#FAFAFC]"
+                        >
+                          {t("optimize.upgradeButton")}
+                        </Link>
+                        <span className="text-[13px] text-[var(--text-muted)]">
+                          {t("optimize.upgradeToImproveSuffix")}
+                        </span>
+                      </div>
                     )}
                 </div>
               </>
@@ -1694,25 +1537,25 @@ export default function Optimize() {
             {stage === "result" && result && (
               <div className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-6 space-y-4">
                 <header className="flex flex-wrap items-center gap-2">
-                  <h2 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Результат</h2>
-                  {result.error ? <p className="text-base font-medium text-[var(--text-tertiary)]">Ошибка</p> : <p className="text-base font-medium text-[#181819]" role="status">Готово.</p>}
+                  <h2 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">{t("optimize.result")}</h2>
+                  {result.error ? <p className="text-base font-medium text-[var(--text-tertiary)]">{t("optimize.errorLabel")}</p> : <p className="text-base font-medium text-[#181819]" role="status">{t("optimize.done")}</p>}
                 </header>
                 {result.error ? (
                   <p className="text-sm text-[var(--text-tertiary)] whitespace-pre-wrap">{result.error}</p>
                 ) : (
                   <>
                     <p className="text-[13px] text-[var(--text-muted)] mb-2">
-                      Режим оптимизации: <span className="font-medium text-[#181819]">{aggressiveTailoring ? "Жёсткий" : "Мягкий"}</span>
+                      {t("optimize.mode")}: <span className="font-medium text-[#181819]">{aggressiveTailoring ? t("optimize.aggressiveMode") : t("optimize.softMode")}</span>
                     </p>
                 {result.pdf_filename && result.pdf_base64 && (
                   <section aria-label={t("optimize.downloadResume")} className="flex flex-wrap items-center gap-2">
                     <a href={`data:application/pdf;base64,${result.pdf_base64}`} download={result.pdf_filename} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-[#181819] text-sm font-medium hover:opacity-95 transition-opacity" style={{ background: "linear-gradient(128deg, #EAFCB6 0%, #d4f090 18%, #b0d8ff 52%, #5e8afc 88%, #4578FC 100%)" }}>
                       <ArrowDownTrayIcon className="w-4 h-4" />
-                      Скачать PDF
+                      {t("optimize.downloadPdf")}
                     </a>
                     {showImproveMore && (
                       <button type="button" onClick={handleImproveMore} disabled={isImprovingMore} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#F5F6FA] text-[#181819] text-sm font-medium hover:bg-[#EBEDF5] transition-colors disabled:opacity-50">
-                        {isImprovingMore ? "Улучшаем…" : "Улучшить ещё больше"}
+                        {isImprovingMore ? t("optimize.improving") : t("optimize.improveMoreLabel")}
                       </button>
                     )}
                   </section>
@@ -1726,7 +1569,7 @@ export default function Optimize() {
                 )}
                     {result.key_changes && result.key_changes.length > 0 && (
                       <section className="pt-3 border-t border-[#EBEDF5]" aria-labelledby="key-changes-heading">
-                        <h3 id="key-changes-heading" className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">Ключевые изменения</h3>
+                        <h3 id="key-changes-heading" className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">{t("optimize.keyChanges")}</h3>
                         <div className="space-y-3">
                           {result.key_changes.map((group, idx) => (
                             <div key={idx} className="space-y-1.5">
@@ -1747,10 +1590,10 @@ export default function Optimize() {
                     {result.validation.results.length > 0 && (
                       <section className="pt-3 border-t border-[#EBEDF5]" aria-labelledby="filter-details-heading">
                         <Disclosure>
-                          <DisclosureButton id="filter-details-heading" className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider hover:text-[#181819]">Детали проверок</DisclosureButton>
+                          <DisclosureButton id="filter-details-heading" className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider hover:text-[#181819]">{t("optimize.filterDetails")}</DisclosureButton>
                           <DisclosurePanel className="mt-2 space-y-1.5">
                             <p className="text-[11px] text-[var(--text-tertiary)] leading-relaxed mb-2">
-                              Внутренние проверки ATS: для каждой — ваша оценка (слева) и порог прохождения (справа). ✓ — проверка пройдена, ✗ — не пройдена.
+                              {t("optimize.filterDetailsDesc")}
                             </p>
                             <ul className="space-y-2" role="list">
                               {result.validation.results.map((r) => (
@@ -1770,23 +1613,6 @@ export default function Optimize() {
             )}
           </div>
         </div>
-          ) : (
-          /* Дополнительный вид: Assessment + Skill Gap + Расшифровка + Улучшение */
-          <AdditionalResultsView
-            summaryData={summaryData}
-            preScores={preScores}
-            stage={stage}
-                aggressiveTailoring={aggressiveTailoring}
-                setAggressiveTailoring={setAggressiveTailoring}
-                onImprove={handleImprove}
-                canImprove={canImprove}
-                canOptimizeSubscription={canOptimizeSubscription}
-                result={result}
-            showImproveMore={!!showImproveMore}
-            isImprovingMore={isImprovingMore}
-            onImproveMore={handleImproveMore}
-          />
-          )}
         </div>
       ) : stage === "landing" ? (
         <div className="flex-1 flex flex-col items-center justify-center pt-8 pb-16 px-6 w-full max-w-5xl mx-auto min-h-0 overflow-auto">
@@ -2044,49 +1870,53 @@ export default function Optimize() {
               </div>
             )}
             <div className="relative flex-1 flex flex-col min-h-0">
-              <div className="p-6 pb-4">
-                <div className="flex items-center gap-2 flex-wrap justify-start">
-                  {hasJob ? (
-                    <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 text-emerald-600 px-3 py-1 text-xs font-medium border border-emerald-200">
-                      <CheckCircleIcon className="w-4 h-4 shrink-0" aria-hidden />
-                      {t("optimize.step2")}
-                    </span>
-                  ) : (
-                    <span className="inline-block rounded-lg border border-[#4578FC] bg-[#4578FC]/5 px-3 py-1 text-xs font-medium text-[#4578FC]">
-                      {t("optimize.step2")}
-                    </span>
-                  )}
-                  <h1 id="step2-heading" className="text-xl font-bold tracking-tight text-[#181819]">
-                    {t("optimize.addJobTitle")}
-                  </h1>
+              <div className="p-6 pb-4 flex items-start justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap justify-start">
+                    {hasJob ? (
+                      <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 text-emerald-600 px-3 py-1 text-xs font-medium border border-emerald-200">
+                        <CheckCircleIcon className="w-4 h-4 shrink-0" aria-hidden />
+                        {t("optimize.step2")}
+                      </span>
+                    ) : (
+                      <span className="inline-block rounded-lg border border-[#4578FC] bg-[#4578FC]/5 px-3 py-1 text-xs font-medium text-[#4578FC]">
+                        {t("optimize.step2")}
+                      </span>
+                    )}
+                    <h1 id="step2-heading" className="text-xl font-bold tracking-tight text-[#181819]">
+                      {t("optimize.addJobTitle")}
+                    </h1>
+                  </div>
+                  <p className="text-sm text-[var(--text-tertiary)] mt-1 text-left">
+                    {t("optimize.addJobSub")}
+                  </p>
                 </div>
-                <p className="text-sm text-[var(--text-tertiary)] mt-1 text-left">
-                  {t("optimize.addJobSub")}
-                </p>
+                {hasJob && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setJobInput("");
+                      setParsedJob(null);
+                      setResult(null);
+                      setStage("idle");
+                    }}
+                    className="group shrink-0 inline-flex items-center gap-1.5 text-sm font-medium text-[var(--text-muted)] hover:bg-[#EBEDF5] hover:text-[#181819] focus:outline-none focus:ring-2 focus:ring-[#4578FC]/20 focus:ring-offset-1 rounded px-1.5 py-0.5 transition-colors"
+                  >
+                    <ArrowPathIcon className="w-3.5 h-3.5 shrink-0" aria-hidden />
+                    {t("optimize.changeJob")}
+                  </button>
+                )}
               </div>
               <div className="px-6 pb-6 flex-1 min-h-0 flex flex-col">
               {hasJob ? (
                 <>
-                  <div className="flex items-center gap-2 mb-3 min-w-0" role="group" aria-label="Вакансия">
+                  <div className="flex items-center gap-2 mb-3 min-w-0" role="group" aria-label="Job">
                     <span className="shrink-0 flex items-center justify-center w-6 h-6 rounded bg-[#4578FC]/12" title={t("optimize.jobLinkPlaceholder")}>
                       <BriefcaseIcon className="w-3.5 h-3.5 text-[#4578FC]" aria-hidden />
                     </span>
                     <strong className="text-sm font-semibold text-[#181819] truncate min-w-0 max-w-[50vw]" title={jobInput.trim()}>
                       {jobMode === "url" ? jobInput.trim() : jobInput.trim().slice(0, 60) + (jobInput.trim().length > 60 ? "…" : "")}
                     </strong>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setJobInput("");
-                        setParsedJob(null);
-                        setResult(null);
-                        setStage("idle");
-                      }}
-                      className="group shrink-0 inline-flex items-center gap-1.5 text-sm font-medium text-[var(--text-muted)] hover:bg-[#EBEDF5] hover:text-[#181819] focus:outline-none focus:ring-2 focus:ring-[#4578FC]/20 focus:ring-offset-1 rounded px-1.5 py-0.5 transition-colors"
-                    >
-                      <ArrowPathIcon className="w-3.5 h-3.5 shrink-0" aria-hidden />
-                      Изменить
-                    </button>
                   </div>
                   {(() => {
                     const hasStructured = parsedJob && (parsedJob.title || parsedJob.company || parsedJob.requirements?.length || parsedJob.description);
@@ -2100,9 +1930,7 @@ export default function Optimize() {
                       );
                     }
                     if (jobMode === "url" && !hasStructured) {
-                      return (
-                        <p className="text-xs text-[var(--text-tertiary)]">Предпросмотр появится после загрузки вакансии</p>
-                      );
+                      return null;
                     }
                     return (
                       <JobPreviewContent parsedJob={parsedJob} rawText={jobInput} isParsing={false} />
@@ -2110,27 +1938,39 @@ export default function Optimize() {
                   })()}
                   {stage === "idle" && (
                     <div className="mt-5 pt-4 border-t border-[#EBEDF5]">
-                      <button
-                        type="button"
-                        onClick={handleStartScan}
-                        disabled={!canAnalyzeSubscription && user?.id !== "local"}
-                        className={`w-full flex items-center justify-center gap-2 rounded-2xl text-white py-3.5 px-5 text-sm font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-[#4578FC]/40 focus:ring-offset-2 focus:ring-offset-[#FAFAFC] ${
-                          canAnalyzeSubscription || user?.id === "local"
-                            ? "bg-[#4578FC] hover:bg-[#3d6ae6]"
-                            : "bg-gray-400 cursor-not-allowed"
-                        }`}
-                      >
-                        <SparklesIcon className="w-5 h-5 shrink-0" aria-hidden />
-                        Проверить соответствие
-                      </button>
                       {!canAnalyzeSubscription && user?.id !== "local" ? (
-                        <p className="mt-2 text-center text-[11px] text-red-500 font-medium">
-                          {t("optimize.freeLimitReached")}
-                        </p>
+                        <div className="flex flex-col items-center gap-3">
+                          <p className="text-center text-[12px] text-[var(--text-muted)]">
+                            {t("optimize.freeLimitReached")}
+                          </p>
+                          <div className="flex flex-wrap items-center justify-center gap-2">
+                            <Link
+                              to="/upgrade"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center justify-center py-2.5 px-4 rounded-xl text-[13px] font-semibold text-white bg-[#4578FC] hover:bg-[#3d6ae6] transition-colors focus:outline-none focus:ring-2 focus:ring-[#4578FC]/40 focus:ring-offset-2"
+                            >
+                              {t("optimize.upgradeButton")}
+                            </Link>
+                            <span className="text-[13px] text-[var(--text-muted)]">
+                              {t("optimize.upgradeToImproveSuffix")}
+                            </span>
+                          </div>
+                        </div>
                       ) : (
-                        <p className="mt-2 text-center text-[11px] text-[var(--text-tertiary)]">
-                          {t("optimize.willStartScan")}
-                        </p>
+                        <>
+                          <button
+                            type="button"
+                            onClick={handleStartScan}
+                            className="w-full flex items-center justify-center gap-2 rounded-2xl text-white py-3.5 px-5 text-sm font-semibold bg-[#4578FC] hover:bg-[#3d6ae6] transition-colors focus:outline-none focus:ring-2 focus:ring-[#4578FC]/40 focus:ring-offset-2 focus:ring-offset-[#FAFAFC]"
+                          >
+                            <SparklesIcon className="w-5 h-5 shrink-0" aria-hidden />
+                            {t("optimize.checkMatch")}
+                          </button>
+                          <p className="mt-2 text-center text-[11px] text-[var(--text-tertiary)]">
+                            {t("optimize.willStartScan")}
+                          </p>
+                        </>
                       )}
                     </div>
                   )}
@@ -2141,24 +1981,26 @@ export default function Optimize() {
                     <div id="paste-job-hint" className="flex gap-2 text-sm text-[var(--text-muted)]/90" role="status" aria-live="polite">
                       <ExclamationTriangleIcon className="w-5 h-5 shrink-0 text-amber-500 mt-0.5" aria-hidden />
                       <p>
-                        Упс, ссылку с этого ресурса не удалось обработать. Скопируйте текст вакансии со страницы целиком и вставьте ниже.
+                        {t("optimize.jobScrapeError")}
                       </p>
                     </div>
                   )}
                   <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => { setJobMode("url"); setOfferPasteAsText(false); }}
-                      className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-xl transition-colors focus:outline-none focus:ring-2 focus:ring-[#4578FC]/30 focus:ring-offset-2 focus:ring-offset-[#F5F6FA] ${
-                        jobMode === "url"
-                          ? "bg-[#4578FC]/12 text-[#4578FC] hover:bg-[#4578FC]/18"
-                          : "bg-[#EBEDF5] text-[#181819] hover:bg-[#E0E4EE]"
-                      }`}
-                      title={t("optimize.pasteJobLinkTitle")}
-                    >
-                      <LinkIcon className="w-4 h-4 shrink-0" aria-hidden />
-                      Link
-                    </button>
+                    {canUseJobUrl && (
+                      <button
+                        type="button"
+                        onClick={() => { setJobMode("url"); setOfferPasteAsText(false); }}
+                        className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-xl transition-colors focus:outline-none focus:ring-2 focus:ring-[#4578FC]/30 focus:ring-offset-2 focus:ring-offset-[#F5F6FA] ${
+                          jobMode === "url"
+                            ? "bg-[#4578FC]/12 text-[#4578FC] hover:bg-[#4578FC]/18"
+                            : "bg-[#EBEDF5] text-[#181819] hover:bg-[#E0E4EE]"
+                        }`}
+                        title={t("optimize.pasteJobLinkTitle")}
+                      >
+                        <LinkIcon className="w-4 h-4 shrink-0" aria-hidden />
+                        Link
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => { setJobMode("text"); setOfferPasteAsText(false); }}
@@ -2174,22 +2016,30 @@ export default function Optimize() {
                     </button>
                   </div>
                   {jobMode === "url" ? (
-                    <div className="flex items-center gap-3 w-full rounded-full border border-[#d1d5db] bg-white px-4 py-3 text-left shadow-sm focus-within:ring-2 focus-within:ring-[#4578FC]/25 focus-within:border-[#4578FC]/40">
-                      <LinkIcon className="w-5 h-5 shrink-0 text-[#6b7280]" aria-hidden />
-                      <input
-                        type="url"
-                        value={jobInput}
-                        onChange={(e) => {
-                          setJobInput(e.target.value);
-                          if (e.target.value.trim().length > 100) setOfferPasteAsText(false);
-                        }}
-                        placeholder={t("optimize.pasteJobLinkPlaceholder")}
-                        className="flex-1 min-w-0 bg-transparent text-sm text-[#181819] placeholder:text-[#9ca3af] focus:outline-none"
-                        aria-describedby={offerPasteAsText ? "paste-job-hint" : undefined}
-                      />
-                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#f3f4f6] text-[#6b7280]" aria-hidden>
-                        <ArrowTopRightOnSquareIcon className="w-4 h-4" />
-                      </span>
+                    <div className="space-y-2">
+                      <div className={`flex items-center gap-3 w-full rounded-full border bg-white px-4 py-3 text-left shadow-sm focus-within:ring-2 focus-within:border-[#4578FC]/40 ${showInvalidUrlHint ? "border-red-300 focus-within:ring-red-200/70" : "border-[#d1d5db] focus-within:ring-[#4578FC]/25"}`}>
+                        <LinkIcon className="w-5 h-5 shrink-0 text-[#6b7280]" aria-hidden />
+                        <input
+                          type="url"
+                          value={jobInput}
+                          onChange={(e) => {
+                            setJobInput(e.target.value);
+                            setError(null);
+                            if (e.target.value.trim().length > 100) setOfferPasteAsText(false);
+                          }}
+                          placeholder={t("optimize.pasteJobLinkPlaceholder")}
+                          className="flex-1 min-w-0 bg-transparent text-sm text-[#181819] placeholder:text-[#9ca3af] focus:outline-none"
+                          aria-describedby={showInvalidUrlHint ? "job-url-invalid-hint" : offerPasteAsText ? "paste-job-hint" : undefined}
+                        />
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#f3f4f6] text-[#6b7280]" aria-hidden>
+                          <ArrowTopRightOnSquareIcon className="w-4 h-4" />
+                        </span>
+                      </div>
+                      {showInvalidUrlHint && (
+                        <p id="job-url-invalid-hint" className="text-xs text-red-600">
+                          {t("optimize.jobUrlInvalid")}
+                        </p>
+                      )}
                     </div>
                   ) : (
                     <textarea
@@ -2231,7 +2081,10 @@ export default function Optimize() {
                 <p className="text-sm text-[var(--text-tertiary)]">
                   {stage === "scanning"
                     ? t("optimize.analyzingResume")
-                    : "Получаем оценки ATS и ключевых слов"}
+                    : t("optimize.analysisSubLabel")}
+                </p>
+                <p className="text-xs text-[var(--text-muted)] text-center max-w-sm">
+                  {activeLoadingHint}
                 </p>
                 {stage === "scanning" ? (
                   <div className="w-full max-w-xs space-y-2">
@@ -2243,13 +2096,13 @@ export default function Optimize() {
                         aria-valuenow={Math.round(scanProgress)}
                         aria-valuemin={0}
                         aria-valuemax={100}
-                        aria-label="Прогресс сканирования"
+                        aria-label={t("optimize.scanProgressAria")}
                       />
                     </div>
                     <p className="text-center text-sm font-medium text-[#181819]">{Math.round(scanProgress)}%</p>
                   </div>
                 ) : (
-                  <p className="text-sm text-[var(--text-tertiary)]">Ожидание ответа…</p>
+                  <p className="text-sm text-[var(--text-tertiary)] text-center">{t("optimize.waitingResponse")}</p>
                 )}
               </div>
             )}
@@ -2264,7 +2117,7 @@ export default function Optimize() {
                 </div>
                 <p className="text-[#181819] font-medium">{t("optimize.improvingResume")}</p>
                 <p className="text-sm text-[var(--text-muted)] text-center max-w-sm">
-                  {loadMessage || "Не закрывайте страницу"}
+                  {loadMessage || t("optimize.doNotClosePage")}
                 </p>
                 <div className="w-full max-w-xs space-y-2">
                   <div className="h-2 rounded-full bg-[#EBEDF5] overflow-hidden">
@@ -2275,7 +2128,7 @@ export default function Optimize() {
                       aria-valuenow={Math.round(loadProgress)}
                       aria-valuemin={0}
                       aria-valuemax={100}
-                      aria-label="Прогресс улучшения"
+                      aria-label={t("optimize.improveProgressAria")}
                     />
                   </div>
                   <p className="text-center text-sm font-medium text-[#181819]">{Math.round(loadProgress)}%</p>

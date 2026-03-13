@@ -208,10 +208,24 @@ export type AnalyzeResponse = {
   improvement_tips?: string | null;
 };
 
+const OUTPUT_LANGUAGE_KEY = "app_output_language";
+
+/** Preferred language for LLM output (resume text, tips). Default "en". */
+export function getOutputLanguage(): string {
+  if (typeof window === "undefined") return "en";
+  const stored = window.localStorage.getItem(OUTPUT_LANGUAGE_KEY);
+  return stored === "ru" ? "ru" : "en";
+}
+
+export function setOutputLanguage(lang: "en" | "ru"): void {
+  window.localStorage.setItem(OUTPUT_LANGUAGE_KEY, lang);
+}
+
 export async function analyze(params: {
   resume_content: string;
   job_text?: string;
   job_url?: string;
+  output_language?: string;
 }): Promise<AnalyzeResponse> {
   const r = await fetch(`${API}/analyze`, {
     method: "POST",
@@ -226,14 +240,12 @@ export async function analyze(params: {
 // --- Landing save → login → claim flow ---
 export type LandingPendingResponse = {
   resume_filename: string;
-  job_url: string | null;
   job_title: string | null;
 };
 
 export type LandingClaimResponse = {
   resume_content: string;
   job_text: string | null;
-  job_url: string | null;
   resume_filename: string;
 };
 
@@ -261,6 +273,7 @@ export async function optimize(params: {
   pre_ats_score?: number;
   pre_keyword_score?: number;
   source_was_pdf?: boolean;
+  output_language?: string;
 }): Promise<OptimizeResponse> {
   const r = await fetch(`${API}/optimize`, {
     method: "POST",
@@ -284,6 +297,7 @@ export async function optimizeStream(
     pre_ats_score?: number;
     pre_keyword_score?: number;
     source_was_pdf?: boolean;
+    output_language?: string;
   },
   onProgress: (percent: number, message: string) => void
 ): Promise<OptimizeResponse> {

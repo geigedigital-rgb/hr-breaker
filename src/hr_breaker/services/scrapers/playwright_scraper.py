@@ -52,7 +52,7 @@ class PlaywrightScraper(BaseScraper):
         if not PLAYWRIGHT_AVAILABLE:
             raise ScrapingError(
                 "Playwright not installed. Install with: "
-                "uv pip install 'hr-breaker[browser]' && playwright install chromium"
+                "uv pip install -e . && python -m playwright install chromium"
             )
 
         playwright_ctx = sync_playwright()

@@ -34,7 +34,7 @@ export function NotificationMenu() {
     generated.push({
       id: "welcome",
       title: "Welcome to PitchCV!",
-      message: "You have 1 free ATS scan available. Paste your resume and a job link to see your match score.",
+      message: "You have 1 free ATS scan available. Paste your resume and job description text to see your match score.",
       actionText: "Get started",
       actionUrl: "/optimize",
       type: "info",

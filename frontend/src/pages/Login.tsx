@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { EnvelopeIcon, LockClosedIcon, DocumentTextIcon, LinkIcon } from "@heroicons/react/24/outline";
+import { EnvelopeIcon, LockClosedIcon, DocumentTextIcon } from "@heroicons/react/24/outline";
 import * as api from "../api";
 import { useAuth } from "../contexts/AuthContext";
 import { t } from "../i18n";
@@ -328,20 +328,9 @@ export default function Login() {
                       {pendingData.job_title && (
                         <span className="text-sm font-medium text-[#181819]">{pendingData.job_title}</span>
                       )}
-                      {pendingData.job_url ? (
-                        <a
-                          href={pendingData.job_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-xs text-[#4578FC] hover:underline truncate max-w-full"
-                        >
-                          {pendingData.job_url}
-                        </a>
-                      ) : (
-                        <span className="text-xs text-[var(--text-muted)]">{t("login.jobLink")}</span>
-                      )}
+                      <span className="text-xs text-[var(--text-muted)]">{t("login.jobDescription")}</span>
                     </div>
-                    <LinkIcon className="w-5 h-5 shrink-0 text-[var(--text-muted)]" />
+                    <DocumentTextIcon className="w-5 h-5 shrink-0 text-[var(--text-muted)]" />
                   </div>
                 </div>
               )}
