@@ -802,6 +802,7 @@ async def api_landing_save(
             "job_text": job_text_resolved.strip(),
             "resume_filename": resume_filename,
             "job_title": job_title,
+            "resume_pdf_body": body if resume and resume.filename and resume.filename.lower().endswith(".pdf") else None,
             "created_at": time.time(),
         }
     logger.info("Landing save OK ip=%s token=%s", ip, token[:8])
@@ -841,6 +842,18 @@ async def api_landing_claim(
         data = _landing_pending.pop(token, None)
     if not data:
         raise HTTPException(404, "Link expired or already used. Upload your files again.")
+    # If landing upload was a PDF, register it into "My resumes" after login.
+    try:
+        user_id = str(user["id"]) if user else None
+        pdf_body = data.get("resume_pdf_body")
+        if user_id and isinstance(pdf_body, (bytes, bytearray)) and len(pdf_body) > 50:
+            await _register_uploaded_pdf_bytes(
+                body=bytes(pdf_body),
+                content=data["resume_content"],
+                user_id=user_id,
+            )
+    except Exception as e:
+        logger.warning("Landing claim: failed to register uploaded PDF for user: %s", e)
     return LandingClaimResponse(
         resume_content=data["resume_content"],
         job_text=data.get("job_text"),
@@ -1054,19 +1067,13 @@ class RegisterUploadResponse(BaseModel):
     filename: str
 
 
-@router.post("/resume/register-upload", response_model=RegisterUploadResponse)
-async def api_register_upload(file: UploadFile = File(...), user: dict | None = Depends(get_current_user)) -> RegisterUploadResponse:
-    """Save uploaded PDF and create a history record (user-scoped when DB is used)."""
-    if not file.filename or not file.filename.lower().endswith(".pdf"):
-        raise HTTPException(400, "Expected a PDF file")
-    body = await file.read()
-    if len(body) < 50:
-        raise HTTPException(400, "PDF file too small")
-    try:
-        content = await asyncio.to_thread(extract_text_from_pdf_bytes, body)
-    except Exception as e:
-        logger.exception("register-upload: extract text failed: %s", e)
-        raise HTTPException(500, detail=f"PDF error: {e!s}")
+async def _register_uploaded_pdf_bytes(
+    *,
+    body: bytes,
+    content: str,
+    user_id: str | None,
+) -> str:
+    """Store uploaded PDF bytes as history record (same behavior as /resume/register-upload)."""
     checksum = hashlib.sha256(content.encode()).hexdigest()
     first_name, last_name = await extract_name(content)
     settings = get_settings()
@@ -1085,8 +1092,25 @@ async def api_register_upload(file: UploadFile = File(...), user: dict | None = 
         last_name=last_name,
         source_was_pdf=True,
     )
-    user_id = str(user["id"]) if user else None
     await pdf_storage.save_record_async(record, user_id=user_id)
+    return filename
+
+
+@router.post("/resume/register-upload", response_model=RegisterUploadResponse)
+async def api_register_upload(file: UploadFile = File(...), user: dict | None = Depends(get_current_user)) -> RegisterUploadResponse:
+    """Save uploaded PDF and create a history record (user-scoped when DB is used)."""
+    if not file.filename or not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(400, "Expected a PDF file")
+    body = await file.read()
+    if len(body) < 50:
+        raise HTTPException(400, "PDF file too small")
+    try:
+        content = await asyncio.to_thread(extract_text_from_pdf_bytes, body)
+    except Exception as e:
+        logger.exception("register-upload: extract text failed: %s", e)
+        raise HTTPException(500, detail=f"PDF error: {e!s}")
+    user_id = str(user["id"]) if user else None
+    filename = await _register_uploaded_pdf_bytes(body=body, content=content, user_id=user_id)
     return RegisterUploadResponse(filename=filename)
 
 

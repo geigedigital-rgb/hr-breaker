@@ -176,7 +176,7 @@ const en = {
     softLabel: "Light touch",
     strictLabel: "Full optimization",
     strictNote: "Resume may be updated with skills from the job. Review before sending.",
-    strictWarningTitle: "Warning",
+    strictWarningTitle: "Please review",
     starting: "Starting…",
     waitingResponse: "Waiting for response…",
     loadingHintScan1: "Extracting key signals from your resume",

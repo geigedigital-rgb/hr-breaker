@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { EnvelopeIcon, LockClosedIcon, DocumentTextIcon } from "@heroicons/react/24/outline";
+import { EnvelopeIcon, LockClosedIcon, DocumentTextIcon, CheckCircleIcon } from "@heroicons/react/24/outline";
 import * as api from "../api";
 import { useAuth } from "../contexts/AuthContext";
 import { t } from "../i18n";
@@ -195,6 +195,52 @@ export default function Login() {
             {t("login.welcome")}
           </p>
 
+          {/* Landing "files ready" block — highlighted and placed before login actions */}
+          {pendingToken && (
+            <div className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4">
+              <div className="flex items-start gap-2.5">
+                <CheckCircleIcon className="w-5 h-5 shrink-0 text-emerald-600 mt-0.5" aria-hidden />
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-emerald-800">
+                    {t("login.filesReady")}
+                  </p>
+                  <p className="mt-0.5 text-xs text-emerald-700">
+                    {t("login.signInToSee")}
+                  </p>
+                </div>
+              </div>
+              {pendingLoading && (
+                <div className="mt-3 rounded-xl bg-white/80 border border-emerald-100 px-3 py-2">
+                  <span className="text-xs text-[var(--text-muted)]">{t("login.loading")}</span>
+                </div>
+              )}
+              {pendingError && (
+                <p className="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5">
+                  {pendingError}
+                </p>
+              )}
+              {!pendingLoading && pendingData && (
+                <div className="mt-3 space-y-2.5">
+                  <div className="flex items-center gap-2.5 rounded-xl bg-white border border-[#EBEDF5] px-3 py-2.5">
+                    <DocumentTextIcon className="w-4 h-4 shrink-0 text-[#4578FC]" />
+                    <span className="text-xs font-medium text-[#181819] truncate" title={pendingData.resume_filename}>
+                      {pendingData.resume_filename}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2.5 rounded-xl bg-white border border-[#EBEDF5] px-3 py-2.5">
+                    <DocumentTextIcon className="w-4 h-4 shrink-0 text-[var(--text-muted)]" />
+                    <div className="min-w-0 flex-1 flex flex-col items-start gap-0.5">
+                      {pendingData.job_title && (
+                        <span className="text-xs font-medium text-[#181819] truncate max-w-full">{pendingData.job_title}</span>
+                      )}
+                      <span className="text-[11px] text-[var(--text-muted)]">{t("login.jobDescription")}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Google sign-in button */}
           <button
             type="button"
@@ -280,48 +326,6 @@ export default function Login() {
             )}
           </form>
 
-          {/* Landing "files ready" block */}
-          {pendingToken && (
-            <div className="mt-10 pt-8 border-t border-[#EBEDF5]">
-              <p className="text-base font-semibold text-[#181819]">
-                {t("login.filesReady")}
-              </p>
-              <p className="mt-1 text-sm text-[var(--text-muted)]">
-                {t("login.signInToSee")}
-              </p>
-              {pendingLoading && (
-                <div className="mt-4 flex items-center gap-3 rounded-xl bg-[#F5F6FA] border border-[#EBEDF5] px-4 py-3">
-                  <span className="text-sm text-[var(--text-muted)]">{t("login.loading")}</span>
-                </div>
-              )}
-              {pendingError && (
-                <p className="mt-4 text-sm text-amber-600 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
-                  {pendingError}
-                </p>
-              )}
-              {!pendingLoading && pendingData && (
-                <div className="mt-4 space-y-3">
-                  <div className="flex items-center gap-3 rounded-xl bg-white border border-[#EBEDF5] shadow-sm px-4 py-3.5">
-                    <div className="min-w-0 flex-1 flex items-center gap-2">
-                      <DocumentTextIcon className="w-5 h-5 shrink-0 text-[#4578FC]" />
-                      <span className="text-sm font-medium text-[#181819] truncate" title={pendingData.resume_filename}>
-                        {pendingData.resume_filename}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3 rounded-xl bg-white border border-[#EBEDF5] shadow-sm px-4 py-3.5">
-                    <div className="min-w-0 flex-1 flex flex-col items-start gap-0.5">
-                      {pendingData.job_title && (
-                        <span className="text-sm font-medium text-[#181819]">{pendingData.job_title}</span>
-                      )}
-                      <span className="text-xs text-[var(--text-muted)]">{t("login.jobDescription")}</span>
-                    </div>
-                    <DocumentTextIcon className="w-5 h-5 shrink-0 text-[var(--text-muted)]" />
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
         </div>
       </div>
     </div>

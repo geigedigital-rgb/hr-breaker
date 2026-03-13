@@ -875,6 +875,7 @@ export default function Optimize() {
       .then((data) => {
         setResumeContent(data.resume_content);
         setUploadedFileName(data.resume_filename);
+        setResumeSourceWasPdf((data.resume_filename || "").toLowerCase().endsWith(".pdf"));
         if (data.job_text) {
           setJobInput(data.job_text);
           setJobMode("text");
@@ -1285,6 +1286,9 @@ export default function Optimize() {
     portfolio: normalizeScorePercent(preScores?.portfolio_score),
   });
   const isLoadingAssessment = stage === "scanning" || (stage === "assessment" && preScores == null);
+  const badLabelsCount = recommendationGroups.reduce((acc, group) => {
+    return acc + group.labels.filter((label) => !isPositiveRecommendationLabel(label)).length;
+  }, 0);
   const loadingHints =
     stage === "scanning"
       ? [
@@ -1346,9 +1350,9 @@ export default function Optimize() {
         )}
 
       {showSummaryBlocks && summaryData ? (
-        <div className="relative w-full flex-1 min-h-0 flex flex-col">
+        <div className="relative w-full flex flex-col">
           {/* Results after scan */}
-        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-3 w-full flex-1 min-h-0 content-start items-stretch">
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-3 w-full content-start items-start">
           {/* Scan results */}
           <div className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-6 flex flex-col gap-0 min-h-0 relative">
             {(() => {
@@ -1366,7 +1370,7 @@ export default function Optimize() {
             <div className="rounded-lg bg-[#EEF0F5] px-3 py-2.5 min-w-0 border border-[#E2E6EE]">
               <div className="space-y-1.5">
                 {scanResultParagraphs.map((paragraph, idx) => (
-                  <p key={idx} className="text-[13px] leading-snug text-[#334155] min-w-0 font-medium">
+                  <p key={idx} className="text-[13px] leading-snug text-[#334155] min-w-0 font-medium break-words [overflow-wrap:anywhere]">
                     {paragraph}
                   </p>
                 ))}
@@ -1417,7 +1421,7 @@ export default function Optimize() {
             </div>
           </div>
           {/* Расшифровка резюме */}
-          <div className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-6 flex flex-col gap-0 min-h-0 min-w-0 overflow-auto" aria-label={t("optimize.resumeBreakdown")}>
+          <div className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-6 flex flex-col gap-0 min-w-0" aria-label={t("optimize.resumeBreakdown")}>
             <p className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider shrink-0 mb-2">
               {t("optimize.resumeBreakdown")}
             </p>
@@ -1430,7 +1434,7 @@ export default function Optimize() {
             />
           </div>
           {/* Нижняя секция, ряд 2: Рекомендации + Режим улучшения + кнопка + результат */}
-          <div className="flex flex-col gap-3 min-h-0 min-w-0 overflow-auto">
+          <div className="flex flex-col gap-3 min-w-0">
             {stage === "assessment" && (
               <>
                 {recommendationGroups.length > 0 && (
@@ -1471,8 +1475,11 @@ export default function Optimize() {
                       onChange={(v) => setAggressiveTailoring(v === "strict")}
                       className="space-y-2"
                     >
-                      <RadioGroup.Label className="block text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider">
-                        {t("optimize.autoImproveLabel")}
+                      <RadioGroup.Label className="flex items-center gap-2 text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider">
+                        <span>Auto apply changes</span>
+                        <span className="inline-flex items-center justify-center min-w-[22px] h-5 px-1.5 rounded-md bg-[#FFF6DB] text-[#9A6700] font-semibold tabular-nums">
+                          {badLabelsCount}
+                        </span>
                       </RadioGroup.Label>
                       <div className="grid grid-cols-2 gap-2">
                         <RadioGroup.Option value="soft" className="rounded-xl outline-none focus:ring-2 focus:ring-[#4578FC]/30 focus:ring-offset-2 focus:ring-offset-[#FAFAFC]">
@@ -1493,11 +1500,11 @@ export default function Optimize() {
                         </RadioGroup.Option>
                       </div>
                       {aggressiveTailoring ? (
-                        <div className="flex gap-2 rounded-xl bg-[#FFF7E8] px-3 py-2.5">
-                          <ExclamationTriangleIcon className="w-4 h-4 shrink-0 text-[#B45309] mt-0.5" aria-hidden />
-                          <div className="text-[11px] leading-relaxed text-[#92400E]">
-                            <p className="font-semibold">{t("optimize.strictWarningTitle")}</p>
-                            <p>{t("optimize.strictNote")}</p>
+                        <div className="flex gap-2 rounded-xl bg-[#F7F9FC] border border-[#E6EAF2] px-3 py-2.5">
+                          <ExclamationTriangleIcon className="w-4 h-4 shrink-0 text-[#6B7280] mt-0.5" aria-hidden />
+                          <div className="text-[11px] leading-relaxed text-[#4B5563]">
+                            <p className="font-medium">{t("optimize.strictWarningTitle")}</p>
+                            <p className="text-[var(--text-muted)]">{t("optimize.strictNote")}</p>
                           </div>
                         </div>
                       ) : (
