@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useId } from "react";
 import { useLocation, useNavigate, useSearchParams, Link } from "react-router-dom";
 import { Disclosure, DisclosureButton, DisclosurePanel, RadioGroup } from "@headlessui/react";
-import { SparklesIcon, ArrowUpTrayIcon, ArrowDownTrayIcon, ArrowPathIcon, BriefcaseIcon, ClipboardDocumentIcon, DocumentTextIcon, LinkIcon, ExclamationTriangleIcon, CheckCircleIcon } from "@heroicons/react/24/outline";
+import { SparklesIcon, ArrowUpTrayIcon, ArrowDownTrayIcon, ArrowPathIcon, BriefcaseIcon, ClipboardDocumentIcon, LinkIcon, ExclamationTriangleIcon, CheckCircleIcon, ArrowTopRightOnSquareIcon } from "@heroicons/react/24/outline";
 import * as api from "../api";
 import { useAuth } from "../contexts/AuthContext";
 import { t } from "../i18n";
@@ -16,6 +16,127 @@ const SCRAPE_FAILED_PASTE_MARKER = "Paste";
 
 function isOfferPasteAsTextError(msg: string): boolean {
   return msg.includes(JOB_LIST_URL_MARKER) || msg.includes(SCRAPE_FAILED_PASTE_MARKER);
+}
+
+/** Shared block: resume thumbnail image. */
+function ResumeThumbnailBlock({
+  imageUrl,
+}: {
+  imageUrl: string;
+}) {
+  return (
+    <div className="relative w-full max-w-[240px] flex flex-col items-center pointer-events-auto translate-y-3">
+      <div className="w-full rounded-md overflow-hidden border border-[#d1d5db] bg-white shadow-lg flex flex-col relative aspect-[210/297] max-h-[200px]">
+        <img
+          src={imageUrl}
+          alt=""
+          className="absolute inset-0 w-full h-full object-cover object-top"
+        />
+      </div>
+    </div>
+  );
+}
+
+/** PDF resume preview: first page as image from API (same as Home cards). Calls onThumbnailLoaded so parent can keep URL after file is cleared. */
+function ResumePdfPreview({
+  file,
+  onThumbnailLoaded,
+}: {
+  file: File;
+  onThumbnailLoaded?: (url: string) => void;
+}) {
+  const [thumbUrl, setThumbUrl] = useState<string | null>(null);
+  const [error, setError] = useState(false);
+  const urlRef = useRef<string | null>(null);
+  const passedToParentRef = useRef(false);
+  useEffect(() => {
+    let cancelled = false;
+    passedToParentRef.current = false;
+    setError(false);
+    setThumbUrl(null);
+    api.getResumeThumbnailUrl(file).then((url) => {
+      if (!cancelled) {
+        urlRef.current = url;
+        setThumbUrl(url);
+        onThumbnailLoaded?.(url);
+        passedToParentRef.current = !!onThumbnailLoaded;
+      } else {
+        URL.revokeObjectURL(url);
+      }
+    }).catch(() => {
+      if (!cancelled) setError(true);
+    });
+    return () => {
+      cancelled = true;
+      if (urlRef.current && !passedToParentRef.current) {
+        URL.revokeObjectURL(urlRef.current);
+      }
+      urlRef.current = null;
+    };
+  }, [file, onThumbnailLoaded]);
+  if (error) {
+    return (
+      <div className="pointer-events-auto flex flex-col items-center gap-2">
+        <p className="text-xs text-[var(--text-muted)]">Preview unavailable</p>
+      </div>
+    );
+  }
+  if (!thumbUrl) {
+    return (
+      <div className="pointer-events-auto flex flex-col items-center gap-2">
+        <div className="w-24 h-32 rounded bg-[#e8eaef] animate-pulse" aria-hidden />
+        <span className="text-xs text-[var(--text-muted)]">Loading…</span>
+      </div>
+    );
+  }
+  return <ResumeThumbnailBlock imageUrl={thumbUrl} />;
+}
+
+/** Preview from history (e.g. came from Home): show thumbnail by filename. */
+function ResumeHistoryThumbnailPreview({
+  filename,
+}: {
+  filename: string;
+}) {
+  const [imgError, setImgError] = useState(false);
+  const token = api.getStoredToken();
+  const src = api.historyThumbnailUrl(filename, token);
+  if (imgError) {
+    return (
+      <div className="pointer-events-auto flex flex-col items-center gap-2">
+        <p className="text-xs text-[var(--text-muted)]">Preview unavailable</p>
+      </div>
+    );
+  }
+  return (
+    <div className="relative w-full max-w-[240px] flex flex-col items-center pointer-events-auto translate-y-3">
+      <div className="w-full rounded-md overflow-hidden border border-[#d1d5db] bg-white shadow-lg flex flex-col relative aspect-[210/297] max-h-[200px]">
+        <img
+          src={src}
+          alt=""
+          className="absolute inset-0 w-full h-full object-cover object-top"
+          onError={() => setImgError(true)}
+        />
+      </div>
+    </div>
+  );
+}
+
+/** Text resume: document-style sheet peeking from bottom */
+function ResumeSheetPreview({ name }: { name: string }) {
+  return (
+    <div className="relative w-full max-w-[260px] flex flex-col items-center pointer-events-auto translate-y-3">
+      <div
+        className="w-full rounded-lg border border-[#d1d5db] bg-white shadow-lg py-4 px-4 text-center"
+        style={{ boxShadow: "0 4px 14px rgba(0,0,0,0.08)" }}
+      >
+        <p className="text-base font-bold text-[#181819] tracking-tight">{name}</p>
+        <div className="mt-2 h-12 bg-[#f5f6f9] rounded mx-2" aria-hidden />
+        <div className="mt-1 h-3 bg-[#e8eaef] rounded w-3/4 mx-auto" aria-hidden />
+        <div className="mt-1 h-3 bg-[#e8eaef] rounded w-1/2 mx-auto" aria-hidden />
+      </div>
+    </div>
+  );
 }
 
 type Stage = "landing" | "idle" | "scanning" | "assessment" | "loading" | "result";
@@ -470,6 +591,7 @@ function AdditionalResultsView({
   setAggressiveTailoring,
   onImprove,
   canImprove,
+  canOptimizeSubscription,
   result,
   showImproveMore,
   isImprovingMore,
@@ -482,6 +604,7 @@ function AdditionalResultsView({
   setAggressiveTailoring: (v: boolean) => void;
   onImprove: () => void;
   canImprove: boolean;
+  canOptimizeSubscription: boolean;
   result: api.OptimizeResponse | null;
   showImproveMore: boolean;
   isImprovingMore: boolean;
@@ -651,12 +774,21 @@ function AdditionalResultsView({
           <button
             type="button"
             onClick={onImprove}
-            disabled={!canImprove}
-            className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-2xl text-[13px] font-semibold text-white bg-[#4578FC] hover:bg-[#3d6ae6] transition-colors focus:outline-none focus:ring-2 focus:ring-[#4578FC]/40 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={!canImprove || !canOptimizeSubscription}
+            className={`w-full flex items-center justify-center gap-2 py-3 px-4 rounded-2xl text-[13px] font-semibold text-white transition-colors focus:outline-none focus:ring-2 focus:ring-[#4578FC]/40 focus:ring-offset-2 ${
+              canOptimizeSubscription
+                ? "bg-[#4578FC] hover:bg-[#3d6ae6] disabled:opacity-50 disabled:cursor-not-allowed"
+                : "bg-gray-400 cursor-not-allowed"
+            }`}
           >
             <SparklesIcon className="w-5 h-5 shrink-0" />
             {t("optimize.improveResume")}
           </button>
+          {!canOptimizeSubscription && (
+            <p className="text-[11px] text-center text-[var(--text-muted)] mt-1">
+              {t("optimize.upgradeToOptimize")}
+            </p>
+          )}
         </div>
         {stage === "result" && result && (
           <div className="rounded-2xl bg-white border border-[#EBEDF5] shadow-sm p-5 space-y-4 shrink-0">
@@ -907,11 +1039,20 @@ export default function Optimize() {
   const [offerPasteAsText, setOfferPasteAsText] = useState(false);
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
   const [lastUploadedPdfFile, setLastUploadedPdfFile] = useState<File | null>(null);
+  /** Keeps thumbnail URL after lastUploadedPdfFile is cleared (e.g. after register), so we still show real image. */
+  const [resumeThumbnailUrl, setResumeThumbnailUrl] = useState<string | null>(null);
   const [resultsViewMode, setResultsViewMode] = useState<"main" | "additional">("main");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const step2SectionRef = useRef<HTMLDivElement>(null);
   const prevHadResumeRef = useRef(false);
   const claimedPendingRef = useRef<string | null>(null);
+
+  const plan = user?.subscription?.plan || "free";
+  const subStatus = user?.subscription?.status || "free";
+  const hasPaidPlan = (plan === "trial" || plan === "monthly") && (subStatus === "active" || subStatus === "trial");
+  const freeAnalysesCount = user?.subscription?.free_analyses_count || 0;
+  const canAnalyzeSubscription = hasPaidPlan || freeAnalysesCount < 1;
+  const canOptimizeSubscription = user?.id === "local" || hasPaidPlan;
 
   // Claim pending landing upload after login: подставляем резюме и вакансию и запускаем анализ
   const pendingToken = searchParams.get("pending");
@@ -1090,6 +1231,18 @@ export default function Optimize() {
     }
   }
 
+  const handleClearResume = () => {
+    if (resumeThumbnailUrl) {
+      URL.revokeObjectURL(resumeThumbnailUrl);
+      setResumeThumbnailUrl(null);
+    }
+    setResumeContent("");
+    setResumeName(null);
+    setUploadedFileName(null);
+    setLastUploadedPdfFile(null);
+    setResumeSourceWasPdf(false);
+  };
+
   async function readResumeFile(file: File) {
     setError(null);
     const ext = file.name.split(".").pop()?.toLowerCase();
@@ -1149,13 +1302,6 @@ export default function Optimize() {
     reader.onerror = () => setError(t("home.readFileError"));
     reader.readAsText(file, "UTF-8");
   }
-  function getUploadedFileExt(): "pdf" | "docx" | "text" | null {
-    if (!uploadedFileName) return null;
-    const ext = uploadedFileName.split(".").pop()?.toLowerCase();
-    if (ext === "pdf") return "pdf";
-    if (ext === "docx" || ext === "doc") return "docx";
-    return "text";
-  }
 
   function handleResumeFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -1190,11 +1336,19 @@ export default function Optimize() {
 
   function handleStartScan() {
     if (!hasResume || !hasJob) return;
+    if (!canAnalyzeSubscription && user?.id !== "local") {
+      setError("Free plan limit reached (1 scan). Please upgrade to a paid plan for unlimited ATS scans.");
+      return;
+    }
     setStage("scanning");
   }
 
   async function handleImprove() {
     if (!canImprove) return;
+    if (!canOptimizeSubscription && user?.id !== "local") {
+      setError("AI auto-optimization is not available on the free plan. Please upgrade to a paid plan.");
+      return;
+    }
     setError(null);
     setStage("loading");
     setLoadProgress(0);
@@ -1519,12 +1673,21 @@ export default function Optimize() {
                     <button
                       type="button"
                       onClick={handleImprove}
-                      disabled={!canImprove}
-                      className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-2xl text-[13px] font-semibold text-white bg-[#4578FC] hover:bg-[#3d6ae6] transition-colors focus:outline-none focus:ring-2 focus:ring-[#4578FC]/40 focus:ring-offset-2 focus:ring-offset-[#FAFAFC] disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={!canImprove || !canOptimizeSubscription}
+                      className={`w-full flex items-center justify-center gap-2 py-3 px-4 rounded-2xl text-[13px] font-semibold text-white transition-colors focus:outline-none focus:ring-2 focus:ring-[#4578FC]/40 focus:ring-offset-2 focus:ring-offset-[#FAFAFC] ${
+                        canOptimizeSubscription
+                          ? "bg-[#4578FC] hover:bg-[#3d6ae6] disabled:opacity-50 disabled:cursor-not-allowed"
+                          : "bg-gray-400 cursor-not-allowed"
+                      }`}
                     >
                       <SparklesIcon className="w-5 h-5 shrink-0" />
                       {t("optimize.improveResume")}
                     </button>
+                    {!canOptimizeSubscription && (
+                      <p className="text-[11px] text-center text-[var(--text-muted)] mt-1">
+                        {t("optimize.upgradeToOptimize")}
+                      </p>
+                    )}
                 </div>
               </>
             )}
@@ -1556,7 +1719,9 @@ export default function Optimize() {
                 )}
                 {result.success && !result.pdf_base64 && (
                   <p className="text-sm text-[var(--text-muted)]">
-                    Оптимизация выполнена. <Link to="/upgrade" className="text-[#4578FC] font-medium hover:underline">Оформите подписку</Link>, чтобы скачать PDF.
+                    {t("optimize.subscribeToDownloadBefore")}
+                    <Link to="/upgrade" className="text-[#4578FC] font-medium hover:underline">{t("optimize.subscribeLink")}</Link>
+                    {t("optimize.subscribeToDownloadAfter")}
                   </p>
                 )}
                     {result.key_changes && result.key_changes.length > 0 && (
@@ -1611,11 +1776,12 @@ export default function Optimize() {
             summaryData={summaryData}
             preScores={preScores}
             stage={stage}
-            aggressiveTailoring={aggressiveTailoring}
-            setAggressiveTailoring={setAggressiveTailoring}
-            onImprove={handleImprove}
-            canImprove={canImprove}
-            result={result}
+                aggressiveTailoring={aggressiveTailoring}
+                setAggressiveTailoring={setAggressiveTailoring}
+                onImprove={handleImprove}
+                canImprove={canImprove}
+                canOptimizeSubscription={canOptimizeSubscription}
+                result={result}
             showImproveMore={!!showImproveMore}
             isImprovingMore={isImprovingMore}
             onImproveMore={handleImproveMore}
@@ -1623,52 +1789,117 @@ export default function Optimize() {
           )}
         </div>
       ) : stage === "landing" ? (
-        <div className="flex-1 flex flex-col items-center justify-center pt-2 pb-12 px-6 w-full max-w-5xl mx-auto min-h-0 overflow-auto">
-          {/* Top Illustration (cropped to hide text from image) */}
-          <div className="w-full relative flex justify-center overflow-hidden mb-8 rounded-[32px]" style={{ maxHeight: "480px" }}>
-            <img 
-              src="/assets/landing-hero.png" 
-              alt="" 
-              className="w-full max-w-[900px] h-auto object-cover object-top" 
-            />
-          </div>
-          
-          {/* Text Content */}
-          <div className="text-center max-w-2xl mx-auto space-y-5 px-4">
-            <h1 className="text-3xl md:text-[40px] leading-tight font-bold text-[#141b34] tracking-tight">
-              Get expert feedback on your resume
-            </h1>
-            <p className="text-base md:text-[17px] text-[#5b657e] leading-relaxed">
-              Get an instant AI-powered score for your resume and personalized tips to make it stand out and land more interviews.
-            </p>
-          </div>
+        <div className="flex-1 flex flex-col items-center justify-center pt-8 pb-16 px-6 w-full max-w-5xl mx-auto min-h-0 overflow-auto">
+          {/* Main Visual Block */}
+          <div className="w-full max-w-[900px] mb-12">
+            <div className="relative rounded-2xl p-8 lg:p-12 overflow-hidden flex flex-col justify-center min-h-[380px] lg:min-h-[420px]"
+                 style={{ background: "linear-gradient(105deg, #faf5ff 0%, #fce7f3 100%)" }}>
+              <div className="max-w-[420px] relative z-10">
+                <h1 className="text-3xl md:text-[40px] leading-tight font-bold text-[#0f172a] tracking-tight mb-5">
+                  Get expert feedback on your resume
+                </h1>
+                <p className="text-base md:text-[17px] text-[#334155] leading-relaxed mb-10">
+                  Make small improvements to your resume score. A match rate of 85% or higher significantly boosts your interview chances.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setStage("idle")}
+                  className="inline-flex items-center gap-2 h-12 px-8 rounded-full text-white text-[16px] font-bold transition-all shadow-md hover:shadow-lg hover:opacity-95 active:scale-[0.98] tracking-tight"
+                  style={{ background: "linear-gradient(160deg, #4558ff 0%, #2f40df 100%)" }}
+                >
+                  <SparklesIcon className="w-5 h-5 shrink-0" aria-hidden />
+                  Check your resume now
+                </button>
+              </div>
+              
+              <div className="absolute right-0 top-10 bottom-0 w-[320px] hidden sm:block z-0 text-right opacity-50 lg:opacity-100 right-[-60px] lg:right-0">
+                <img 
+                  src="https://www.pitchcv.app/assets/resume-example-1.png" 
+                  alt="Resume Preview" 
+                  className="w-full h-auto bg-white shadow-[-10px_10px_40px_-10px_rgba(0,0,0,0.15)] rounded-tl-md object-cover object-top"
+                />
+                
+                {/* Score Badge */}
+                <div className="absolute right-5 top-5 bg-white p-3 rounded-xl shadow-[0_8px_24px_rgba(0,0,0,0.12)] border border-[#f1f5f9] flex items-center gap-3 text-left">
+                  <div className="inline-block bg-[#fb7185] text-white text-[1.05rem] font-bold px-2.5 py-1.5 rounded-lg text-center">
+                    85%
+                  </div>
+                  <div className="text-[0.9rem] font-semibold text-[#334155] leading-snug">
+                    ATS<br/>Match
+                  </div>
+                </div>
 
-          {/* Action Button */}
-          <div className="mt-8 mb-4 flex justify-center w-full">
-            <button
-              type="button"
-              onClick={() => setStage("idle")}
-              className="bg-[#4558ff] hover:bg-[#3d4deb] text-white px-8 py-3.5 rounded-[14px] text-[16px] font-semibold transition-all focus:outline-none focus:ring-2 focus:ring-[#4558ff]/50 focus:ring-offset-2 shadow-[0_4px_14px_rgba(69,88,255,0.25)]"
-            >
-              Check your resume now
-            </button>
+                {/* Skills Badge */}
+                <div className="absolute left-[-20px] top-32 bg-white p-3.5 rounded-xl shadow-[0_8px_24px_rgba(0,0,0,0.12)] border border-[#f1f5f9] flex flex-col gap-2.5 text-left w-[180px]">
+                  <div className="text-[10px] font-bold text-[#64748b] uppercase tracking-wider">Skills analysis</div>
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
+                        <CheckCircleIcon className="w-3.5 h-3.5" />
+                      </div>
+                      <span className="text-[12px] font-semibold text-[#334155] truncate">Strategic Planning</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
+                        <CheckCircleIcon className="w-3.5 h-3.5" />
+                      </div>
+                      <span className="text-[12px] font-semibold text-[#334155] truncate">Market Expansion</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-5 h-5 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </div>
+                      <span className="text-[12px] font-medium text-[#64748b] truncate line-through decoration-[#fb7185]/50 decoration-2">B2C Sales</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       ) : stage === "idle" ? (
         /* Два блока на одной странице: слева Шаг 1 (резюме), справа Шаг 2 (вакансия). Шаг 2 затемнён до загрузки резюме. */
         <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-6 p-4 lg:p-6 max-w-6xl mx-auto w-full items-stretch content-start">
           {/* Шаг 1 — слева */}
-          <section className="rounded-2xl border border-[#EBEDF5] bg-white overflow-hidden flex flex-col min-h-0" aria-labelledby="step1-heading">
-            <div className="p-6 pb-4 text-center">
-              <span className="inline-block rounded-lg border border-[#4578FC] px-3 py-1 text-xs font-medium text-[#4578FC] mb-3">
-                {t("optimize.step1")}
-              </span>
-              <h1 id="step1-heading" className="text-xl font-bold tracking-tight text-[#181819] mb-1">
-                {t("optimize.addResume")}
-              </h1>
-              <p className="text-sm text-[var(--text-tertiary)]">
-                {t("optimize.addResumeHint")}
-              </p>
+          <section
+            className={`rounded-2xl border overflow-hidden flex flex-col min-h-0 transition-colors ${
+              hasResume ? "border-transparent bg-[#f8f9fb]" : "border-[#EBEDF5] bg-white"
+            }`}
+            aria-labelledby="step1-heading"
+          >
+            <div className="p-6 pb-4 flex items-start justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2 flex-wrap justify-start">
+                  {hasResume ? (
+                    <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 text-emerald-600 px-3 py-1 text-xs font-medium border border-emerald-200">
+                      <CheckCircleIcon className="w-4 h-4 shrink-0" aria-hidden />
+                      {t("optimize.step1")}
+                    </span>
+                  ) : (
+                    <span className="inline-block rounded-lg border border-[#4578FC] bg-[#4578FC]/5 px-3 py-1 text-xs font-medium text-[#4578FC]">
+                      {t("optimize.step1")}
+                    </span>
+                  )}
+                  <h1 id="step1-heading" className="text-xl font-bold tracking-tight text-[#181819]">
+                    {t("optimize.addResume")}
+                  </h1>
+                </div>
+                <p className="text-sm text-[var(--text-tertiary)] mt-1 text-left">
+                  {t("optimize.addResumeHint")}
+                </p>
+              </div>
+              {hasResume && (
+                <button
+                  type="button"
+                  onClick={handleClearResume}
+                  className="group shrink-0 inline-flex items-center gap-1.5 text-sm font-medium text-[var(--text-muted)] hover:bg-[#EBEDF5] hover:text-[#181819] focus:outline-none focus:ring-2 focus:ring-[#4578FC]/20 focus:ring-offset-1 rounded px-1.5 py-0.5 transition-colors"
+                >
+                  <ArrowPathIcon className="w-3.5 h-3.5 shrink-0" aria-hidden />
+                  {t("optimize.changeResume")}
+                </button>
+              )}
             </div>
             <div className="flex-1 flex flex-col min-h-0 px-6 pb-6">
               <input
@@ -1684,73 +1915,114 @@ export default function Optimize() {
                 onDragLeave={handleResumeDragLeave}
                 onDrop={handleResumeDrop}
                 className={`relative rounded-2xl border-2 border-dashed overflow-hidden transition-all duration-200 flex-1 min-h-[200px] flex flex-col ${
-                  isDragging ? "border-[#5e8afc]/60" : "border-[#d8dce8]"
+                  isDragging ? "border-[#5e8afc]/60" : hasResume ? "border-[#d8dce8]/80" : "border-[#d8dce8]"
                 }`}
                 style={{
-                  background: isDragging
-                    ? "linear-gradient(165deg, #e8eeff 0%, #f0f4ff 50%, #e0e8fc 100%)"
-                    : "linear-gradient(165deg, #f8fafc 0%, #f0f4ff 40%, #e8eef8 100%)",
+                  background: hasResume
+                    ? "linear-gradient(165deg, #eef0f4 0%, #e6e9ef 50%, #dfe2e8 100%)"
+                    : isDragging
+                      ? "linear-gradient(165deg, #e8eeff 0%, #f0f4ff 50%, #e0e8fc 100%)"
+                      : "linear-gradient(165deg, #f5f6f9 0%, #eef0f5 40%, #e8eaef 100%)",
                 }}
               >
-                <div
-                  className="absolute inset-0 opacity-40 pointer-events-none"
-                  style={{
-                    backgroundImage: `
-                      linear-gradient(to right, rgba(69,120,252,0.08) 1px, transparent 1px),
-                      linear-gradient(to bottom, rgba(69,120,252,0.08) 1px, transparent 1px)
-                    `,
-                    backgroundSize: "20px 20px",
-                    maskImage: "radial-gradient(ellipse 75% 75% at 50% 50%, black 0%, transparent 70%)",
-                    WebkitMaskImage: "radial-gradient(ellipse 75% 75% at 50% 50%, black 0%, transparent 70%)",
-                  }}
-                  aria-hidden
-                />
-                <div className="relative p-6 flex flex-col items-center gap-4 flex-1 justify-center">
-                  <div className="rounded-full bg-white/90 border border-[#4578FC]/20 p-3 shadow-sm" aria-hidden>
-                    <ArrowUpTrayIcon className="w-8 h-8 text-[#4578FC]" />
-                  </div>
-                  <p className="text-sm font-bold text-[#181819] uppercase tracking-wide">
-                    {t("optimize.dragHere")}
-                  </p>
-                  <p className="text-xs text-[var(--text-tertiary)]">
-                    {t("optimize.orFormats")}
-                  </p>
-                  <div className="flex flex-wrap justify-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => { setResumeInputMode("file"); fileInputRef.current?.click(); }}
-                      className={`inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-xl transition-colors focus:outline-none focus:ring-2 focus:ring-[#4578FC]/50 focus:ring-offset-2 ${
-                        resumeInputMode === "file"
-                          ? "bg-[#4578FC]/15 text-[#4578FC] border border-[#4578FC]/50 hover:bg-[#4578FC]/25"
-                          : "border border-[#b8bed0] bg-white text-[var(--text)] hover:bg-[#F5F6FA]"
-                      }`}
-                    >
-                      <ArrowUpTrayIcon className="w-4 h-4 shrink-0" aria-hidden />
-                      Файл
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { setResumeInputMode("text"); setResumeSourceWasPdf(false); }}
-                      className={`inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-xl transition-colors focus:outline-none focus:ring-2 focus:ring-[#4578FC]/30 focus:ring-offset-2 ${
-                        resumeInputMode === "text"
-                          ? "bg-[#d4f090]/60 text-[#181819] border border-[#b8d86a] hover:bg-[#d4f090]/80"
-                          : "border border-[#b8bed0] bg-white text-[var(--text)] hover:bg-[#F5F6FA]"
-                      }`}
-                    >
-                      <ClipboardDocumentIcon className="w-4 h-4 shrink-0" aria-hidden />
-                      Текст
-                    </button>
-                  </div>
-                  {resumeInputMode === "text" && (
-                    <textarea
-                      value={resumeContent}
-                      onChange={(e) => setResumeContent(e.target.value)}
-                      onBlur={handleResumePaste}
-                      placeholder={t("optimize.jobTextPlaceholder")}
-                      className="w-full min-h-[5rem] max-w-md rounded-xl border border-[#c8cddc] bg-white/80 px-3 py-2.5 text-sm text-[#181819] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[#4578FC]/30 focus:border-[#4578FC]/50 resize-none"
+                {hasResume ? (
+                  <>
+                    <div
+                      className="absolute inset-0 backdrop-blur-[2px] bg-white/20 pointer-events-none"
+                      aria-hidden
                     />
-                  )}
-                </div>
+                    <div className="absolute inset-0 overflow-hidden flex flex-col items-center justify-end" style={{ paddingBottom: "0.5rem" }}>
+                      {(() => {
+                        const isPdfFromHistory = uploadedFileName?.toLowerCase().endsWith(".pdf");
+                        if (resumeThumbnailUrl) {
+                          return <ResumeThumbnailBlock imageUrl={resumeThumbnailUrl} />;
+                        }
+                        if (lastUploadedPdfFile && lastUploadedPdfFile.name.toLowerCase().endsWith(".pdf")) {
+                          return (
+                            <ResumePdfPreview
+                              file={lastUploadedPdfFile}
+                              onThumbnailLoaded={(url) => setResumeThumbnailUrl(url)}
+                            />
+                          );
+                        }
+                        if (isPdfFromHistory && user?.id && user.id !== "local" && !lastUploadedPdfFile) {
+                          return (
+                            <ResumeHistoryThumbnailPreview
+                              filename={uploadedFileName!}
+                            />
+                          );
+                        }
+                        return (
+                          <ResumeSheetPreview
+                            name={resumeName?.first || resumeName?.last ? [resumeName.first, resumeName.last].filter(Boolean).join(" ") : "Resume"}
+                          />
+                        );
+                      })()}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div
+                      className="absolute inset-0 opacity-40 pointer-events-none"
+                      style={{
+                        backgroundImage: `
+                          linear-gradient(to right, rgba(69,120,252,0.08) 1px, transparent 1px),
+                          linear-gradient(to bottom, rgba(69,120,252,0.08) 1px, transparent 1px)
+                        `,
+                        backgroundSize: "20px 20px",
+                        maskImage: "radial-gradient(ellipse 75% 75% at 50% 50%, black 0%, transparent 70%)",
+                        WebkitMaskImage: "radial-gradient(ellipse 75% 75% at 50% 50%, black 0%, transparent 70%)",
+                      }}
+                      aria-hidden
+                    />
+                    <div className="relative p-6 flex flex-col items-center gap-4 flex-1 justify-center">
+                      <div className="rounded-full bg-white/90 border border-[#4578FC]/20 p-3 shadow-sm" aria-hidden>
+                        <ArrowUpTrayIcon className="w-8 h-8 text-[#4578FC]" />
+                      </div>
+                      <p className="text-sm font-bold text-[#181819] uppercase tracking-wide">
+                        {t("optimize.dragHere")}
+                      </p>
+                      <p className="text-xs text-[var(--text-tertiary)]">
+                        {t("optimize.orFormats")}
+                      </p>
+                      <div className="flex flex-wrap justify-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => { setResumeInputMode("file"); fileInputRef.current?.click(); }}
+                          className={`inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-xl transition-colors focus:outline-none focus:ring-2 focus:ring-[#4578FC]/50 focus:ring-offset-2 ${
+                            resumeInputMode === "file"
+                              ? "bg-[#4578FC]/15 text-[#4578FC] border border-[#4578FC]/50 hover:bg-[#4578FC]/25"
+                              : "border border-[#b8bed0] bg-white text-[var(--text)] hover:bg-[#F5F6FA]"
+                          }`}
+                        >
+                          <ArrowUpTrayIcon className="w-4 h-4 shrink-0" aria-hidden />
+                          File
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setResumeInputMode("text"); setResumeSourceWasPdf(false); }}
+                          className={`inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-xl transition-colors focus:outline-none focus:ring-2 focus:ring-[#4578FC]/30 focus:ring-offset-2 ${
+                            resumeInputMode === "text"
+                              ? "bg-[#d4f090]/60 text-[#181819] border border-[#b8d86a] hover:bg-[#d4f090]/80"
+                              : "border border-[#b8bed0] bg-white text-[var(--text)] hover:bg-[#F5F6FA]"
+                          }`}
+                        >
+                          <ClipboardDocumentIcon className="w-4 h-4 shrink-0" aria-hidden />
+                          Text
+                        </button>
+                      </div>
+                      {resumeInputMode === "text" && (
+                        <textarea
+                          value={resumeContent}
+                          onChange={(e) => setResumeContent(e.target.value)}
+                          onBlur={handleResumePaste}
+                          placeholder={t("optimize.jobTextPlaceholder")}
+                          className="w-full min-h-[5rem] max-w-md rounded-xl border border-[#c8cddc] bg-white/80 px-3 py-2.5 text-sm text-[#181819] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[#4578FC]/30 focus:border-[#4578FC]/50 resize-none"
+                        />
+                      )}
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           </section>
@@ -1758,8 +2030,8 @@ export default function Optimize() {
           {/* Шаг 2 — справа; затемнён и неактивен, пока нет резюме */}
           <section
             ref={step2SectionRef}
-            className={`relative rounded-2xl border border-[#EBEDF5] bg-white overflow-hidden flex flex-col min-h-0 transition-all duration-200 ${
-              !hasResume ? "opacity-60 pointer-events-none select-none" : ""
+            className={`relative rounded-2xl border overflow-hidden flex flex-col min-h-0 transition-all duration-200 ${
+              !hasResume ? "opacity-60 pointer-events-none select-none border-[#EBEDF5] bg-white" : hasJob ? "border-transparent bg-[#f8f9fb]" : "border-[#EBEDF5] bg-white"
             }`}
             aria-labelledby="step2-heading"
             aria-disabled={!hasResume}
@@ -1772,44 +2044,27 @@ export default function Optimize() {
               </div>
             )}
             <div className="relative flex-1 flex flex-col min-h-0">
-            <div className="p-6 pb-4 text-center">
-            <span className="inline-block rounded-lg border border-[#4578FC] px-3 py-1 text-xs font-medium text-[#4578FC] mb-3">
-              {t("optimize.step2")}
-            </span>
-            <h1 id="step2-heading" className="text-xl font-bold tracking-tight text-[#181819] mb-1">
-              {t("optimize.addJobTitle")}
-            </h1>
-            <p className="text-sm text-[var(--text-tertiary)]">
-              Ссылка или вставьте описание вручную
-            </p>
-            </div>
-            <div className="rounded-2xl border border-[#EBEDF5] bg-[#FAFAFC] overflow-hidden text-left mx-6 mb-6 flex-1 min-h-0 flex flex-col">
-              <div className="p-5 flex-1 min-h-0 flex flex-col">
-              <div className="flex items-center gap-2 mb-4 min-w-0" role="group" aria-label="Загруженный файл резюме">
-                {getUploadedFileExt() === "pdf" && (
-                  <span className="shrink-0 flex items-center justify-center w-6 h-6 rounded bg-[#dc2626]/10" title="PDF">
-                    <DocumentTextIcon className="w-3.5 h-3.5 text-[#dc2626]" aria-hidden />
-                  </span>
-                )}
-                {getUploadedFileExt() === "docx" && (
-                  <span className="shrink-0 flex items-center justify-center w-6 h-6 rounded bg-[#2563eb]/10" title="Word">
-                    <DocumentTextIcon className="w-3.5 h-3.5 text-[#2563eb]" aria-hidden />
-                  </span>
-                )}
-                {getUploadedFileExt() === "text" && (
-                  <span className="shrink-0 flex items-center justify-center w-6 h-6 rounded bg-[#EBEDF5]" title="Текст">
-                    <ClipboardDocumentIcon className="w-3.5 h-3.5 text-[var(--text-muted)]" aria-hidden />
-                  </span>
-                )}
-                {!getUploadedFileExt() && (
-                  <span className="shrink-0 flex items-center justify-center w-6 h-6 rounded bg-[#EBEDF5]" aria-hidden>
-                    <DocumentTextIcon className="w-3.5 h-3.5 text-[var(--text-muted)]" />
-                  </span>
-                )}
-                <strong className="text-sm font-semibold text-[#181819] truncate min-w-0 max-w-[50vw]" title={uploadedFileName ?? undefined}>
-                  {uploadedFileName ?? (resumeName ? `${resumeName.first ?? ""} ${resumeName.last ?? ""}`.trim() || "Загружено" : "Загружено")}
-                </strong>
+              <div className="p-6 pb-4">
+                <div className="flex items-center gap-2 flex-wrap justify-start">
+                  {hasJob ? (
+                    <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 text-emerald-600 px-3 py-1 text-xs font-medium border border-emerald-200">
+                      <CheckCircleIcon className="w-4 h-4 shrink-0" aria-hidden />
+                      {t("optimize.step2")}
+                    </span>
+                  ) : (
+                    <span className="inline-block rounded-lg border border-[#4578FC] bg-[#4578FC]/5 px-3 py-1 text-xs font-medium text-[#4578FC]">
+                      {t("optimize.step2")}
+                    </span>
+                  )}
+                  <h1 id="step2-heading" className="text-xl font-bold tracking-tight text-[#181819]">
+                    {t("optimize.addJobTitle")}
+                  </h1>
+                </div>
+                <p className="text-sm text-[var(--text-tertiary)] mt-1 text-left">
+                  {t("optimize.addJobSub")}
+                </p>
               </div>
+              <div className="px-6 pb-6 flex-1 min-h-0 flex flex-col">
               {hasJob ? (
                 <>
                   <div className="flex items-center gap-2 mb-3 min-w-0" role="group" aria-label="Вакансия">
@@ -1838,7 +2093,7 @@ export default function Optimize() {
                     const isPreviewLoading = jobMode === "url" && isFetchingJobUrl;
                     if (isPreviewLoading) {
                       return (
-                        <div className="relative flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 w-full pl-6">
+                        <div className="relative flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 w-full">
                           <p className="text-xs text-[var(--text-tertiary)] min-w-0">{t("optimize.loadingJob")}</p>
                           <span className="absolute left-0 top-2 h-4 w-4 border-2 border-[#EBEDF5] border-t-[#4578FC] rounded-full animate-spin sm:static sm:order-last" aria-hidden />
                         </div>
@@ -1858,80 +2113,100 @@ export default function Optimize() {
                       <button
                         type="button"
                         onClick={handleStartScan}
-                        className="w-full flex items-center justify-center gap-2 rounded-2xl text-white py-3.5 px-5 text-sm font-semibold bg-[#4578FC] hover:bg-[#3d6ae6] transition-colors focus:outline-none focus:ring-2 focus:ring-[#4578FC]/40 focus:ring-offset-2 focus:ring-offset-[#FAFAFC]"
+                        disabled={!canAnalyzeSubscription && user?.id !== "local"}
+                        className={`w-full flex items-center justify-center gap-2 rounded-2xl text-white py-3.5 px-5 text-sm font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-[#4578FC]/40 focus:ring-offset-2 focus:ring-offset-[#FAFAFC] ${
+                          canAnalyzeSubscription || user?.id === "local"
+                            ? "bg-[#4578FC] hover:bg-[#3d6ae6]"
+                            : "bg-gray-400 cursor-not-allowed"
+                        }`}
                       >
                         <SparklesIcon className="w-5 h-5 shrink-0" aria-hidden />
                         Проверить соответствие
                       </button>
-                      <p className="mt-2 text-center text-[11px] text-[var(--text-tertiary)]">
-                        {t("optimize.willStartScan")}
-                      </p>
+                      {!canAnalyzeSubscription && user?.id !== "local" ? (
+                        <p className="mt-2 text-center text-[11px] text-red-500 font-medium">
+                          {t("optimize.freeLimitReached")}
+                        </p>
+                      ) : (
+                        <p className="mt-2 text-center text-[11px] text-[var(--text-tertiary)]">
+                          {t("optimize.willStartScan")}
+                        </p>
+                      )}
                     </div>
                   )}
                 </>
               ) : (
-                <div className="rounded-2xl border border-[#EBEDF5] bg-[#F5F6FA] p-5 space-y-5">
+                <div className="flex-1 flex flex-col space-y-4 text-left">
                   {offerPasteAsText && (
                     <div id="paste-job-hint" className="flex gap-2 text-sm text-[var(--text-muted)]/90" role="status" aria-live="polite">
                       <ExclamationTriangleIcon className="w-5 h-5 shrink-0 text-amber-500 mt-0.5" aria-hidden />
                       <p>
-                        Упс, ссылку с этого ресурса не удалось обработать. Скопируйте текст вакансии со страницы целиком — от названия должности до конца — и вставьте в поле ниже.
+                        Упс, ссылку с этого ресурса не удалось обработать. Скопируйте текст вакансии со страницы целиком и вставьте ниже.
                       </p>
                     </div>
                   )}
-                  <div className="space-y-1.5">
-                    <p className="text-sm text-[var(--text-muted)] font-medium">{t("optimize.howToAddJob")}</p>
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => { setJobMode("url"); setOfferPasteAsText(false); }}
-                        className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-xl transition-colors focus:outline-none focus:ring-2 focus:ring-[#4578FC]/30 focus:ring-offset-2 focus:ring-offset-[#F5F6FA] ${
-                          jobMode === "url"
-                            ? "bg-[#4578FC]/12 text-[#4578FC] hover:bg-[#4578FC]/18"
-                            : "bg-[#EBEDF5] text-[#181819] hover:bg-[#E0E4EE]"
-                        }`}
-                        title={t("optimize.pasteJobLinkTitle")}
-                      >
-                        <LinkIcon className="w-4 h-4 shrink-0" aria-hidden />
-                        URL
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => { setJobMode("text"); setOfferPasteAsText(false); }}
-                        className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-xl transition-colors focus:outline-none focus:ring-2 focus:ring-[#4578FC]/30 focus:ring-offset-2 focus:ring-offset-[#F5F6FA] ${
-                          jobMode === "text"
-                            ? "bg-[#4578FC]/12 text-[#4578FC] hover:bg-[#4578FC]/18"
-                            : "bg-[#EBEDF5] text-[#181819] hover:bg-[#E0E4EE]"
-                        }`}
-                        title={t("optimize.pasteJobTextTitle")}
-                      >
-                        <ClipboardDocumentIcon className="w-4 h-4 shrink-0" aria-hidden />
-                        Текст
-                      </button>
-                    </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => { setJobMode("url"); setOfferPasteAsText(false); }}
+                      className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-xl transition-colors focus:outline-none focus:ring-2 focus:ring-[#4578FC]/30 focus:ring-offset-2 focus:ring-offset-[#F5F6FA] ${
+                        jobMode === "url"
+                          ? "bg-[#4578FC]/12 text-[#4578FC] hover:bg-[#4578FC]/18"
+                          : "bg-[#EBEDF5] text-[#181819] hover:bg-[#E0E4EE]"
+                      }`}
+                      title={t("optimize.pasteJobLinkTitle")}
+                    >
+                      <LinkIcon className="w-4 h-4 shrink-0" aria-hidden />
+                      Link
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setJobMode("text"); setOfferPasteAsText(false); }}
+                      className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-xl transition-colors focus:outline-none focus:ring-2 focus:ring-[#4578FC]/30 focus:ring-offset-2 focus:ring-offset-[#F5F6FA] ${
+                        jobMode === "text"
+                          ? "bg-[#4578FC]/12 text-[#4578FC] hover:bg-[#4578FC]/18"
+                          : "bg-[#EBEDF5] text-[#181819] hover:bg-[#E0E4EE]"
+                      }`}
+                      title={t("optimize.pasteJobTextTitle")}
+                    >
+                      <ClipboardDocumentIcon className="w-4 h-4 shrink-0" aria-hidden />
+                      Text
+                    </button>
                   </div>
-                  <div className="space-y-1.5">
-                    {jobMode === "url" && (
-                      <p className="text-sm text-[var(--text-tertiary)]">
-                        Ссылка на страницу вакансии — загрузим и разберём описание.
-                      </p>
-                    )}
+                  {jobMode === "url" ? (
+                    <div className="flex items-center gap-3 w-full rounded-full border border-[#d1d5db] bg-white px-4 py-3 text-left shadow-sm focus-within:ring-2 focus-within:ring-[#4578FC]/25 focus-within:border-[#4578FC]/40">
+                      <LinkIcon className="w-5 h-5 shrink-0 text-[#6b7280]" aria-hidden />
+                      <input
+                        type="url"
+                        value={jobInput}
+                        onChange={(e) => {
+                          setJobInput(e.target.value);
+                          if (e.target.value.trim().length > 100) setOfferPasteAsText(false);
+                        }}
+                        placeholder={t("optimize.pasteJobLinkPlaceholder")}
+                        className="flex-1 min-w-0 bg-transparent text-sm text-[#181819] placeholder:text-[#9ca3af] focus:outline-none"
+                        aria-describedby={offerPasteAsText ? "paste-job-hint" : undefined}
+                      />
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#f3f4f6] text-[#6b7280]" aria-hidden>
+                        <ArrowTopRightOnSquareIcon className="w-4 h-4" />
+                      </span>
+                    </div>
+                  ) : (
                     <textarea
                       value={jobInput}
                       onChange={(e) => {
                         setJobInput(e.target.value);
                         if (e.target.value.trim().length > 100) setOfferPasteAsText(false);
                       }}
-                      placeholder={jobMode === "url" ? "https://…" : "Скопируйте текст со страницы вакансии (должность, требования, описание) и вставьте сюда."}
-                    className="w-full min-h-[7rem] rounded-xl border border-[#EBEDF5] bg-white px-4 py-3 text-sm text-[#181819] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-2 focus:ring-[#4578FC]/25 focus:border-[#4578FC]/40 resize-none"
+                      placeholder={t("optimize.jobTextPlaceholder")}
+                      className="w-full min-h-[7rem] rounded-xl border border-[#EBEDF5] bg-white px-4 py-3 text-sm text-[#181819] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-2 focus:ring-[#4578FC]/25 focus:border-[#4578FC]/40 resize-none"
                       aria-describedby={offerPasteAsText ? "paste-job-hint" : undefined}
                     />
-                  </div>
+                  )}
                 </div>
               )}
               </div>
             </div>
-          </div>
           </section>
         </div>
       ) : (

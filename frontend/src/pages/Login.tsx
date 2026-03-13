@@ -109,105 +109,97 @@ export default function Login() {
 
   return (
     <div className="flex min-h-screen bg-[#F2F3F9]">
-      {/* Left panel: gradient circles, doc icons, flow, skeleton card */}
-      <div className="hidden w-[45%] min-h-screen lg:flex flex-col justify-between bg-[#1e3a5f] p-10 relative overflow-hidden">
-        {/* Два светлых круга с градиентом на фоне */}
-        <div className="absolute inset-0 pointer-events-none">
-          <div
-            className="absolute rounded-full opacity-40"
-            style={{
-              top: "5%",
-              left: "-5%",
-              width: "min(70vw, 420px)",
-              height: "min(70vw, 420px)",
-              background: "radial-gradient(circle at 40% 40%, rgba(147, 197, 253, 0.5), rgba(96, 165, 250, 0.2) 50%, transparent 70%)",
-            }}
-          />
-          <div
-            className="absolute rounded-full opacity-35"
-            style={{
-              top: "35%",
-              left: "10%",
-              width: "min(50vw, 280px)",
-              height: "min(50vw, 280px)",
-              background: "radial-gradient(circle at 50% 50%, rgba(191, 219, 254, 0.45), rgba(147, 197, 253, 0.15) 60%, transparent 75%)",
-            }}
-          />
+      <style>{`
+        @keyframes login-block-in {
+          from { opacity: 0; transform: translateY(6px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .login-block-1 { animation: login-block-in 0.4s ease-out 0.1s forwards; opacity: 0; }
+        .login-block-2 { animation: login-block-in 0.4s ease-out 0.2s forwards; opacity: 0; }
+        .login-block-3 { animation: login-block-in 0.4s ease-out 0.3s forwards; opacity: 0; }
+      `}</style>
+      {/* Left panel: visible background + resume card with shadow + asymmetric blocks */}
+      <div
+        className="hidden w-[45%] min-h-screen lg:flex flex-col justify-between p-10 relative overflow-hidden"
+        style={{ background: "linear-gradient(105deg, #faf5ff 0%, #fce7f3 100%)" }}
+      >
+        <div className="relative z-10 flex items-center gap-2">
+          <img src="/logo-color.svg" alt="PitchCV" className="w-8 h-8 object-contain shrink-0" />
+          <div className="font-semibold text-xl text-[#0f172a] tracking-tight">PitchCV</div>
         </div>
 
-        <div className="relative z-10 font-semibold text-xl text-white tracking-tight">HR-Breaker</div>
+        {/* Center: resume as a card (shadow, so background shows) + blocks placed asymmetrically */}
+        <div className="relative z-10 flex-1 flex items-center justify-center min-h-0 py-6">
+          <div className="relative w-full max-w-[320px] flex items-center justify-center">
+            {/* Resume image inside a card with shadow */}
+            <div className="w-[85%] max-h-[70vh] rounded-lg overflow-hidden bg-white shadow-[0_20px_50px_-12px_rgba(0,0,0,0.18),0_8px_24px_-8px_rgba(0,0,0,0.12)] border border-[#e5e7eb]/80">
+              <img
+                src="https://www.pitchcv.app/assets/resume-example-1.png"
+                alt=""
+                className="w-full h-auto object-contain object-top"
+                aria-hidden
+              />
+            </div>
 
-        {/* Center: doc icons → flow → skeleton card */}
-        <div className="relative z-10 flex-1 flex items-center justify-center px-4">
-          <div className="relative w-full max-w-[320px] flex items-center">
-            {/* Three doc icons */}
-            <div className="flex flex-col gap-8 shrink-0">
-              <div className="w-12 h-12 rounded-full bg-white border border-white/30 shadow-lg flex items-center justify-center">
-                <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="#e11d48" fill="#fecdd3" />
-                  <path d="M14 2v6h6M9 13h6M9 17h6" stroke="#e11d48" strokeLinecap="round" />
-                </svg>
-              </div>
-              <div className="w-12 h-12 rounded-full bg-white border border-white/30 shadow-lg flex items-center justify-center">
-                <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="#2563eb" fill="#bfdbfe" />
-                  <path d="M14 2v6h6M9 13h6M9 17h6" stroke="#2563eb" strokeLinecap="round" />
-                </svg>
-              </div>
-              <div className="w-12 h-12 rounded-full bg-white border border-white/30 shadow-lg flex items-center justify-center">
-                <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="#059669" fill="#a7f3d0" />
-                  <path d="M14 2v6h6M9 13h6M9 17h6" stroke="#059669" strokeLinecap="round" />
-                </svg>
+            {/* Block: percentage — top-right of resume */}
+            <div className="login-block-1 absolute -top-2 right-0 bg-white p-3 rounded-xl shadow-[0_8px_24px_rgba(0,0,0,0.12)] border border-[#f1f5f9] flex items-center gap-3 z-10">
+              <div className="bg-[#fb7185] text-white text-lg font-bold px-2.5 py-1 rounded-lg leading-none">85%</div>
+              <div className="text-sm font-semibold text-[#334155] leading-snug">ATS Match</div>
+            </div>
+
+            {/* Block: checkmarks and crosses — bottom-left of resume */}
+            <div className="login-block-2 absolute bottom-4 -left-2 bg-white p-3.5 rounded-xl shadow-[0_8px_24px_rgba(0,0,0,0.12)] border border-[#f1f5f9] w-[170px] z-10">
+              <div className="text-[10px] font-bold text-[#64748b] uppercase tracking-wider mb-2">Skills</div>
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
+                    <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                  </div>
+                  <span className="text-xs font-medium text-[#334155] truncate">Planning</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
+                    <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                  </div>
+                  <span className="text-xs font-medium text-[#334155] truncate">Analysis</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+                    <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                  </div>
+                  <span className="text-xs font-medium text-[#64748b] truncate line-through">B2C Sales</span>
+                </div>
               </div>
             </div>
 
-            {/* Flow lines to card */}
-            <svg className="absolute left-14 top-1/2 -translate-y-1/2 w-[calc(100%-8rem)] h-24" style={{ minWidth: 140 }}>
-              <path d="M 0 12 L 28 12" stroke="rgba(255,255,255,0.4)" strokeWidth="2" fill="none" strokeLinecap="round" />
-              <path d="M 0 36 L 28 36" stroke="rgba(255,255,255,0.4)" strokeWidth="2" fill="none" strokeLinecap="round" />
-              <path d="M 0 60 L 28 60" stroke="rgba(255,255,255,0.4)" strokeWidth="2" fill="none" strokeLinecap="round" />
-              <path d="M 28 12 L 28 36 L 28 60" stroke="rgba(255,255,255,0.35)" strokeWidth="2" fill="none" strokeLinecap="round" />
-              <path d="M 28 36 L 36 36" stroke="rgba(255,255,255,0.4)" strokeWidth="2" fill="none" strokeLinecap="round" />
-              <path d="M 36 36 L 120 36" stroke="rgba(255,255,255,0.5)" strokeWidth="2.5" fill="none" strokeLinecap="round" />
-            </svg>
-
-            {/* Skeleton card "Match" */}
-            <div className="ml-auto w-44 shrink-0 rounded-xl bg-white border border-white/20 shadow-xl overflow-hidden">
-              <div className="flex items-center gap-1.5 px-2.5 py-2 border-b border-gray-100">
-                <span className="w-2.5 h-2.5 rounded-full bg-red-400" />
-                <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
-              </div>
-              <div className="p-3 space-y-2.5">
-                <div className="flex gap-2 items-center">
-                  <div className="w-6 h-6 rounded-full bg-gray-200 shrink-0" />
-                  <div className="h-2 flex-1 rounded bg-gray-200 max-w-[70%]" />
-                </div>
-                <div className="flex gap-2 items-center">
-                  <div className="w-6 h-6 rounded-full bg-gray-200 shrink-0" />
-                  <div className="h-2 flex-1 rounded bg-gray-200 max-w-[85%]" />
-                </div>
-                <div className="flex gap-2 items-center">
-                  <div className="w-6 h-6 rounded-full bg-gray-200 shrink-0" />
-                  <div className="h-2 flex-1 rounded bg-gray-200 max-w-[60%]" />
-                </div>
-              </div>
-              <div className="px-3 pb-3 pt-1">
-                <span className="inline-block text-xs font-semibold text-[#2563eb] bg-blue-50 px-2 py-1 rounded">Match</span>
-              </div>
+            {/* Block: minimal gauge — arc + filled slider, no needle; "Interview chance" */}
+            <div className="login-block-3 absolute -bottom-1 right-2 bg-white p-3 rounded-xl shadow-[0_8px_24px_rgba(0,0,0,0.12)] border border-[#f1f5f9] flex items-center gap-3 z-10">
+              <svg viewBox="0 0 64 36" className="w-14 h-7 shrink-0" aria-hidden>
+                <defs>
+                  <linearGradient id="login-mini-gauge" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" stopColor="#dc2626" />
+                    <stop offset="50%" stopColor="#eab308" />
+                    <stop offset="100%" stopColor="#16a34a" />
+                  </linearGradient>
+                </defs>
+                {/* Thick background arc */}
+                <path d="M 4 32 A 28 28 0 0 1 60 32" fill="none" stroke="#E8EAEF" strokeWidth="8" strokeLinecap="round" />
+                {/* Filled portion (85%) on top — slider along the arc */}
+                <path d="M 4 32 A 28 28 0 0 1 60 32" fill="none" stroke="url(#login-mini-gauge)" strokeWidth="8" strokeLinecap="round" strokeDasharray="74.8 88" strokeDashoffset="0" />
+              </svg>
+              <span className="text-xs font-semibold text-[#64748b]">Interview chance</span>
             </div>
           </div>
         </div>
 
-        <div className="relative z-10 text-white space-y-1">
+        <div className="relative z-10 text-[#0f172a] space-y-1">
           <p className="text-lg font-semibold">Resume meets job.</p>
-          <p className="text-sm text-white/80">Optimization and ATS in one place.</p>
+          <p className="text-sm text-[#334155]">Optimization and ATS in one place.</p>
         </div>
       </div>
 
       {/* Right panel — sign-in form */}
-      <div className="flex-1 flex items-center justify-center p-6 lg:p-12">
+      <div className="flex-1 flex items-center justify-center p-6 lg:p-12 bg-white">
         <div className="w-full max-w-[400px]">
           <h1 className="text-2xl font-bold text-[#181819] tracking-tight">{t("login.title")}</h1>
           <p className="mt-1.5 text-sm text-[var(--text-muted)]">

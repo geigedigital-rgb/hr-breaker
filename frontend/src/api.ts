@@ -85,6 +85,15 @@ export function historyOriginalUrl(filename: string): string {
   return `${API}/history/original/${encodeURIComponent(filename)}`;
 }
 
+export async function getHistoryOriginalText(filename: string): Promise<string> {
+  const r = await fetch(historyOriginalUrl(filename), { headers: authHeaders() });
+  if (!r.ok) {
+    const data = await r.json().catch(() => ({})) as { detail?: string };
+    throw new Error(data.detail || r.statusText);
+  }
+  return r.text();
+}
+
 
 export async function deleteHistory(filename: string): Promise<void> {
   const r = await fetch(`${API}/history/${encodeURIComponent(filename)}`, { method: "DELETE", headers: authHeaders() });
@@ -139,6 +148,19 @@ export async function parseResumeDocx(file: File): Promise<ParsePdfResponse> {
   const data = await parseJsonOrThrow<ParsePdfResponse & { detail?: string }>(r);
   if (!r.ok) throw new Error(data.detail || r.statusText);
   return data;
+}
+
+/** First page of PDF as PNG (for Optimize step 1 preview). Returns object URL; caller must revoke. */
+export async function getResumeThumbnailUrl(file: File): Promise<string> {
+  const form = new FormData();
+  form.append("file", file);
+  const r = await fetch(`${API}/resume/thumbnail`, { method: "POST", body: form, headers: authHeaders() });
+  if (!r.ok) {
+    const text = await r.text();
+    throw new Error(text || r.statusText);
+  }
+  const blob = await r.blob();
+  return URL.createObjectURL(blob);
 }
 
 export type RegisterUploadResponse = { filename: string };
@@ -360,6 +382,7 @@ export type Subscription = {
   plan: string; // free | trial | monthly
   status: string; // free | trial | active | canceled
   current_period_end: string | null;
+  free_analyses_count: number;
 };
 export type AuthUser = {
   id: string;

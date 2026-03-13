@@ -76,6 +76,7 @@ export default function Home() {
   const [addUploading, setAddUploading] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<{ filename: string; name: string } | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [improvingFilename, setImprovingFilename] = useState<string | null>(null);
   const addFileInputRef = useRef<HTMLInputElement>(null);
 
   const handleDeleteConfirm = async () => {
@@ -92,6 +93,22 @@ export default function Home() {
     }
   };
 
+  const handleImproveHistoryItem = async (item: api.HistoryItem, e: React.MouseEvent) => {
+    e.preventDefault();
+    if (improvingFilename) return;
+    setImprovingFilename(item.filename);
+    try {
+      const content = await api.getHistoryOriginalText(item.filename);
+      navigate("/optimize", {
+        state: { resumeContent: content, uploadedFileName: item.filename, sourceWasPdf: item.source_was_pdf }
+      });
+    } catch {
+      navigate("/optimize");
+    } finally {
+      setImprovingFilename(null);
+    }
+  };
+
   async function handleAddFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = "";
@@ -102,12 +119,14 @@ export default function Home() {
     try {
       let content: string;
       let sourceWasPdf = false;
+      let uploadedFileName = file.name;
       if (ext === "pdf") {
         const res = await api.parseResumePdf(file);
         content = res.content ?? "";
         sourceWasPdf = true;
         if (user) {
-          await api.registerResumeUpload(file);
+          const upRes = await api.registerResumeUpload(file);
+          uploadedFileName = upRes.filename;
           await refreshUser();
         }
       } else if (ext === "docx" || ext === "doc") {
@@ -122,7 +141,7 @@ export default function Home() {
         });
       }
       navigate("/optimize", {
-        state: { resumeContent: content, uploadedFileName: file.name, sourceWasPdf },
+        state: { resumeContent: content, uploadedFileName: uploadedFileName, sourceWasPdf },
         replace: false,
       });
     } catch {
@@ -134,32 +153,29 @@ export default function Home() {
 
   return (
     <div className="space-y-6">
-      {/* Banner: Resume match score — full width, gradient, CTA */}
+      {/* Banner: Resume match score — same block style as other sections */}
       <Link
         to="/optimize"
-        className="block w-full rounded-2xl border border-[#d8dcf0] overflow-hidden transition-all duration-200 hover:border-[#4578FC]/40 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#4578FC]/30 focus:ring-offset-2"
-        style={{
-          background: "linear-gradient(135deg, #f8f9fe 0%, #eef2fc 35%, #f4f6fd 70%, #fafbff 100%)",
-        }}
+        className="block rounded-2xl border border-[#EBEDF5] bg-white overflow-hidden focus:outline-none focus:ring-2 focus:ring-[#4578FC]/30 focus:ring-offset-2"
       >
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-5 p-6 sm:p-8 min-h-[140px]">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-5 px-5 py-4 sm:p-5">
           <div className="flex items-start gap-4 min-w-0">
-            <div className="shrink-0 w-14 h-14 rounded-2xl flex items-center justify-center bg-white/80 shadow-sm border border-[#EBEDF5] text-[#4578FC]">
-              <ChartBarIcon className="w-7 h-7" strokeWidth={1.75} />
+            <div className="shrink-0 w-12 h-12 rounded-xl flex items-center justify-center bg-[#F5F6FA] border border-[#EBEDF5] text-[#6366f1]">
+              <ChartBarIcon className="w-6 h-6" strokeWidth={1.75} />
             </div>
             <div className="min-w-0">
-              <h2 className="text-lg font-semibold tracking-tight text-[#181819]">
+              <h2 className="text-base font-semibold tracking-tight text-[#181819]">
                 {t("home.resumeMatchScore")}
               </h2>
-              <p className="text-sm text-[var(--text-muted)] mt-1 leading-relaxed max-w-xl">
+              <p className="text-sm text-[var(--text-muted)] mt-0.5 leading-relaxed max-w-xl">
                 {t("home.resumeMatchDesc")}
               </p>
             </div>
           </div>
           <div className="shrink-0">
-              <span className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-[#4578FC] text-white text-sm font-semibold shadow-sm hover:bg-[#3d6ae6] transition-colors">
-                {t("home.checkChance")}
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <span className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-semibold text-[#4578FC] bg-transparent border-2 border-[#4578FC] transition-colors hover:bg-[#4578FC]/5">
+              {t("home.checkChance")}
+              <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
               </svg>
             </span>
@@ -233,13 +249,19 @@ export default function Home() {
                         {formatRelative(item.timestamp)}
                       </p>
                       <div className="flex flex-col gap-0.5 mt-1.5">
-                        <Link
-                          to="/optimize"
-                          className="inline-flex items-center gap-1 p-1 rounded text-[9px] font-medium text-[var(--text-muted)] hover:bg-[#EBEDF5] hover:text-[#181819] transition-colors"
+                        <button
+                          type="button"
+                          onClick={(e) => handleImproveHistoryItem(item, e)}
+                          disabled={improvingFilename === item.filename}
+                          className="inline-flex items-center gap-1 p-1 rounded text-[9px] font-medium text-[var(--text-muted)] hover:bg-[#EBEDF5] hover:text-[#181819] transition-colors disabled:opacity-50 text-left"
                         >
-                          <PencilSquareIcon className="w-2.5 h-2.5 shrink-0" />
+                          {improvingFilename === item.filename ? (
+                            <span className="w-2.5 h-2.5 border border-[#4578FC]/30 border-t-[#4578FC] rounded-full animate-spin shrink-0" aria-hidden />
+                          ) : (
+                            <PencilSquareIcon className="w-2.5 h-2.5 shrink-0" />
+                          )}
                           {t("home.improve")}
-                        </Link>
+                        </button>
                         <a
                           href={api.downloadUrl(item.filename, api.getStoredToken())}
                           download={item.filename}

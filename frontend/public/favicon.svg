@@ -1,26 +1,39 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Pitch My CV icon">
-  <defs>
-    <linearGradient id="topGrad" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stop-color="#ff0000"/>
-      <stop offset="100%" stop-color="#e3001a"/>
-    </linearGradient>
-    <linearGradient id="bottomGrad" x1="0" y1="1" x2="1" y2="0">
-      <stop offset="0%" stop-color="#0ea5ff"/>
-      <stop offset="100%" stop-color="#b61084"/>
-    </linearGradient>
-    <clipPath id="topClip">
-      <path d="M 42 104 L 276 104 C 336 104 374 142 374 206 L 98 206 Z"/>
-    </clipPath>
-    <clipPath id="bottomClip">
-      <path d="M 42 286 L 286 286 L 334 430 L 22 430 Z"/>
-    </clipPath>
-  </defs>
-
-  <rect width="512" height="512" fill="none"/>
-
-  <rect x="18" y="96" width="380" height="126" fill="url(#topGrad)" clip-path="url(#topClip)"/>
-  <path d="M 84 206 H 372 C 423 206 458 241 458 292 C 458 344 421 381 372 381 H 84 L 106 322 H 306 C 334 322 356 304 356 278 C 356 252 334 236 306 236 H 84 Z" fill="#ffffff"/>
-  <rect x="14" y="278" width="390" height="170" fill="url(#bottomGrad)" clip-path="url(#bottomClip)"/>
-  <path d="M 292 206 H 374 C 425 206 466 247 466 298 C 466 347 428 383 382 387 C 388 375 391 361 391 347 C 391 315 365 289 333 289 H 268 Z" fill="url(#bottomGrad)"/>
-  <circle cx="342" cy="348" r="54" fill="#ffffff"/>
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g clip-path="url(#clip0_85_32941)">
+<mask id="mask0_85_32941" style="mask-type:luminance" maskUnits="userSpaceOnUse" x="0" y="0" width="512" height="512">
+<path d="M512 0H0V512H512V0Z" fill="white"/>
+</mask>
+<g mask="url(#mask0_85_32941)">
+<mask id="mask1_85_32941" style="mask-type:luminance" maskUnits="userSpaceOnUse" x="23" y="68" width="383" height="118">
+<path d="M23.063 68.0361H292.901C362.09 68.0361 405.91 111.856 405.91 185.658H87.6396L23.063 68.0361Z" fill="white"/>
+</mask>
+<g mask="url(#mask1_85_32941)">
+<path d="M433.585 58.8105H-4.61279V204.108H433.585V58.8105Z" fill="url(#paint0_linear_85_32941)"/>
+</g>
+<mask id="mask2_85_32941" style="mask-type:luminance" maskUnits="userSpaceOnUse" x="0" y="277" width="360" height="167">
+<path d="M23.0631 277.91H304.432L359.784 443.964H0L23.0631 277.91Z" fill="white"/>
+</mask>
+<g mask="url(#mask2_85_32941)">
+<path d="M440.505 268.685H-9.2251V464.721H440.505V268.685Z" fill="url(#paint1_linear_85_32941)"/>
+</g>
+<path d="M311.351 185.657H405.91C464.721 185.657 512 232.937 512 291.747C512 348.252 468.18 389.765 415.135 394.378C422.054 380.54 425.514 364.396 425.514 348.252C425.514 311.351 395.532 281.369 358.631 281.369H283.676L311.351 185.657Z" fill="url(#paint2_linear_85_32941)"/>
+</g>
+</g>
+<defs>
+<linearGradient id="paint0_linear_85_32941" x1="-4.61279" y1="58.8105" x2="433.585" y2="58.8105" gradientUnits="userSpaceOnUse">
+<stop stop-color="#FF0000"/>
+<stop offset="1" stop-color="#CE152A"/>
+</linearGradient>
+<linearGradient id="paint1_linear_85_32941" x1="-9.2251" y1="464.721" x2="134.39" y2="135.25" gradientUnits="userSpaceOnUse">
+<stop stop-color="#0EA5FF"/>
+<stop offset="1" stop-color="#B61084"/>
+</linearGradient>
+<linearGradient id="paint2_linear_85_32941" x1="283.676" y1="394.378" x2="491.558" y2="166.97" gradientUnits="userSpaceOnUse">
+<stop stop-color="#0EA5FF"/>
+<stop offset="1" stop-color="#B61084"/>
+</linearGradient>
+<clipPath id="clip0_85_32941">
+<rect width="512" height="512" fill="white"/>
+</clipPath>
+</defs>
 </svg>

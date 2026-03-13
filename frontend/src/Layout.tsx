@@ -6,7 +6,6 @@ import {
   ArrowRightOnRectangleIcon,
   UserPlusIcon,
   FireIcon,
-  BellIcon,
   ShieldCheckIcon,
 } from "@heroicons/react/24/outline";
 import { useAuth } from "./contexts/AuthContext";
@@ -18,6 +17,7 @@ import {
   READINESS_STAGE_ICON_IMAGE,
 } from "./readiness";
 import { t } from "./i18n";
+import { NotificationMenu } from "./components/NotificationMenu";
 
 const nav = [
   { to: "/", label: t("nav.home"), icon: HomeIcon },
@@ -35,7 +35,10 @@ export default function Layout() {
         className="w-64 shrink-0 flex flex-col py-6 px-4 overflow-hidden text-white shadow-xl z-20"
         style={{ background: "linear-gradient(160deg, #4558ff 0%, #2f40df 100%)" }}
       >
-        <div className="font-bold text-2xl tracking-tight mb-8 px-2 drop-shadow-sm">HR-Breaker</div>
+        <div className="flex items-center gap-2.5 mb-8 px-2">
+          <img src="/logo-white.svg" alt="" className="w-8 h-8 object-contain shrink-0" />
+          <div className="font-bold text-2xl tracking-tight drop-shadow-sm">PitchCV</div>
+        </div>
         
         <nav className="space-y-1">
           {nav.map(({ to, label, icon: Icon }) => {
@@ -133,27 +136,25 @@ export default function Layout() {
             <h3 className="text-[11px] font-semibold text-white/90 uppercase tracking-wider px-1">{t("nav.yourProgress")}</h3>
             <Link
               to="/progress"
-              className="block rounded-xl p-3.5 bg-white border border-transparent transition-all hover:opacity-95 focus:opacity-95 outline-none shadow-md group"
+              className="block rounded-xl p-3.5 bg-white/85 border border-white/20 transition-all hover:opacity-95 focus:opacity-95 outline-none shadow-md group"
               aria-label={t("nav.goToProgress")}
             >
               <div className="flex items-center gap-3 mb-2.5">
-                <div className="w-8 h-8 rounded-full bg-[#F5F6FA] flex items-center justify-center shrink-0">
-                  {READINESS_STAGE_ICON_IMAGE[user.readiness.stage] ? (
-                    <img
-                      src={READINESS_STAGE_ICON_IMAGE[user.readiness.stage]}
-                      alt=""
-                      className="block w-5 h-5 object-contain"
-                    />
-                  ) : (
-                    <span
-                      className="block w-5 h-5"
-                      style={READINESS_STAGE_ICON_STYLE[user.readiness.stage] ?? READINESS_STAGE_ICON_STYLE.Emerging}
-                    />
-                  )}
-                </div>
+                {READINESS_STAGE_ICON_IMAGE[user.readiness.stage] ? (
+                  <img
+                    src={READINESS_STAGE_ICON_IMAGE[user.readiness.stage]}
+                    alt=""
+                    className="block w-6 h-6 object-contain shrink-0 drop-shadow-[0_2px_8px_rgba(168,85,247,0.4)]"
+                  />
+                ) : (
+                  <span
+                    className="block w-6 h-6 shrink-0 drop-shadow-[0_2px_8px_rgba(168,85,247,0.4)]"
+                    style={READINESS_STAGE_ICON_STYLE[user.readiness.stage] ?? READINESS_STAGE_ICON_STYLE.Emerging}
+                  />
+                )}
                 <div className="flex flex-col min-w-0">
-                  <span className="text-[13px] font-bold text-[#181819] leading-tight truncate group-hover:text-[#4558ff] transition-colors">{READINESS_STAGE_LABEL[user.readiness.stage] ?? user.readiness.stage}</span>
-                  <span className="text-[11px] text-[var(--text-tertiary)] font-medium mt-0.5">{t("nav.toNextLevel")} {Math.round(user.readiness.progress_to_next * 100)}%</span>
+                  <span className="text-[13px] font-bold text-[#0f172a] leading-tight truncate group-hover:text-[#7c3aed] transition-colors">{READINESS_STAGE_LABEL[user.readiness.stage] ?? user.readiness.stage}</span>
+                  <span className="text-[11px] font-semibold text-[#334155] mt-0.5">{t("nav.toNextLevel")} {Math.round(user.readiness.progress_to_next * 100)}%</span>
                 </div>
               </div>
               <div className="h-2 rounded-full bg-[#EBEDF5] overflow-hidden" role="progressbar" aria-valuenow={Math.round(user.readiness.progress_to_next * 100)} aria-valuemin={0} aria-valuemax={100}>
@@ -181,9 +182,14 @@ export default function Layout() {
           <div className="flex items-center gap-4">
             <Link
               to="/upgrade"
-              className="inline-flex items-center justify-center h-9 px-4 rounded-xl bg-[#181819] text-white text-sm font-semibold hover:bg-black transition-colors shadow-sm"
+              className="inline-flex items-center gap-2 h-[34px] px-4 rounded-full text-white text-[13px] font-bold transition-all shadow-sm hover:shadow-md hover:opacity-95 active:scale-[0.98] tracking-tight"
+              style={{ background: "linear-gradient(160deg, #4558ff 0%, #2f40df 100%)" }}
             >
-              Upgrade
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path d="M2.5 17L4.5 7L9.5 11.5L12 4.5L14.5 11.5L19.5 7L21.5 17H2.5Z" />
+                <path d="M2.5 19H21.5" stroke="currentColor" strokeWidth="2.5" strokeLinecap="square" />
+              </svg>
+              Upgrade Now
             </Link>
             {user && user.id !== "local" && user.readiness && (
               <div className="flex items-center gap-2">
@@ -220,14 +226,7 @@ export default function Layout() {
                     </div>
                   </Tooltip>
                 )}
-                <button
-                  type="button"
-                  className="p-1.5 rounded-full bg-[#F5F6FA] border border-[#EBEDF5] text-[var(--text-muted)] hover:bg-[#EBEDF5] hover:text-[#181819] transition-colors"
-                title={t("nav.notifications")}
-                aria-label={t("nav.notifications")}
-                >
-                  <BellIcon className="w-5 h-5" />
-                </button>
+                <NotificationMenu />
               </div>
             )}
           </div>

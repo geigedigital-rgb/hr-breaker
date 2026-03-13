@@ -52,6 +52,7 @@ from hr_breaker.services.db import (
     user_list_all,
     db_list_all,
     db_recent_resumes_with_user,
+    user_increment_free_analyses,
     READINESS_DELTA_ANALYSIS,
     READINESS_DELTA_OPTIMIZE,
 )
@@ -268,6 +269,7 @@ class SubscriptionOut(BaseModel):
     plan: str  # free | trial | monthly
     status: str  # free | trial | active | canceled
     current_period_end: str | None = None
+    free_analyses_count: int = 0
 
 
 class AuthUserOut(BaseModel):
@@ -347,6 +349,7 @@ def _user_out(u: dict, subscription: dict | None = None) -> AuthUserOut:
             plan=subscription.get("plan", "free"),
             status=subscription.get("status", "free"),
             current_period_end=subscription.get("current_period_end"),
+            free_analyses_count=subscription.get("free_analyses_count", 0),
         )
     return out
 
@@ -1047,6 +1050,34 @@ async def api_parse_resume_docx(file: UploadFile = File(...)) -> ParsePdfRespons
         raise HTTPException(500, detail=f"DOCX error: {e!s}")
 
 
+@router.post("/resume/thumbnail")
+async def api_resume_thumbnail(file: UploadFile = File(...)) -> Response:
+    """Return first page of uploaded PDF as PNG (for preview in Optimize step 1)."""
+    if not file.filename or not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(400, "Expected a PDF file")
+    body = await file.read()
+    try:
+        doc = fitz.open(stream=body, filetype="pdf")
+        try:
+            if doc.page_count == 0:
+                raise HTTPException(400, "PDF has no pages")
+            page = doc[0]
+            pix = page.get_pixmap(dpi=120)
+            png_bytes = pix.tobytes("png")
+            return Response(
+                content=png_bytes,
+                media_type="image/png",
+                headers={"Cache-Control": "no-store"},
+            )
+        finally:
+            doc.close()
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Resume thumbnail failed: %s", e)
+        raise HTTPException(500, "Failed to generate thumbnail")
+
+
 class RegisterUploadResponse(BaseModel):
     """Response after registering an uploaded PDF for «Мои резюме»."""
     filename: str
@@ -1217,6 +1248,23 @@ def _build_recommendations(
 @router.post("/analyze", response_model=AnalyzeResponse)
 async def api_analyze(req: AnalyzeRequest, user: dict | None = Depends(get_optional_user)) -> AnalyzeResponse:
     """Pre-assessment: score current resume vs job (ATS + keywords) before optimization."""
+    user_id = str(user["id"]) if user and user.get("id") else None
+    if user_id and user_id != "local":
+        pool = await get_pool()
+        if pool:
+            u_data = await user_get_by_id(pool, user_id)
+            if u_data:
+                plan = u_data.get("subscription_plan") or "free"
+                status = u_data.get("subscription_status") or "free"
+                has_paid = plan in ("trial", "monthly") and status in ("active", "trial")
+                if not has_paid:
+                    free_count = u_data.get("free_analyses_count", 0)
+                    if free_count >= 1:
+                        raise HTTPException(402, "Free plan limit reached (1 scan). Please upgrade to a paid plan for unlimited ATS scans.")
+                
+                # Increment regardless of plan so we track usage
+                await user_increment_free_analyses(pool, user_id)
+
     settings = get_settings()
     if not settings.google_api_key:
         raise HTTPException(503, "GOOGLE_API_KEY not set. Add it to .env and restart the backend.")
@@ -1291,6 +1339,20 @@ async def _run_optimize(
     user: dict | None = None,
 ) -> OptimizeResponse:
     """Run full optimization; optionally push (percent, message) to progress_queue."""
+    user_id = str(user["id"]) if user and user.get("id") else None
+    if user_id and user_id != "local":
+        pool = await get_pool()
+        if pool:
+            u_data = await user_get_by_id(pool, user_id)
+            if u_data:
+                plan = u_data.get("subscription_plan") or "free"
+                status = u_data.get("subscription_status") or "free"
+                has_paid = plan in ("trial", "monthly") and status in ("active", "trial")
+                if not has_paid:
+                    err_msg = "AI auto-optimization is not available on the free plan. Please upgrade to a paid plan."
+                    _put_progress(progress_queue, 100, err_msg)
+                    raise HTTPException(402, err_msg)
+
     settings = get_settings()
     if not settings.google_api_key:
         raise HTTPException(503, "GOOGLE_API_KEY not set. Add it to .env and restart the backend.")

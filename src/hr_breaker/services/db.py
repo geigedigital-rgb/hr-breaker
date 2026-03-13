@@ -124,6 +124,9 @@ async def init_table(pool) -> None:
         await conn.execute(
             f"ALTER TABLE {USERS_TABLE} ADD COLUMN IF NOT EXISTS current_period_end TIMESTAMPTZ"
         )
+        await conn.execute(
+            f"ALTER TABLE {USERS_TABLE} ADD COLUMN IF NOT EXISTS free_analyses_count INTEGER NOT NULL DEFAULT 0"
+        )
         await conn.execute(f"CREATE INDEX IF NOT EXISTS idx_users_stripe_customer ON {USERS_TABLE}(stripe_customer_id)")
 
 
@@ -260,7 +263,7 @@ async def user_create(pool, email: str, password_hash: str | None = None, name: 
     return {"id": str(uid), "email": email, "name": name or email.split("@")[0], "created_at": datetime.now().isoformat()}
 
 
-USER_SUBSCRIPTION_COLS = "stripe_customer_id, stripe_subscription_id, subscription_status, subscription_plan, current_period_end"
+USER_SUBSCRIPTION_COLS = "stripe_customer_id, stripe_subscription_id, subscription_status, subscription_plan, current_period_end, free_analyses_count"
 
 async def user_get_by_email(pool, email: str) -> dict | None:
     """Get user by email."""
@@ -314,14 +317,15 @@ async def user_get_subscription(pool, user_id: str) -> dict:
     """Return subscription info for user. Resolves effective status (e.g. trial/active past period_end -> free)."""
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
-            f"SELECT subscription_status, subscription_plan, current_period_end FROM {USERS_TABLE} WHERE id = $1::uuid",
+            f"SELECT subscription_status, subscription_plan, current_period_end, free_analyses_count FROM {USERS_TABLE} WHERE id = $1::uuid",
             user_id,
         )
     if row is None:
-        return {"plan": "free", "status": "free", "current_period_end": None}
+        return {"plan": "free", "status": "free", "current_period_end": None, "free_analyses_count": 0}
     status = (row["subscription_status"] or "free").lower()
     plan = (row["subscription_plan"] or "free").lower()
     period_end = row["current_period_end"]
+    free_analyses_count = row["free_analyses_count"] or 0
     if period_end:
         from datetime import timezone
         now = datetime.now(timezone.utc)
@@ -334,6 +338,7 @@ async def user_get_subscription(pool, user_id: str) -> dict:
         "plan": plan,
         "status": status,
         "current_period_end": period_end.isoformat() if period_end else None,
+        "free_analyses_count": free_analyses_count,
     }
 
 
@@ -392,6 +397,15 @@ async def user_update_subscription(
         await conn.execute(
             f"UPDATE {USERS_TABLE} SET {', '.join(updates)} WHERE id = ${i}::uuid",
             *values,
+        )
+
+
+async def user_increment_free_analyses(pool, user_id: str) -> None:
+    """Increment the free analyses count for the user."""
+    async with pool.acquire() as conn:
+        await conn.execute(
+            f"UPDATE {USERS_TABLE} SET free_analyses_count = free_analyses_count + 1 WHERE id = $1::uuid",
+            user_id,
         )
 
 

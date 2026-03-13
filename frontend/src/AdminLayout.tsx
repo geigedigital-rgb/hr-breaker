@@ -37,7 +37,10 @@ export default function AdminLayout() {
             <ShieldCheckIcon className="w-5 h-5" />
           </span>
           <div>
-            <div className="font-bold text-lg tracking-tight drop-shadow-sm">HR-Breaker</div>
+            <div className="flex items-center gap-2">
+              <img src="/logo-white.svg" alt="" className="w-6 h-6 object-contain shrink-0" />
+              <div className="font-bold text-lg tracking-tight drop-shadow-sm">PitchCV</div>
+            </div>
             <div className="text-[11px] font-medium text-white/70 uppercase tracking-wider">{t("admin.badge")}</div>
           </div>
         </div>
