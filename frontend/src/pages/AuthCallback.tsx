@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import * as api from "../api";
-import { setStoredToken } from "../api";
+import { useAuth } from "../contexts/AuthContext";
 import { t } from "../i18n";
 
 const LANDING_PENDING_KEY = "landing_pending_token";
@@ -9,6 +9,7 @@ const LANDING_PENDING_KEY = "landing_pending_token";
 export default function AuthCallback() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const { setUserFromToken } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const code = searchParams.get("code");
 
@@ -23,7 +24,7 @@ export default function AuthCallback() {
         const redirectUri = `${window.location.origin}/auth/callback`;
         const res = await api.exchangeGoogleCode(code, redirectUri);
         if (cancelled) return;
-        setStoredToken(res.access_token);
+        setUserFromToken(res.access_token);
         const pending = sessionStorage.getItem(LANDING_PENDING_KEY);
         if (pending) {
           sessionStorage.removeItem(LANDING_PENDING_KEY);

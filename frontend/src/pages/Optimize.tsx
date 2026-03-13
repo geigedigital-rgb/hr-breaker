@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useId } from "react";
 import { useLocation, useNavigate, useSearchParams, Link } from "react-router-dom";
 import { Disclosure, DisclosureButton, DisclosurePanel, RadioGroup } from "@headlessui/react";
-import { SparklesIcon, ArrowUpTrayIcon, ArrowDownTrayIcon, ArrowPathIcon, BriefcaseIcon, ClipboardDocumentIcon, LinkIcon, ExclamationTriangleIcon, CheckCircleIcon, ArrowTopRightOnSquareIcon } from "@heroicons/react/24/outline";
+import { SparklesIcon, ArrowUpTrayIcon, ArrowDownTrayIcon, ArrowPathIcon, BriefcaseIcon, ClipboardDocumentIcon, LinkIcon, ExclamationTriangleIcon, CheckCircleIcon, ArrowTopRightOnSquareIcon, LockClosedIcon } from "@heroicons/react/24/outline";
 import * as api from "../api";
 import { useAuth } from "../contexts/AuthContext";
 import { t } from "../i18n";
@@ -1518,11 +1518,23 @@ export default function Optimize() {
                       </button>
                     ) : (
                       <div className="flex flex-wrap items-center justify-center gap-2">
+                        <button
+                          type="button"
+                          disabled
+                          className="inline-flex items-center justify-center gap-2 py-3 px-4 rounded-2xl text-[13px] font-semibold text-[#6B7280] bg-[#F3F4F6] border border-[#E5E7EB] cursor-not-allowed"
+                          title={t("optimize.upgradeToOptimize")}
+                        >
+                          <SparklesIcon className="w-4 h-4" />
+                          {t("optimize.improveResume")}
+                          <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-[#E5E7EB] text-[#6B7280]">
+                            <LockClosedIcon className="w-2.5 h-2.5" />
+                          </span>
+                        </button>
                         <Link
                           to="/upgrade"
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center justify-center py-3 px-5 rounded-2xl text-[13px] font-semibold text-white bg-[#4578FC] hover:bg-[#3d6ae6] transition-colors focus:outline-none focus:ring-2 focus:ring-[#4578FC]/40 focus:ring-offset-2 focus:ring-offset-[#FAFAFC]"
+                          className="inline-flex items-center justify-center py-3 px-5 rounded-2xl text-[13px] font-semibold text-[#4578FC] border border-[#4578FC]/60 bg-transparent hover:bg-[#4578FC]/6 transition-colors focus:outline-none focus:ring-2 focus:ring-[#4578FC]/25 focus:ring-offset-2 focus:ring-offset-[#FAFAFC]"
                         >
                           {t("optimize.upgradeButton")}
                         </Link>

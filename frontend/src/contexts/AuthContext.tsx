@@ -74,6 +74,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const setUserFromToken = useCallback(
     (token: string) => {
       setStoredToken(token);
+      setLoading(true);
       loadUser();
     },
     [loadUser]
