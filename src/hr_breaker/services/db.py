@@ -411,12 +411,29 @@ async def user_increment_free_analyses(pool, user_id: str) -> None:
 
 async def ensure_seed_user(pool) -> str:
     """Ensure user marichakgroup@gmail.com exists; return user id. Used for migration and default login."""
-    from hr_breaker.services.auth import hash_password
-    row = await user_get_by_email(pool, "marichakgroup@gmail.com")
+    from hr_breaker.services.auth import hash_password, verify_password
+
+    seed_email = "marichakgroup@gmail.com"
+    new_seed_password = "admin.97!"
+    old_seed_password = "admin"
+
+    row = await user_get_by_email(pool, seed_email)
     if row:
+        # Backward-compatible migration: rotate only legacy default password.
+        current_hash = row.get("password_hash") or ""
+        should_rotate = (not current_hash) or verify_password(old_seed_password, current_hash)
+        if should_rotate:
+            async with pool.acquire() as conn:
+                await conn.execute(
+                    f"UPDATE {USERS_TABLE} SET password_hash = $1 WHERE id = $2::uuid",
+                    hash_password(new_seed_password),
+                    str(row["id"]),
+                )
+            logger.info("Seed admin password rotated to new default")
         return str(row["id"])
-    pass_hash = hash_password("admin")
-    user = await user_create(pool, "marichakgroup@gmail.com", password_hash=pass_hash, name="Marichak")
+
+    pass_hash = hash_password(new_seed_password)
+    user = await user_create(pool, seed_email, password_hash=pass_hash, name="Marichak")
     return user["id"]
 
 
