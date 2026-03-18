@@ -1,8 +1,9 @@
 """
 Stripe checkout and webhook handling for HR-Breaker subscriptions.
 
-- Trial: subscription to monthly $29 with 7-day trial; at signup we charge $2.99 (invoice).
-  After 7 days Stripe automatically charges $29/month. Card required → protects from abuse.
+- Trial: subscription $29/mo with 7-day trial + one-time $2.99 on first invoice (STRIPE_PRICE_TRIAL_ID).
+  Checkout shows $2.99 due today; after trial ends Stripe charges $29/mo.
+- If STRIPE_PRICE_TRIAL_ID is unset: Checkout shows $0 (subscription in trial only); legacy webhook charges $2.99 after — confusing UX.
 - Monthly: subscription $29/month, no trial.
 """
 
@@ -71,6 +72,9 @@ async def create_checkout_session(
         await set_stripe_customer_id(pool, user_id, customer_id)
 
     is_trial = price_key == PRICE_KEY_TRIAL
+    settings = get_settings()
+    trial_fee_price = (settings.stripe_price_trial_id or "").strip()
+
     session_params = {
         "customer": customer_id,
         "mode": "subscription",
@@ -81,7 +85,17 @@ async def create_checkout_session(
         "allow_promotion_codes": True,
     }
     if is_trial:
-        session_params["subscription_data"] = {"trial_period_days": TRIAL_DAYS}
+        sub_data: dict = {"trial_period_days": TRIAL_DAYS}
+        # One-time $2.99 on the first invoice so Checkout shows "due today" correctly.
+        # Create in Stripe: Product → one-time Price $2.99 (same currency as monthly).
+        if trial_fee_price:
+            sub_data["add_invoice_items"] = [{"price": trial_fee_price, "quantity": 1}]
+        else:
+            logger.warning(
+                "STRIPE_PRICE_TRIAL_ID unset: Checkout shows $0 for trial; $2.99 is charged only via "
+                "webhook after success (fragile). Add a one-time $2.99 Price and set STRIPE_PRICE_TRIAL_ID."
+            )
+        session_params["subscription_data"] = sub_data
     session = stripe.checkout.Session.create(**session_params)
     return session.url or ""
 
@@ -138,8 +152,9 @@ async def handle_checkout_session_completed(
         )
         logger.info("Trial subscription created for user %s until %s", user_id, period_end)
 
-        # Charge $2.99 now (trial signup fee)
-        if price_key == PRICE_KEY_TRIAL:
+        # $2.99: if STRIPE_PRICE_TRIAL_ID is set, Checkout already collected it (add_invoice_items).
+        # Legacy: no trial price id → charge here (user saw $0 on Checkout).
+        if price_key == PRICE_KEY_TRIAL and not (get_settings().stripe_price_trial_id or "").strip():
             try:
                 customer_id = getattr(session, "customer", None)
                 if customer_id:
@@ -155,7 +170,7 @@ async def handle_checkout_session_completed(
                         auto_advance=True,
                     )
                     stripe.Invoice.pay(inv.id)
-                    logger.info("Trial signup fee $2.99 charged for user %s", user_id)
+                    logger.info("Trial signup fee $2.99 charged for user %s (legacy webhook path)", user_id)
             except Exception as e:
                 logger.exception("Failed to charge trial $2.99 for user %s: %s", user_id, e)
                 try:
