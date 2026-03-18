@@ -224,8 +224,8 @@ export default function History() {
         <h2 id="all-history-heading" className="text-base font-semibold text-[var(--text)]">{t("history.allHistory")}</h2>
         <div className="rounded-2xl border border-[#EBEDF5] bg-white overflow-hidden">
           {/* Тулбар: поиск + период — в стиле сайта */}
-          <div className="flex flex-wrap items-end justify-between gap-4 border-b border-[#EBEDF5] px-5 py-4 bg-[#F5F6FA]/50">
-            <div className="min-w-0 flex-1 max-w-xs">
+          <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-end sm:justify-between gap-4 border-b border-[#EBEDF5] px-4 sm:px-5 py-4 bg-[#F5F6FA]/50">
+            <div className="min-w-0 flex-1 w-full sm:max-w-xs">
               <label htmlFor="history-search" className="mb-1.5 block text-xs font-medium text-[var(--text-muted)]">
                 {t("history.search")}
               </label>
@@ -243,15 +243,15 @@ export default function History() {
               </div>
             </div>
             <Listbox value={period} onChange={setPeriod}>
-              <div className="flex flex-col">
+              <div className="flex flex-col w-full sm:w-auto">
                 <label className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-[var(--text-muted)]">
                   <CalendarDaysIcon className="h-3.5 w-3.5" />
                   {t("history.period")}
                 </label>
-                <div className="relative">
+                <div className="relative w-full sm:w-auto">
                   <ListboxButton
                     aria-label="Период"
-                    className="flex items-center gap-2 h-10 min-w-[11rem] rounded-xl border border-[#EBEDF5] bg-white px-3 pr-9 text-left text-sm text-[#181819] transition-colors hover:border-[#E0E2E8] hover:bg-[#FAFBFC] focus:outline-none focus:ring-2 focus:ring-[#4578FC]/30 focus:border-[#4578FC]/50"
+                    className="flex items-center gap-2 h-10 w-full sm:min-w-[11rem] rounded-xl border border-[#EBEDF5] bg-white px-3 pr-9 text-left text-sm text-[#181819] transition-colors hover:border-[#E0E2E8] hover:bg-[#FAFBFC] focus:outline-none focus:ring-2 focus:ring-[#4578FC]/30 focus:border-[#4578FC]/50"
                   >
                     <span className="block truncate">
                       {PERIOD_OPTIONS.find((o) => o.value === period)?.label ?? period}
@@ -277,20 +277,102 @@ export default function History() {
             </Listbox>
           </div>
 
-          {/* Сетка: пропорциональные колонки, компактно, без переносов */}
-          <div
-            className="grid grid-cols-[2rem_minmax(0,1fr)_minmax(0,0.85fr)_minmax(0,1.6fr)_4.5rem_minmax(0,0.9fr)_6rem] gap-x-3 px-5 py-2.5 border-b border-[#EBEDF5] bg-[#F5F6FA]/70 text-xs font-medium text-[var(--text-muted)]"
-            aria-hidden
-          >
-            <span />
-            <span>{t("history.company")}</span>
-            <span>{t("history.resume")}</span>
-            <span>{t("history.jobTitle")}</span>
-            <span>{t("history.date")}</span>
-            <span>{t("history.scores")}</span>
-            <span className="text-right">{t("history.actions")}</span>
-          </div>
-          <ul className="divide-y divide-[#EBEDF5]" aria-label="История сгенерированных резюме">
+          <ul className="divide-y divide-[#EBEDF5] lg:hidden" aria-label="История сгенерированных резюме (мобильная версия)">
+            {filtered.length > 0 ? (
+              filtered.map((item) => {
+                const personName = [item.first_name, item.last_name].filter(Boolean).join(" ") || "—";
+                return (
+                  <li key={item.filename} className="px-4 py-3.5 space-y-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold text-[#181819] truncate" title={item.job_title || undefined}>
+                          {item.job_title || "—"}
+                        </p>
+                        <p className="mt-1 text-xs text-[var(--text-muted)] truncate">{personName}</p>
+                      </div>
+                      <span className="text-xs tabular-nums text-[var(--text-muted)] shrink-0">
+                        {formatDate(item.timestamp)}
+                      </span>
+                    </div>
+                    <CompanyCell item={item} />
+                    <ScoresCell item={item} />
+                    <div className="flex flex-wrap items-center gap-2 pt-1">
+                      {hasPaidPlan ? (
+                        <a
+                          href={api.downloadUrl(item.filename, api.getStoredToken())}
+                          download={item.filename}
+                          className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[#EBEDF5] bg-[#F5F6FA] px-3 py-2 text-xs font-medium text-[#181819] transition-colors hover:border-[#4578FC] hover:bg-[#4578FC]/8"
+                        >
+                          <ArrowDownTrayIcon className="h-4 w-4" aria-hidden />
+                          PDF
+                        </a>
+                      ) : (
+                        <span
+                          className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[#EBEDF5] bg-[#F5F6FA] px-3 py-2 text-xs font-medium text-[var(--text-muted)] opacity-60 cursor-not-allowed"
+                          title="PDF export requires a paid plan"
+                        >
+                          <ArrowDownTrayIcon className="h-4 w-4" aria-hidden />
+                          PDF
+                        </span>
+                      )}
+                      {hasPaidPlan ? (
+                        <a
+                          href={api.historyOpenUrl(item.filename, api.getStoredToken())}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[#EBEDF5] bg-[#F5F6FA] px-3 py-2 text-xs font-medium text-[#181819] transition-colors hover:border-[#4578FC] hover:bg-[#4578FC]/8"
+                        >
+                          <EyeIcon className="h-4 w-4" aria-hidden />
+                          {t("history.open")}
+                        </a>
+                      ) : (
+                        <span
+                          className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[#EBEDF5] bg-[#F5F6FA] px-3 py-2 text-xs font-medium text-[var(--text-muted)] opacity-60 cursor-not-allowed"
+                          title="Opening PDFs requires a paid plan"
+                        >
+                          <EyeIcon className="h-4 w-4" aria-hidden />
+                          {t("history.open")}
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(item.filename)}
+                        disabled={deleting === item.filename}
+                        className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[#F0D9D9] bg-[#FFF7F7] px-3 py-2 text-xs font-medium text-[#B91C1C] transition-colors hover:bg-[#FDECEC] disabled:opacity-50"
+                      >
+                        <TrashIcon className="h-4 w-4" aria-hidden />
+                        {t("history.delete")}
+                      </button>
+                    </div>
+                  </li>
+                );
+              })
+            ) : (
+              <li>
+                <div className="flex flex-col items-center justify-center py-12 text-center px-4" role="status">
+                  <p className="text-sm text-[var(--text-muted)]">
+                    {items.length === 0 ? "Пока нет сгенерированных резюме." : "Ничего не найдено по фильтрам."}
+                  </p>
+                </div>
+              </li>
+            )}
+          </ul>
+
+          <div className="hidden lg:block">
+            {/* Сетка: пропорциональные колонки, компактно, без переносов */}
+            <div
+              className="grid grid-cols-[2rem_minmax(0,1fr)_minmax(0,0.85fr)_minmax(0,1.6fr)_4.5rem_minmax(0,0.9fr)_6rem] gap-x-3 px-5 py-2.5 border-b border-[#EBEDF5] bg-[#F5F6FA]/70 text-xs font-medium text-[var(--text-muted)]"
+              aria-hidden
+            >
+              <span />
+              <span>{t("history.company")}</span>
+              <span>{t("history.resume")}</span>
+              <span>{t("history.jobTitle")}</span>
+              <span>{t("history.date")}</span>
+              <span>{t("history.scores")}</span>
+              <span className="text-right">{t("history.actions")}</span>
+            </div>
+            <ul className="divide-y divide-[#EBEDF5]" aria-label="История сгенерированных резюме">
             {filtered.length > 0 ? (
               filtered.map((item) => {
                 const personName = [item.first_name, item.last_name].filter(Boolean).join(" ") || "—";
@@ -442,7 +524,8 @@ export default function History() {
                 </div>
               </li>
             )}
-          </ul>
+            </ul>
+          </div>
         </div>
       </section>
     </div>
