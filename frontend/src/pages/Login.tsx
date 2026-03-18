@@ -6,6 +6,8 @@ import { useAuth } from "../contexts/AuthContext";
 import { t } from "../i18n";
 
 const LANDING_PENDING_KEY = "landing_pending_token";
+const PARTNER_REF_CODE_KEY = "partner_ref_code";
+const PARTNER_REF_SRC_KEY = "partner_ref_source";
 
 export default function Login() {
   const { user, loading, login, register, loginWithGoogle, setUserFromToken } = useAuth();
@@ -35,6 +37,13 @@ export default function Login() {
       .finally(() => setPendingLoading(false));
   }, [pendingToken]);
 
+  const refFromUrl = searchParams.get("ref");
+  useEffect(() => {
+    if (!refFromUrl) return;
+    sessionStorage.setItem(PARTNER_REF_CODE_KEY, refFromUrl.trim().toLowerCase());
+    sessionStorage.setItem(PARTNER_REF_SRC_KEY, window.location.href);
+  }, [refFromUrl]);
+
   const tokenFromUrl = searchParams.get("token");
   useEffect(() => {
     if (tokenFromUrl) {
@@ -49,6 +58,11 @@ export default function Login() {
       if (pending) {
         sessionStorage.removeItem(LANDING_PENDING_KEY);
         navigate(`/optimize?pending=${encodeURIComponent(pending)}`, { replace: true });
+        return;
+      }
+      const refCode = sessionStorage.getItem(PARTNER_REF_CODE_KEY);
+      if (refCode) {
+        navigate("/optimize", { replace: true });
         return;
       }
       navigate("/", { replace: true });
@@ -66,16 +80,20 @@ export default function Login() {
     setError(null);
     setSubmitting(true);
     try {
+      const referral = {
+        code: sessionStorage.getItem(PARTNER_REF_CODE_KEY),
+        source_url: sessionStorage.getItem(PARTNER_REF_SRC_KEY),
+      };
       if (isRegister) {
-        await register(email, password);
+        await register(email, password, referral);
       } else {
-        await login(email, password);
+        await login(email, password, referral);
       }
       if (pendingToken) {
         sessionStorage.setItem(LANDING_PENDING_KEY, pendingToken);
         navigate(`/optimize?pending=${encodeURIComponent(pendingToken)}`, { replace: true });
       } else {
-        navigate("/", { replace: true });
+        navigate("/optimize", { replace: true });
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : t("login.errorGeneric"));

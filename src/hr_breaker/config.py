@@ -114,6 +114,7 @@ class Settings(BaseModel):
 
     # Admin: single admin user email (full access to admin panel)
     admin_email: str = "marichakgroup@gmail.com"
+    partner_program_enabled: bool = True
 
 
 def get_settings() -> Settings:
@@ -183,6 +184,7 @@ def get_settings() -> Settings:
         landing_max_job_url_len=int(os.getenv("LANDING_MAX_JOB_URL_LEN", "2048")),
         landing_pending_ttl_seconds=int(os.getenv("LANDING_PENDING_TTL_SECONDS", "900")),
         admin_email=os.getenv("ADMIN_EMAIL", "marichakgroup@gmail.com").strip().lower() or "marichakgroup@gmail.com",
+        partner_program_enabled=os.getenv("PARTNER_PROGRAM_ENABLED", "true").lower() in ("true", "1", "yes"),
     )
 
 

@@ -5,6 +5,8 @@ import { useAuth } from "../contexts/AuthContext";
 import { t } from "../i18n";
 
 const LANDING_PENDING_KEY = "landing_pending_token";
+const PARTNER_REF_CODE_KEY = "partner_ref_code";
+const PARTNER_REF_SRC_KEY = "partner_ref_source";
 
 export default function AuthCallback() {
   const [searchParams] = useSearchParams();
@@ -22,13 +24,18 @@ export default function AuthCallback() {
     (async () => {
       try {
         const redirectUri = `${window.location.origin}/auth/callback`;
-        const res = await api.exchangeGoogleCode(code, redirectUri);
+        const res = await api.exchangeGoogleCode(code, redirectUri, {
+          code: sessionStorage.getItem(PARTNER_REF_CODE_KEY),
+          source_url: sessionStorage.getItem(PARTNER_REF_SRC_KEY),
+        });
         if (cancelled) return;
         setUserFromToken(res.access_token);
         const pending = sessionStorage.getItem(LANDING_PENDING_KEY);
         if (pending) {
           sessionStorage.removeItem(LANDING_PENDING_KEY);
           navigate(`/optimize?pending=${encodeURIComponent(pending)}`, { replace: true });
+        } else if (sessionStorage.getItem(PARTNER_REF_CODE_KEY)) {
+          navigate("/optimize", { replace: true });
         } else {
           navigate("/", { replace: true });
         }

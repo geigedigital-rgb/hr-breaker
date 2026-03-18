@@ -5,8 +5,16 @@ import { setStoredToken } from "../api";
 type AuthContextValue = {
   user: api.AuthUser | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string) => Promise<void>;
+  login: (
+    email: string,
+    password: string,
+    referral?: { code?: string | null; source_url?: string | null }
+  ) => Promise<void>;
+  register: (
+    email: string,
+    password: string,
+    referral?: { code?: string | null; source_url?: string | null }
+  ) => Promise<void>;
   loginWithGoogle: () => void;
   logout: () => void;
   setUserFromToken: (token: string) => void;
@@ -42,8 +50,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [loadUser]);
 
   const login = useCallback(
-    async (email: string, password: string) => {
-      const res = await api.login(email, password);
+    async (email: string, password: string, referral?: { code?: string | null; source_url?: string | null }) => {
+      const res = await api.login(email, password, referral);
       setStoredToken(res.access_token);
       setUser(res.user);
       void loadUser();
@@ -52,8 +60,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const register = useCallback(
-    async (email: string, password: string) => {
-      const res = await api.register(email, password);
+    async (email: string, password: string, referral?: { code?: string | null; source_url?: string | null }) => {
+      const res = await api.register(email, password, referral);
       setStoredToken(res.access_token);
       setUser(res.user);
       void loadUser();
