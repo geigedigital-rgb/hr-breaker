@@ -1341,7 +1341,7 @@ export default function Optimize() {
     : [];
 
   return (
-    <div className="flex flex-col gap-5 h-full min-h-0 overflow-auto">
+    <div className="flex flex-col gap-4 sm:gap-5 h-full min-h-0 overflow-auto">
         {error && !isOfferPasteAsTextError(error) && (
           <div className="flex gap-2 text-sm text-[var(--text-muted)]/90 rounded-xl border border-[#EBEDF5] bg-[#FAFAFC] px-4 py-3 shrink-0" role="alert">
             <ExclamationTriangleIcon className="w-5 h-5 shrink-0 text-amber-500 mt-0.5" aria-hidden />
@@ -1354,7 +1354,7 @@ export default function Optimize() {
           {/* Results after scan */}
         <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-3 w-full content-start items-start">
           {/* Scan results */}
-          <div className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-6 flex flex-col gap-0 min-h-0 relative">
+          <div className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-4 sm:p-6 flex flex-col gap-0 min-h-0 relative">
             {(() => {
               const desc = [getAtsCategory(summaryData.atsPct).description, getKeywordsCategory(summaryData.kwPct).description].filter(Boolean).join(" ");
               const is90Rejection = /90%|rejection|90\s*%/.test(desc);
@@ -1378,7 +1378,7 @@ export default function Optimize() {
             </div>
           </div>
           {/* ATS + Ключевые слова + Общий балл + Skills / Experience / Portfolio */}
-          <div className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-6 flex flex-col gap-2.5 min-h-0 min-w-0">
+          <div className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-4 sm:p-6 flex flex-col gap-2.5 min-h-0 min-w-0">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 min-h-0 min-w-0">
               <div className="flex flex-col gap-1 min-w-0 min-h-0">
                 <p className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider shrink-0 mb-1">ATS match</p>
@@ -1414,14 +1414,14 @@ export default function Optimize() {
               </div>
             </div>
             <div className="border-t border-[#EBEDF5] pt-2" role="separator" />
-            <div className="flex flex-row items-end gap-3">
+            <div className="flex flex-col sm:flex-row sm:items-end gap-2.5 sm:gap-3">
               <BarScoreRow label="Skills" percent={summaryData.skillsPct} compact />
               <BarScoreRow label="Experience" percent={summaryData.experiencePct} compact />
               <BarScoreRow label="Portfolio" percent={summaryData.portfolioPct} compact />
             </div>
           </div>
           {/* Расшифровка резюме */}
-          <div className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-6 flex flex-col gap-0 min-w-0" aria-label={t("optimize.resumeBreakdown")}>
+          <div className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-4 sm:p-6 flex flex-col gap-0 min-w-0" aria-label={t("optimize.resumeBreakdown")}>
             <p className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider shrink-0 mb-2">
               {t("optimize.resumeBreakdown")}
             </p>
@@ -1438,7 +1438,7 @@ export default function Optimize() {
             {stage === "assessment" && (
               <>
                 {recommendationGroups.length > 0 && (
-                  <div className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-6 shrink-0">
+                  <div className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-4 sm:p-6 shrink-0">
                     <p className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider shrink-0 mb-3">
                       {t("optimize.recommendationsTitle")}
                     </p>
@@ -1469,7 +1469,7 @@ export default function Optimize() {
                     </div>
                   </div>
                 )}
-                <div className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-6 space-y-3 shrink-0">
+                <div className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-4 sm:p-6 space-y-3 shrink-0">
                   <RadioGroup
                       value={aggressiveTailoring ? "strict" : "soft"}
                       onChange={(v) => setAggressiveTailoring(v === "strict")}
@@ -1481,7 +1481,7 @@ export default function Optimize() {
                           {badLabelsCount}
                         </span>
                       </RadioGroup.Label>
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         <RadioGroup.Option value="soft" className="rounded-xl outline-none focus:ring-2 focus:ring-[#4578FC]/30 focus:ring-offset-2 focus:ring-offset-[#FAFAFC]">
                           {({ checked }) => (
                             <div className={`relative flex flex-col rounded-lg px-3 py-2.5 cursor-pointer transition-colors ${checked ? "bg-[#4578FC]/10 ring-1 ring-[#4578FC]/30" : "bg-[#EBEDF5] hover:bg-[#E0E4EE]"}`}>
@@ -1554,7 +1554,7 @@ export default function Optimize() {
               </>
             )}
             {stage === "result" && result && (
-              <div className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-6 space-y-4">
+              <div className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-4 sm:p-6 space-y-4">
                 <header className="flex flex-wrap items-center gap-2">
                   <h2 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">{t("optimize.result")}</h2>
                   {result.error ? <p className="text-base font-medium text-[var(--text-tertiary)]">{t("optimize.errorLabel")}</p> : <p className="text-base font-medium text-[#181819]" role="status">{t("optimize.done")}</p>}
@@ -1634,16 +1634,16 @@ export default function Optimize() {
         </div>
         </div>
       ) : stage === "landing" ? (
-        <div className="flex-1 flex flex-col items-center justify-center pt-8 pb-16 px-6 w-full max-w-5xl mx-auto min-h-0 overflow-auto">
+        <div className="flex-1 flex flex-col items-center justify-start sm:justify-center pt-2 sm:pt-8 pb-8 sm:pb-16 px-3 sm:px-6 w-full max-w-5xl mx-auto min-h-0 overflow-auto">
           {/* Main Visual Block */}
-          <div className="w-full max-w-[900px] mb-12">
-            <div className="relative rounded-2xl p-8 lg:p-12 overflow-hidden flex flex-col justify-center min-h-[380px] lg:min-h-[420px]"
+          <div className="w-full max-w-[900px] mb-6 sm:mb-12">
+            <div className="relative rounded-2xl p-5 sm:p-8 lg:p-12 overflow-hidden flex flex-col justify-center min-h-[320px] sm:min-h-[380px] lg:min-h-[420px]"
                  style={{ background: "linear-gradient(105deg, #faf5ff 0%, #fce7f3 100%)" }}>
               <div className="max-w-[420px] relative z-10">
-                <h1 className="text-3xl md:text-[40px] leading-tight font-bold text-[#0f172a] tracking-tight mb-5">
+                <h1 className="text-[1.9rem] sm:text-3xl md:text-[40px] leading-tight font-bold text-[#0f172a] tracking-tight mb-4 sm:mb-5">
                   Get expert feedback on your resume
                 </h1>
-                <p className="text-base md:text-[17px] text-[#334155] leading-relaxed mb-10">
+                <p className="text-[0.95rem] sm:text-base md:text-[17px] text-[#334155] leading-relaxed mb-7 sm:mb-10">
                   Make small improvements to your resume score. A match rate of 85% or higher significantly boosts your interview chances.
                 </p>
                 <button
@@ -1706,7 +1706,7 @@ export default function Optimize() {
         </div>
       ) : stage === "idle" ? (
         /* Два блока на одной странице: слева Шаг 1 (резюме), справа Шаг 2 (вакансия). Шаг 2 затемнён до загрузки резюме. */
-        <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-6 p-4 lg:p-6 max-w-6xl mx-auto w-full items-stretch content-start">
+        <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 p-3 sm:p-4 lg:p-6 max-w-6xl mx-auto w-full items-stretch content-start">
           {/* Шаг 1 — слева */}
           <section
             className={`rounded-2xl border overflow-hidden flex flex-col min-h-0 transition-colors ${
@@ -1714,7 +1714,7 @@ export default function Optimize() {
             }`}
             aria-labelledby="step1-heading"
           >
-            <div className="p-6 pb-4 flex items-start justify-between gap-4">
+            <div className="p-4 sm:p-6 pb-4 flex items-start justify-between gap-3 sm:gap-4">
               <div>
                 <div className="flex items-center gap-2 flex-wrap justify-start">
                   {hasResume ? (
@@ -1727,7 +1727,7 @@ export default function Optimize() {
                       {t("optimize.step1")}
                     </span>
                   )}
-                  <h1 id="step1-heading" className="text-xl font-bold tracking-tight text-[#181819]">
+                  <h1 id="step1-heading" className="text-lg sm:text-xl font-bold tracking-tight text-[#181819]">
                     {t("optimize.addResume")}
                   </h1>
                 </div>
@@ -1746,7 +1746,7 @@ export default function Optimize() {
                 </button>
               )}
             </div>
-            <div className="flex-1 flex flex-col min-h-0 px-6 pb-6">
+            <div className="flex-1 flex flex-col min-h-0 px-4 sm:px-6 pb-4 sm:pb-6">
               <input
                 ref={fileInputRef}
                 type="file"
@@ -1824,7 +1824,7 @@ export default function Optimize() {
                       <div className="rounded-full bg-white/90 border border-[#4578FC]/20 p-3 shadow-sm" aria-hidden>
                         <ArrowUpTrayIcon className="w-8 h-8 text-[#4578FC]" />
                       </div>
-                      <p className="text-sm font-bold text-[#181819] uppercase tracking-wide">
+                      <p className="text-[13px] sm:text-sm font-bold text-[#181819] uppercase tracking-wide">
                         {t("optimize.dragHere")}
                       </p>
                       <p className="text-xs text-[var(--text-tertiary)]">
@@ -1889,7 +1889,7 @@ export default function Optimize() {
               </div>
             )}
             <div className="relative flex-1 flex flex-col min-h-0">
-              <div className="p-6 pb-4 flex items-start justify-between gap-4">
+              <div className="p-4 sm:p-6 pb-4 flex items-start justify-between gap-3 sm:gap-4">
                 <div>
                   <div className="flex items-center gap-2 flex-wrap justify-start">
                     {hasJob ? (
@@ -1902,7 +1902,7 @@ export default function Optimize() {
                         {t("optimize.step2")}
                       </span>
                     )}
-                    <h1 id="step2-heading" className="text-xl font-bold tracking-tight text-[#181819]">
+                    <h1 id="step2-heading" className="text-lg sm:text-xl font-bold tracking-tight text-[#181819]">
                       {t("optimize.addJobTitle")}
                     </h1>
                   </div>
@@ -1926,7 +1926,7 @@ export default function Optimize() {
                   </button>
                 )}
               </div>
-              <div className="px-6 pb-6 flex-1 min-h-0 flex flex-col">
+              <div className="px-4 sm:px-6 pb-4 sm:pb-6 flex-1 min-h-0 flex flex-col">
               {hasJob ? (
                 <>
                   <div className="flex items-center gap-2 mb-3 min-w-0" role="group" aria-label="Job">
