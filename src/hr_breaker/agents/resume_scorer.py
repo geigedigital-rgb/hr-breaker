@@ -43,13 +43,40 @@ def _job_summary(job: JobPosting) -> str:
     return "\n".join(parts)
 
 
-async def score_resume_vs_job(resume_text: str, job: JobPosting) -> int:
+async def score_resume_vs_job(
+    resume_text: str, job: JobPosting, audit_user_id: str | None = None
+) -> int:
     """Return ATS-style score 0-100. Uses only resume text (no PDF)."""
+    from hr_breaker.services.db import get_pool
+    from hr_breaker.services.usage_audit import log_usage_event, tokens_from_run_result
+
+    settings = get_settings()
+    model = settings.gemini_flash_model
     agent = get_resume_scorer_agent()
     summary = _job_summary(job)
     prompt = f"## Job:\n{summary}\n\n## Resume (text):\n{resume_text[:6000]}"
-    result = await agent.run(prompt)
-    return max(0, min(100, result.output.score))
+    try:
+        result = await agent.run(prompt)
+        score = max(0, min(100, result.output.score))
+        if audit_user_id:
+            pool = await get_pool()
+            inp, out = tokens_from_run_result(result)
+            await log_usage_event(
+                pool, audit_user_id, "analyze_ats_score", model, input_tokens=inp, output_tokens=out
+            )
+        return score
+    except Exception as e:
+        if audit_user_id:
+            pool = await get_pool()
+            await log_usage_event(
+                pool,
+                audit_user_id,
+                "analyze_ats_score",
+                model,
+                success=False,
+                error_message=str(e)[:2000],
+            )
+        raise
 
 
 class BreakdownScores(BaseModel):
@@ -85,21 +112,48 @@ def get_breakdown_scorer_agent() -> Agent:
 
 
 async def get_breakdown_scores(
-    resume_text: str, job: JobPosting, output_language: str | None = None
+    resume_text: str,
+    job: JobPosting,
+    output_language: str | None = None,
+    audit_user_id: str | None = None,
 ) -> BreakdownScores:
     """Return independent Skills, Experience, Portfolio scores 0-100 and optional improvement_tips from LLM.
     output_language: e.g. 'en', 'ru'. Default English. Used for improvement_tips text."""
+    from hr_breaker.services.db import get_pool
+    from hr_breaker.services.usage_audit import log_usage_event, tokens_from_run_result
+
+    settings = get_settings()
+    model = settings.gemini_flash_model
     agent = get_breakdown_scorer_agent()
     summary = _job_summary(job)
     lang_instruction = ""
     if output_language and output_language.lower() != "en":
         lang_instruction = f"\n\nWrite improvement_tips in: {output_language}."
     prompt = f"## Job:\n{summary}\n\n## Resume (text):\n{resume_text[:6000]}{lang_instruction}"
-    result = await agent.run(prompt)
+    try:
+        result = await agent.run(prompt)
+    except Exception as e:
+        if audit_user_id:
+            pool = await get_pool()
+            await log_usage_event(
+                pool,
+                audit_user_id,
+                "analyze_breakdown",
+                model,
+                success=False,
+                error_message=str(e)[:2000],
+            )
+        raise
     out = result.output
     tips = getattr(out, "improvement_tips", None)
     if isinstance(tips, str):
         tips = tips.strip() or None
+    if audit_user_id:
+        pool = await get_pool()
+        inp, out_tok = tokens_from_run_result(result)
+        await log_usage_event(
+            pool, audit_user_id, "analyze_breakdown", model, input_tokens=inp, output_tokens=out_tok
+        )
     return BreakdownScores(
         skills=max(0, min(100, out.skills)),
         experience=max(0, min(100, out.experience)),

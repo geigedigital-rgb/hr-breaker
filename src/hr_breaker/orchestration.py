@@ -117,6 +117,7 @@ async def optimize_for_job(
     parallel: bool = False,
     no_shame: bool = False,
     output_language: str | None = None,
+    audit_user_id: str | None = None,
 ) -> tuple[OptimizedResume, ValidationResult, JobPosting]:
     """
     Core optimization loop.
@@ -146,7 +147,7 @@ async def optimize_for_job(
         if on_progress:
             on_progress(12, "Parsing job…")
         with log_time("parse_job_posting"):
-            job = await parse_job_posting(job_text)
+            job = await parse_job_posting(job_text, audit_user_id=audit_user_id)
         if on_progress:
             on_progress(15, "Job parsed")
     optimized = None
@@ -177,7 +178,12 @@ async def optimize_for_job(
             )
             with log_time("optimize_resume"):
                 optimized = await optimize_resume(
-                    source, job, ctx, no_shame=no_shame, output_language=output_language
+                    source,
+                    job,
+                    ctx,
+                    no_shame=no_shame,
+                    output_language=output_language,
+                    audit_user_id=audit_user_id,
                 )
         finally:
             if heartbeat_task is not None:

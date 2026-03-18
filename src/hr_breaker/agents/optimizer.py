@@ -243,6 +243,7 @@ async def optimize_resume(
     context: IterationContext,
     no_shame: bool = False,
     output_language: str | None = None,
+    audit_user_id: str | None = None,
 ) -> OptimizedResume:
     """Optimize resume for job posting.
     output_language: Preferred language for all LLM output (e.g. 'en', 'ru'). Default: English."""
@@ -306,8 +307,39 @@ Return JSON with:
 Output ONLY valid JSON. The html field should contain the raw HTML string.
 """
 
+    from hr_breaker.services.db import get_pool
+    from hr_breaker.services.usage_audit import log_usage_event, tokens_from_run_result
+
+    settings = get_settings()
+    model = settings.gemini_pro_model
     agent = get_optimizer_agent(job, source, no_shame=no_shame)
-    result = await agent.run(prompt)
+    try:
+        result = await agent.run(prompt)
+    except Exception as e:
+        if audit_user_id:
+            pool = await get_pool()
+            await log_usage_event(
+                pool,
+                audit_user_id,
+                "optimize_generate",
+                model,
+                success=False,
+                error_message=str(e)[:2000],
+                metadata={"iteration": context.iteration},
+            )
+        raise
+    if audit_user_id:
+        pool = await get_pool()
+        inp, out = tokens_from_run_result(result)
+        await log_usage_event(
+            pool,
+            audit_user_id,
+            "optimize_generate",
+            model,
+            input_tokens=inp,
+            output_tokens=out,
+            metadata={"iteration": context.iteration},
+        )
     return OptimizedResume(
         html=result.output.html,
         iteration=context.iteration,

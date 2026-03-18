@@ -10,6 +10,7 @@ Requires: pip install 'hr-breaker[db]'
 import logging
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 from uuid import uuid4
 
 from hr_breaker.config import get_settings
@@ -19,6 +20,13 @@ logger = logging.getLogger(__name__)
 
 USERS_TABLE = "users"
 RESUMES_TABLE = "generated_resumes"
+REFERRAL_CODES_TABLE = "referral_codes"
+REFERRAL_ATTRIBUTIONS_TABLE = "referral_attributions"
+REFERRAL_COMMISSIONS_TABLE = "referral_commissions"
+REFERRAL_EVENTS_TABLE = "referral_events"
+REFERRAL_ABUSE_FLAGS_TABLE = "referral_abuse_flags"
+REFERRAL_PROCESSED_EVENTS_TABLE = "referral_processed_events"
+USAGE_AUDIT_TABLE = "usage_audit_log"
 TABLE = RESUMES_TABLE
 
 _USERS_SCHEMA = f"""
@@ -51,6 +59,80 @@ CREATE TABLE IF NOT EXISTS {TABLE} (
     job_url TEXT,
     source_was_pdf BOOLEAN NOT NULL DEFAULT FALSE
 );
+"""
+
+_REFERRAL_SCHEMA = f"""
+CREATE TABLE IF NOT EXISTS {REFERRAL_CODES_TABLE} (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    owner_user_id UUID NOT NULL REFERENCES {USERS_TABLE}(id) ON DELETE CASCADE,
+    code TEXT NOT NULL UNIQUE,
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS {REFERRAL_ATTRIBUTIONS_TABLE} (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    invited_user_id UUID NOT NULL UNIQUE REFERENCES {USERS_TABLE}(id) ON DELETE CASCADE,
+    referrer_user_id UUID NOT NULL REFERENCES {USERS_TABLE}(id) ON DELETE CASCADE,
+    code TEXT NOT NULL,
+    source_url TEXT,
+    first_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expires_at TIMESTAMPTZ NOT NULL,
+    status TEXT NOT NULL DEFAULT 'attributed',
+    reason TEXT
+);
+
+CREATE TABLE IF NOT EXISTS {REFERRAL_COMMISSIONS_TABLE} (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    invited_user_id UUID NOT NULL UNIQUE REFERENCES {USERS_TABLE}(id) ON DELETE CASCADE,
+    referrer_user_id UUID NOT NULL REFERENCES {USERS_TABLE}(id) ON DELETE CASCADE,
+    stripe_invoice_id TEXT,
+    amount_cents BIGINT NOT NULL,
+    currency TEXT NOT NULL DEFAULT 'usd',
+    rate_percent INTEGER NOT NULL DEFAULT 30,
+    status TEXT NOT NULL DEFAULT 'hold',
+    reason TEXT,
+    reviewed_by UUID REFERENCES {USERS_TABLE}(id) ON DELETE SET NULL,
+    reviewed_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS {REFERRAL_EVENTS_TABLE} (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    event_type TEXT NOT NULL,
+    user_id UUID REFERENCES {USERS_TABLE}(id) ON DELETE SET NULL,
+    referrer_user_id UUID REFERENCES {USERS_TABLE}(id) ON DELETE SET NULL,
+    invited_user_id UUID REFERENCES {USERS_TABLE}(id) ON DELETE SET NULL,
+    stripe_event_id TEXT,
+    metadata JSONB NOT NULL DEFAULT '{{}}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS {REFERRAL_ABUSE_FLAGS_TABLE} (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    flag_type TEXT NOT NULL,
+    user_id UUID REFERENCES {USERS_TABLE}(id) ON DELETE CASCADE,
+    score INTEGER NOT NULL DEFAULT 100,
+    evidence JSONB NOT NULL DEFAULT '{{}}'::jsonb,
+    resolved BOOLEAN NOT NULL DEFAULT FALSE,
+    resolved_by UUID REFERENCES {USERS_TABLE}(id) ON DELETE SET NULL,
+    resolved_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS {REFERRAL_PROCESSED_EVENTS_TABLE} (
+    event_id TEXT PRIMARY KEY,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_ref_codes_owner ON {REFERRAL_CODES_TABLE}(owner_user_id);
+CREATE INDEX IF NOT EXISTS idx_ref_attr_referrer ON {REFERRAL_ATTRIBUTIONS_TABLE}(referrer_user_id);
+CREATE INDEX IF NOT EXISTS idx_ref_attr_status ON {REFERRAL_ATTRIBUTIONS_TABLE}(status);
+CREATE INDEX IF NOT EXISTS idx_ref_comm_referrer ON {REFERRAL_COMMISSIONS_TABLE}(referrer_user_id);
+CREATE INDEX IF NOT EXISTS idx_ref_comm_status ON {REFERRAL_COMMISSIONS_TABLE}(status);
+CREATE INDEX IF NOT EXISTS idx_ref_events_type_created ON {REFERRAL_EVENTS_TABLE}(event_type, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ref_events_referrer ON {REFERRAL_EVENTS_TABLE}(referrer_user_id);
+CREATE INDEX IF NOT EXISTS idx_ref_events_invited ON {REFERRAL_EVENTS_TABLE}(invited_user_id);
 """
 
 _pool = None
@@ -91,6 +173,7 @@ async def init_table(pool) -> None:
     async with pool.acquire() as conn:
         await conn.execute(_USERS_SCHEMA)
         await conn.execute(_RESUMES_SCHEMA)
+        await conn.execute(_REFERRAL_SCHEMA)
         await conn.execute(
             f"ALTER TABLE {TABLE} ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES {USERS_TABLE}(id) ON DELETE CASCADE"
         )
@@ -128,6 +211,31 @@ async def init_table(pool) -> None:
             f"ALTER TABLE {USERS_TABLE} ADD COLUMN IF NOT EXISTS free_analyses_count INTEGER NOT NULL DEFAULT 0"
         )
         await conn.execute(f"CREATE INDEX IF NOT EXISTS idx_users_stripe_customer ON {USERS_TABLE}(stripe_customer_id)")
+        await conn.execute(
+            f"ALTER TABLE {USERS_TABLE} ADD COLUMN IF NOT EXISTS partner_program_access BOOLEAN NOT NULL DEFAULT FALSE"
+        )
+        await conn.execute(
+            f"""
+            CREATE TABLE IF NOT EXISTS {USAGE_AUDIT_TABLE} (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                user_id UUID REFERENCES {USERS_TABLE}(id) ON DELETE SET NULL,
+                action TEXT NOT NULL,
+                model TEXT,
+                success BOOLEAN NOT NULL DEFAULT TRUE,
+                error_message TEXT,
+                input_tokens INTEGER NOT NULL DEFAULT 0,
+                output_tokens INTEGER NOT NULL DEFAULT 0,
+                metadata JSONB NOT NULL DEFAULT '{{}}'::jsonb,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            );
+            """
+        )
+        await conn.execute(
+            f"CREATE INDEX IF NOT EXISTS idx_usage_audit_created ON {USAGE_AUDIT_TABLE}(created_at DESC)"
+        )
+        await conn.execute(
+            f"CREATE INDEX IF NOT EXISTS idx_usage_audit_user ON {USAGE_AUDIT_TABLE}(user_id)"
+        )
 
 
 async def db_insert(pool, output_dir: Path, pdf: GeneratedPDF, user_id: str) -> None:
@@ -263,7 +371,7 @@ async def user_create(pool, email: str, password_hash: str | None = None, name: 
     return {"id": str(uid), "email": email, "name": name or email.split("@")[0], "created_at": datetime.now().isoformat()}
 
 
-USER_SUBSCRIPTION_COLS = "stripe_customer_id, stripe_subscription_id, subscription_status, subscription_plan, current_period_end, free_analyses_count"
+USER_SUBSCRIPTION_COLS = "stripe_customer_id, stripe_subscription_id, subscription_status, subscription_plan, current_period_end, free_analyses_count, partner_program_access"
 
 async def user_get_by_email(pool, email: str) -> dict | None:
     """Get user by email."""
@@ -452,13 +560,83 @@ async def backfill_user_id(pool, user_id: str) -> int:
 
 
 async def user_list_all(pool, limit: int = 500) -> list[dict]:
-    """List all users (id, email, name, created_at, subscription_status, subscription_plan). For admin only."""
+    """List all users (id, email, name, created_at, subscription, partner flag). For admin only."""
     async with pool.acquire() as conn:
         rows = await conn.fetch(
-            f"SELECT id, email, name, created_at, subscription_status, subscription_plan FROM {USERS_TABLE} ORDER BY created_at DESC LIMIT $1",
+            f"""
+            SELECT id, email, name, created_at, subscription_status, subscription_plan, partner_program_access
+            FROM {USERS_TABLE} ORDER BY created_at DESC LIMIT $1
+            """,
             limit,
         )
     return [dict(r) for r in rows]
+
+
+async def user_set_partner_program_access(pool, user_id: str, enabled: bool) -> bool:
+    """Set partner_program_access. Returns True if a row was updated."""
+    async with pool.acquire() as conn:
+        n = await conn.execute(
+            f"UPDATE {USERS_TABLE} SET partner_program_access = $2 WHERE id = $1::uuid",
+            user_id,
+            bool(enabled),
+        )
+    return "UPDATE 1" in str(n) or (n and "1" in str(n))
+
+
+async def usage_audit_insert(
+    pool,
+    *,
+    user_id: str | None,
+    action: str,
+    model: str | None,
+    success: bool,
+    error_message: str | None,
+    input_tokens: int,
+    output_tokens: int,
+    metadata: dict,
+) -> None:
+    import json as _json
+
+    async with pool.acquire() as conn:
+        await conn.execute(
+            f"""
+            INSERT INTO {USAGE_AUDIT_TABLE}
+            (user_id, action, model, success, error_message, input_tokens, output_tokens, metadata)
+            VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8::jsonb)
+            """,
+            user_id if user_id else None,
+            action,
+            model,
+            success,
+            error_message,
+            int(input_tokens),
+            int(output_tokens),
+            _json.dumps(metadata or {}),
+        )
+
+
+async def usage_audit_list_admin(pool, limit: int = 500) -> list[dict]:
+    """Recent usage/error events with user email."""
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            f"""
+            SELECT l.id, l.user_id, l.action, l.model, l.success, l.error_message,
+                   l.input_tokens, l.output_tokens, l.metadata, l.created_at,
+                   u.email AS user_email
+            FROM {USAGE_AUDIT_TABLE} l
+            LEFT JOIN {USERS_TABLE} u ON l.user_id = u.id
+            ORDER BY l.created_at DESC
+            LIMIT $1
+            """,
+            limit,
+        )
+    out = []
+    for r in rows:
+        d = dict(r)
+        if d.get("metadata") is not None and hasattr(d["metadata"], "keys"):
+            d["metadata"] = dict(d["metadata"])
+        out.append(d)
+    return out
 
 
 async def db_recent_resumes_with_user(pool, output_dir: Path, limit: int = 100) -> list[dict]:
@@ -487,6 +665,335 @@ async def db_recent_resumes_with_user(pool, output_dir: Path, limit: int = 100) 
                 "user_email": rec.get("user_email") or None,
             })
     return result
+
+
+# --- Referrals ---
+
+def _safe_ref_code(seed: str) -> str:
+    cleaned = "".join(ch for ch in (seed or "").lower() if ch.isalnum())
+    if not cleaned:
+        cleaned = "partner"
+    return cleaned[:16]
+
+
+async def referral_get_or_create_code(pool, user_id: str, email: str | None = None) -> str:
+    """Return active referral code for user; create one if missing."""
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            f"SELECT code FROM {REFERRAL_CODES_TABLE} WHERE owner_user_id = $1::uuid AND active = TRUE ORDER BY created_at ASC LIMIT 1",
+            user_id,
+        )
+        if row:
+            return str(row["code"])
+
+        base = _safe_ref_code((email or "partner").split("@")[0])
+        candidate = f"{base}-{str(user_id).replace('-', '')[:8]}"
+        i = 1
+        while True:
+            try:
+                await conn.execute(
+                    f"INSERT INTO {REFERRAL_CODES_TABLE} (owner_user_id, code, active) VALUES ($1::uuid, $2, TRUE)",
+                    user_id,
+                    candidate,
+                )
+                return candidate
+            except Exception:
+                i += 1
+                candidate = f"{base}-{str(user_id).replace('-', '')[:8]}-{i}"
+
+
+async def referral_get_referrer_by_code(pool, code: str) -> dict[str, Any] | None:
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            f"""
+            SELECT rc.owner_user_id, rc.code, u.email
+            FROM {REFERRAL_CODES_TABLE} rc
+            JOIN {USERS_TABLE} u ON u.id = rc.owner_user_id
+            WHERE rc.code = $1 AND rc.active = TRUE
+            LIMIT 1
+            """,
+            (code or "").strip().lower(),
+        )
+    return dict(row) if row else None
+
+
+async def referral_get_attribution_by_invited(pool, invited_user_id: str) -> dict[str, Any] | None:
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            f"SELECT * FROM {REFERRAL_ATTRIBUTIONS_TABLE} WHERE invited_user_id = $1::uuid LIMIT 1",
+            invited_user_id,
+        )
+    return dict(row) if row else None
+
+
+async def referral_create_attribution(
+    pool,
+    invited_user_id: str,
+    referrer_user_id: str,
+    code: str,
+    expires_at: datetime,
+    source_url: str | None = None,
+    status: str = "attributed",
+    reason: str | None = None,
+) -> bool:
+    """Create attribution once per invited user. Returns True when inserted."""
+    async with pool.acquire() as conn:
+        result = await conn.execute(
+            f"""
+            INSERT INTO {REFERRAL_ATTRIBUTIONS_TABLE} (
+                invited_user_id, referrer_user_id, code, source_url, expires_at, status, reason
+            ) VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7)
+            ON CONFLICT (invited_user_id) DO NOTHING
+            """,
+            invited_user_id,
+            referrer_user_id,
+            (code or "").strip().lower(),
+            source_url,
+            expires_at,
+            status,
+            reason,
+        )
+    return "INSERT 0 1" in str(result)
+
+
+async def referral_mark_attribution_status(
+    pool, invited_user_id: str, status: str, reason: str | None = None
+) -> None:
+    async with pool.acquire() as conn:
+        await conn.execute(
+            f"UPDATE {REFERRAL_ATTRIBUTIONS_TABLE} SET status = $1, reason = $2 WHERE invited_user_id = $3::uuid",
+            status,
+            reason,
+            invited_user_id,
+        )
+
+
+async def referral_mark_processed_event(pool, event_id: str) -> bool:
+    """
+    Mark Stripe webhook event as processed.
+    Returns True if inserted (first seen), False if duplicate.
+    """
+    async with pool.acquire() as conn:
+        result = await conn.execute(
+            f"""
+            INSERT INTO {REFERRAL_PROCESSED_EVENTS_TABLE} (event_id)
+            VALUES ($1)
+            ON CONFLICT (event_id) DO NOTHING
+            """,
+            event_id,
+        )
+    return "INSERT 0 1" in str(result)
+
+
+async def referral_log_event(
+    pool,
+    event_type: str,
+    *,
+    user_id: str | None = None,
+    referrer_user_id: str | None = None,
+    invited_user_id: str | None = None,
+    stripe_event_id: str | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> None:
+    async with pool.acquire() as conn:
+        await conn.execute(
+            f"""
+            INSERT INTO {REFERRAL_EVENTS_TABLE} (
+                event_type, user_id, referrer_user_id, invited_user_id, stripe_event_id, metadata
+            ) VALUES ($1, $2::uuid, $3::uuid, $4::uuid, $5, $6::jsonb)
+            """,
+            event_type,
+            user_id,
+            referrer_user_id,
+            invited_user_id,
+            stripe_event_id,
+            metadata or {},
+        )
+
+
+async def referral_flag_abuse(
+    pool,
+    *,
+    flag_type: str,
+    user_id: str | None,
+    score: int = 100,
+    evidence: dict[str, Any] | None = None,
+) -> None:
+    async with pool.acquire() as conn:
+        await conn.execute(
+            f"""
+            INSERT INTO {REFERRAL_ABUSE_FLAGS_TABLE} (flag_type, user_id, score, evidence)
+            VALUES ($1, $2::uuid, $3, $4::jsonb)
+            """,
+            flag_type,
+            user_id,
+            max(0, min(score, 100)),
+            evidence or {},
+        )
+
+
+async def referral_get_commission_by_invited(pool, invited_user_id: str) -> dict[str, Any] | None:
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            f"SELECT * FROM {REFERRAL_COMMISSIONS_TABLE} WHERE invited_user_id = $1::uuid LIMIT 1",
+            invited_user_id,
+        )
+    return dict(row) if row else None
+
+
+async def referral_create_commission(
+    pool,
+    *,
+    invited_user_id: str,
+    referrer_user_id: str,
+    stripe_invoice_id: str | None,
+    amount_cents: int,
+    currency: str = "usd",
+    rate_percent: int = 30,
+    status: str = "hold",
+    reason: str | None = None,
+) -> bool:
+    """Create a one-time commission row. Returns True when inserted."""
+    async with pool.acquire() as conn:
+        result = await conn.execute(
+            f"""
+            INSERT INTO {REFERRAL_COMMISSIONS_TABLE} (
+                invited_user_id, referrer_user_id, stripe_invoice_id, amount_cents, currency, rate_percent, status, reason
+            ) VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8)
+            ON CONFLICT (invited_user_id) DO NOTHING
+            """,
+            invited_user_id,
+            referrer_user_id,
+            stripe_invoice_id,
+            int(amount_cents),
+            (currency or "usd").lower(),
+            int(rate_percent),
+            status,
+            reason,
+        )
+    return "INSERT 0 1" in str(result)
+
+
+async def referral_partner_summary(pool, referrer_user_id: str) -> dict[str, Any]:
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            f"""
+            SELECT
+              COALESCE(COUNT(*) FILTER (WHERE c.status IN ('approved','paid')), 0) AS eligible_count,
+              COALESCE(COUNT(*) FILTER (WHERE c.status = 'hold'), 0) AS pending_count,
+              COALESCE(COUNT(*) FILTER (WHERE c.status = 'paid'), 0) AS paid_count,
+              COALESCE(COUNT(*) FILTER (WHERE c.status = 'rejected'), 0) AS rejected_count,
+              COALESCE(SUM(c.amount_cents) FILTER (WHERE c.status IN ('approved','paid')), 0) AS eligible_cents,
+              COALESCE(SUM(c.amount_cents) FILTER (WHERE c.status = 'paid'), 0) AS paid_cents
+            FROM {REFERRAL_COMMISSIONS_TABLE} c
+            WHERE c.referrer_user_id = $1::uuid
+            """,
+            referrer_user_id,
+        )
+    d = dict(row) if row else {}
+    return {
+        "eligible_count": int(d.get("eligible_count") or 0),
+        "pending_count": int(d.get("pending_count") or 0),
+        "paid_count": int(d.get("paid_count") or 0),
+        "rejected_count": int(d.get("rejected_count") or 0),
+        "eligible_cents": int(d.get("eligible_cents") or 0),
+        "paid_cents": int(d.get("paid_cents") or 0),
+    }
+
+
+async def referral_partner_commissions(pool, referrer_user_id: str, limit: int = 200) -> list[dict[str, Any]]:
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            f"""
+            SELECT c.*, u.email AS invited_email
+            FROM {REFERRAL_COMMISSIONS_TABLE} c
+            LEFT JOIN {USERS_TABLE} u ON u.id = c.invited_user_id
+            WHERE c.referrer_user_id = $1::uuid
+            ORDER BY c.created_at DESC
+            LIMIT $2
+            """,
+            referrer_user_id,
+            limit,
+        )
+    return [dict(r) for r in rows]
+
+
+async def referral_admin_chains(pool, limit: int = 200) -> list[dict[str, Any]]:
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            f"""
+            SELECT
+              a.id,
+              a.first_seen_at,
+              a.expires_at,
+              a.status AS attribution_status,
+              a.reason AS attribution_reason,
+              a.code,
+              ref_u.email AS referrer_email,
+              inv_u.email AS invited_email,
+              c.id AS commission_id,
+              c.amount_cents,
+              c.currency,
+              c.status AS commission_status,
+              c.reason AS commission_reason
+            FROM {REFERRAL_ATTRIBUTIONS_TABLE} a
+            LEFT JOIN {USERS_TABLE} ref_u ON ref_u.id = a.referrer_user_id
+            LEFT JOIN {USERS_TABLE} inv_u ON inv_u.id = a.invited_user_id
+            LEFT JOIN {REFERRAL_COMMISSIONS_TABLE} c ON c.invited_user_id = a.invited_user_id
+            ORDER BY a.first_seen_at DESC
+            LIMIT $1
+            """,
+            limit,
+        )
+    return [dict(r) for r in rows]
+
+
+async def referral_admin_events(pool, limit: int = 300) -> list[dict[str, Any]]:
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            f"""
+            SELECT
+              e.id,
+              e.event_type,
+              e.stripe_event_id,
+              e.metadata,
+              e.created_at,
+              ref_u.email AS referrer_email,
+              inv_u.email AS invited_email,
+              u.email AS user_email
+            FROM {REFERRAL_EVENTS_TABLE} e
+            LEFT JOIN {USERS_TABLE} ref_u ON ref_u.id = e.referrer_user_id
+            LEFT JOIN {USERS_TABLE} inv_u ON inv_u.id = e.invited_user_id
+            LEFT JOIN {USERS_TABLE} u ON u.id = e.user_id
+            ORDER BY e.created_at DESC
+            LIMIT $1
+            """,
+            limit,
+        )
+    return [dict(r) for r in rows]
+
+
+async def referral_admin_update_commission_status(
+    pool,
+    commission_id: str,
+    *,
+    status: str,
+    reason: str | None,
+    reviewer_user_id: str | None,
+) -> bool:
+    async with pool.acquire() as conn:
+        result = await conn.execute(
+            f"""
+            UPDATE {REFERRAL_COMMISSIONS_TABLE}
+            SET status = $1, reason = $2, reviewed_by = $3::uuid, reviewed_at = NOW()
+            WHERE id = $4::uuid
+            """,
+            status,
+            reason,
+            reviewer_user_id,
+            commission_id,
+        )
+    return "UPDATE 1" in str(result)
 
 
 # --- Market Readiness (status indicator, not gamification) ---

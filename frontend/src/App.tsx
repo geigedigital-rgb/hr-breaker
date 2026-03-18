@@ -11,6 +11,7 @@ import Progress from "./pages/Progress";
 import Vacancies from "./pages/Vacancies";
 import Settings from "./pages/Settings";
 import Upgrade from "./pages/Upgrade";
+import Partner from "./pages/Partner";
 import Login from "./pages/Login";
 import AuthCallback from "./pages/AuthCallback";
 import AdminDashboard from "./pages/admin/AdminDashboard";
@@ -18,6 +19,8 @@ import AdminUsers from "./pages/admin/AdminUsers";
 import AdminApp from "./pages/admin/AdminApp";
 import AdminConfig from "./pages/admin/AdminConfig";
 import AdminActivity from "./pages/admin/AdminActivity";
+import AdminUsage from "./pages/admin/AdminUsage";
+import AdminReferrals from "./pages/admin/AdminReferrals";
 import { t } from "./i18n";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -30,6 +33,20 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
     );
   }
   if (!user) return <Navigate to="/login" replace />;
+  return <>{children}</>;
+}
+
+function RequirePartnerAccess({ children }: { children: React.ReactNode }) {
+  const { user, loading } = useAuth();
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#F2F3F9]">
+        <span className="h-8 w-8 animate-spin rounded-full border-2 border-[#4578FC] border-t-transparent" aria-hidden />
+      </div>
+    );
+  }
+  if (!user) return <Navigate to="/login" replace />;
+  if (!user.partner_program_access) return <Navigate to="/" replace />;
   return <>{children}</>;
 }
 
@@ -81,11 +98,14 @@ function App() {
               <Route path="vacancies" element={<Vacancies />} />
               <Route path="settings" element={<Settings />} />
               <Route path="upgrade" element={<Upgrade />} />
+              <Route path="partner" element={<RequirePartnerAccess><Partner /></RequirePartnerAccess>} />
             </Route>
             <Route path="/admin" element={<RequireAuth><RequireAdmin><AdminLayout /></RequireAdmin></RequireAuth>}>
               <Route index element={<AdminDashboard />} />
               <Route path="users" element={<AdminUsers />} />
               <Route path="activity" element={<AdminActivity />} />
+              <Route path="usage" element={<AdminUsage />} />
+              <Route path="referrals" element={<AdminReferrals />} />
               <Route path="config" element={<AdminConfig />} />
               <Route path="app" element={<AdminApp />} />
             </Route>

@@ -33,6 +33,7 @@ from hr_breaker.orchestration import optimize_for_job
 from hr_breaker.services import PDFStorage, scrape_job_posting, CloudflareBlockedError
 from hr_breaker.services.job_scraper import extract_company_logo_url
 from hr_breaker.services.auth import create_access_token, decode_token, hash_password, verify_password
+from hr_breaker.services.usage_audit import log_usage_event
 from hr_breaker.services.db import (
     get_pool,
     user_create,
@@ -48,6 +49,8 @@ from hr_breaker.services.db import (
     user_update_subscription,
     user_get_id_by_stripe_customer_id,
     ensure_seed_user,
+    user_set_partner_program_access,
+    usage_audit_list_admin,
     backfill_user_id,
     user_list_all,
     db_list_all,
@@ -55,6 +58,20 @@ from hr_breaker.services.db import (
     user_increment_free_analyses,
     READINESS_DELTA_ANALYSIS,
     READINESS_DELTA_OPTIMIZE,
+    referral_admin_chains,
+    referral_admin_events,
+    referral_admin_update_commission_status,
+    referral_get_or_create_code,
+    referral_mark_processed_event,
+    referral_partner_commissions,
+    referral_partner_summary,
+)
+from hr_breaker.services.referral_service import (
+    COOKIE_DAYS,
+    MIN_PAYOUT_CENTS,
+    partner_terms,
+    process_first_paid_invoice_commission,
+    try_apply_referral_after_auth,
 )
 
 # For SSE progress events
@@ -257,6 +274,8 @@ _http_bearer = HTTPBearer(auto_error=False)
 class LoginRequest(BaseModel):
     email: str
     password: str
+    referral_code: str | None = None
+    referral_source_url: str | None = None
 
 
 class ReadinessOut(BaseModel):
@@ -280,6 +299,7 @@ class AuthUserOut(BaseModel):
     name: str | None
     readiness: ReadinessOut | None = None
     subscription: SubscriptionOut | None = None
+    partner_program_access: bool = False
 
 
 class LoginResponse(BaseModel):
@@ -342,6 +362,15 @@ def _is_admin_user(user: dict | None) -> bool:
     return (user.get("email") or "").strip().lower() == admin_email
 
 
+def _partner_enabled() -> bool:
+    return bool(get_settings().partner_program_enabled)
+
+
+def _partner_user_allowed(user: dict) -> bool:
+    """User-facing partner cabinet (referral link, commissions) — only if admin enabled flag."""
+    return bool(user.get("partner_program_access"))
+
+
 async def get_admin_user(user: dict | None = Depends(get_current_user)) -> dict:
     """Require current user and admin email; else 403."""
     if not user:
@@ -352,7 +381,12 @@ async def get_admin_user(user: dict | None = Depends(get_current_user)) -> dict:
 
 
 def _user_out(u: dict, subscription: dict | None = None) -> AuthUserOut:
-    out = AuthUserOut(id=str(u["id"]), email=u["email"], name=u.get("name"))
+    out = AuthUserOut(
+        id=str(u["id"]),
+        email=u["email"],
+        name=u.get("name"),
+        partner_program_access=bool(u.get("partner_program_access")),
+    )
     if subscription is not None:
         # Admin always gets full plan for UI and limits
         if _is_admin_user(u):
@@ -390,6 +424,7 @@ class AdminUserOut(BaseModel):
     created_at: str
     subscription_status: str | None = None
     subscription_plan: str | None = None
+    partner_program_access: bool = False
 
 
 class AdminUsersResponse(BaseModel):
@@ -408,6 +443,7 @@ class AdminConfigResponse(BaseModel):
     max_iterations: int
     frontend_url: str
     adzuna_configured: bool
+    partner_program_enabled: bool
 
 
 class AdminActivityItem(BaseModel):
@@ -420,6 +456,97 @@ class AdminActivityItem(BaseModel):
 
 class AdminActivityResponse(BaseModel):
     items: list[AdminActivityItem]
+
+
+class AdminUsageAuditItem(BaseModel):
+    id: str
+    user_email: str | None = None
+    action: str
+    model: str | None = None
+    success: bool
+    error_message: str | None = None
+    input_tokens: int = 0
+    output_tokens: int = 0
+    metadata: dict = Field(default_factory=dict)
+    created_at: str
+
+
+class AdminUsageAuditResponse(BaseModel):
+    items: list[AdminUsageAuditItem]
+
+
+class AdminPartnerAccessBody(BaseModel):
+    partner_program_access: bool
+
+
+class PartnerCommissionItem(BaseModel):
+    invited_email: str | None = None
+    amount_cents: int
+    currency: str
+    status: str
+    created_at: str
+    reason: str | None = None
+
+
+class PartnerMeResponse(BaseModel):
+    referral_link: str
+    payout_threshold_cents: int
+    eligible_cents: int
+    paid_cents: int
+    eligible_count: int
+    pending_count: int
+    paid_count: int
+    rejected_count: int
+    items: list[PartnerCommissionItem]
+
+
+class PartnerLinkResponse(BaseModel):
+    referral_link: str
+    code: str
+
+
+class PartnerTermsResponse(BaseModel):
+    items: list[str]
+
+
+class AdminReferralChainItem(BaseModel):
+    id: str
+    first_seen_at: str
+    expires_at: str
+    attribution_status: str
+    attribution_reason: str | None = None
+    code: str
+    referrer_email: str | None = None
+    invited_email: str | None = None
+    commission_id: str | None = None
+    amount_cents: int | None = None
+    currency: str | None = None
+    commission_status: str | None = None
+    commission_reason: str | None = None
+
+
+class AdminReferralChainsResponse(BaseModel):
+    items: list[AdminReferralChainItem]
+
+
+class AdminReferralEventItem(BaseModel):
+    id: str
+    event_type: str
+    stripe_event_id: str | None = None
+    user_email: str | None = None
+    referrer_email: str | None = None
+    invited_email: str | None = None
+    metadata: dict = Field(default_factory=dict)
+    created_at: str
+
+
+class AdminReferralEventsResponse(BaseModel):
+    items: list[AdminReferralEventItem]
+
+
+class AdminReferralActionRequest(BaseModel):
+    commission_id: str
+    reason: str | None = None
 
 
 class VacancyCard(BaseModel):
@@ -458,6 +585,18 @@ async def api_register(req: LoginRequest) -> LoginResponse:
         raise HTTPException(400, "Email already registered")
     pass_hash = hash_password(req.password)
     user = await user_create(pool, req.email, password_hash=pass_hash)
+    if _partner_enabled() and req.referral_code:
+        try:
+            await try_apply_referral_after_auth(
+                pool,
+                invited_user_id=str(user["id"]),
+                invited_email=user["email"],
+                referral_code=req.referral_code,
+                source_url=req.referral_source_url,
+                ttl_days=COOKIE_DAYS,
+            )
+        except Exception as e:
+            logger.warning("Referral apply failed on register for user=%s: %s", user.get("id"), e)
     subscription = await user_get_subscription(pool, str(user["id"]))
     token = create_access_token(str(user["id"]), user["email"])
     return LoginResponse(access_token=token, user=_user_out(user, subscription=subscription))
@@ -474,6 +613,18 @@ async def api_login(req: LoginRequest) -> LoginResponse:
         raise HTTPException(401, "Invalid email or password")
     if not verify_password(req.password, user["password_hash"]):
         raise HTTPException(401, "Invalid email or password")
+    if _partner_enabled() and req.referral_code:
+        try:
+            await try_apply_referral_after_auth(
+                pool,
+                invited_user_id=str(user["id"]),
+                invited_email=user["email"],
+                referral_code=req.referral_code,
+                source_url=req.referral_source_url,
+                ttl_days=COOKIE_DAYS,
+            )
+        except Exception as e:
+            logger.warning("Referral apply failed on login for user=%s: %s", user.get("id"), e)
     try:
         token = create_access_token(str(user["id"]), user["email"])
     except ValueError as e:
@@ -527,6 +678,8 @@ async def api_google_login(redirect_uri: str | None = Query(None, description="O
 class GoogleCallbackRequest(BaseModel):
     code: str
     redirect_uri: str | None = None
+    referral_code: str | None = None
+    referral_source_url: str | None = None
 
 
 @router.post("/auth/google/callback", response_model=LoginResponse)
@@ -578,9 +731,119 @@ async def api_google_exchange(req: GoogleCallbackRequest) -> LoginResponse:
         else:
             await user_create(pool, email, name=name, google_id=google_id)
             user = await user_get_by_email(pool, email)
+    if _partner_enabled() and req.referral_code:
+        try:
+            await try_apply_referral_after_auth(
+                pool,
+                invited_user_id=str(user["id"]),
+                invited_email=user["email"],
+                referral_code=req.referral_code,
+                source_url=req.referral_source_url,
+                ttl_days=COOKIE_DAYS,
+            )
+        except Exception as e:
+            logger.warning("Referral apply failed on google callback for user=%s: %s", user.get("id"), e)
     token = create_access_token(str(user["id"]), user["email"])
     subscription = await user_get_subscription(pool, str(user["id"]))
     return LoginResponse(access_token=token, user=_user_out(user, subscription=subscription))
+
+
+@router.get("/r/{code}")
+async def api_referral_redirect(code: str, request: Request):
+    if not _partner_enabled():
+        raise HTTPException(404, "Partner program disabled")
+    """
+    Public referral entrypoint.
+    Stores referral code in cookie and redirects user to login.
+    """
+    settings = get_settings()
+    frontend = (settings.frontend_url or "").rstrip("/") or "http://localhost:5173"
+    clean_code = (code or "").strip().lower()
+    dest = f"{frontend}/login?ref={clean_code}"
+    response = RedirectResponse(url=dest)
+    response.set_cookie(
+        key="hr_ref_code",
+        value=clean_code,
+        max_age=COOKIE_DAYS * 24 * 3600,
+        httponly=True,
+        samesite="lax",
+    )
+    response.set_cookie(
+        key="hr_ref_src",
+        value=str(request.url),
+        max_age=COOKIE_DAYS * 24 * 3600,
+        httponly=True,
+        samesite="lax",
+    )
+    return response
+
+
+@router.post("/partner/link", response_model=PartnerLinkResponse)
+async def api_partner_link(user: dict | None = Depends(get_current_user)) -> PartnerLinkResponse:
+    if not _partner_enabled():
+        raise HTTPException(404, "Partner program disabled")
+    if not user:
+        raise HTTPException(401, "Not authenticated")
+    if not _partner_user_allowed(user):
+        raise HTTPException(403, "Partner access not enabled for this account")
+    pool = await get_pool()
+    if not pool:
+        raise HTTPException(503, "Database not configured")
+    code = await referral_get_or_create_code(pool, str(user["id"]), user.get("email"))
+    frontend = (get_settings().frontend_url or "").rstrip("/") or "http://localhost:5173"
+    return PartnerLinkResponse(
+        code=code,
+        referral_link=f"{frontend}/api/r/{code}",
+    )
+
+
+@router.get("/partner/me", response_model=PartnerMeResponse)
+async def api_partner_me(
+    user: dict | None = Depends(get_current_user),
+    limit: int = Query(200, ge=1, le=500),
+) -> PartnerMeResponse:
+    if not _partner_enabled():
+        raise HTTPException(404, "Partner program disabled")
+    if not user:
+        raise HTTPException(401, "Not authenticated")
+    if not _partner_user_allowed(user):
+        raise HTTPException(403, "Partner access not enabled for this account")
+    pool = await get_pool()
+    if not pool:
+        raise HTTPException(503, "Database not configured")
+    code = await referral_get_or_create_code(pool, str(user["id"]), user.get("email"))
+    frontend = (get_settings().frontend_url or "").rstrip("/") or "http://localhost:5173"
+    summary = await referral_partner_summary(pool, str(user["id"]))
+    rows = await referral_partner_commissions(pool, str(user["id"]), limit=limit)
+    items = [
+        PartnerCommissionItem(
+            invited_email=r.get("invited_email"),
+            amount_cents=int(r.get("amount_cents") or 0),
+            currency=(r.get("currency") or "usd").lower(),
+            status=(r.get("status") or "hold"),
+            created_at=r["created_at"].isoformat() if r.get("created_at") else "",
+            reason=r.get("reason"),
+        )
+        for r in rows
+    ]
+    return PartnerMeResponse(
+        referral_link=f"{frontend}/api/r/{code}",
+        payout_threshold_cents=MIN_PAYOUT_CENTS,
+        eligible_cents=summary["eligible_cents"],
+        paid_cents=summary["paid_cents"],
+        eligible_count=summary["eligible_count"],
+        pending_count=summary["pending_count"],
+        paid_count=summary["paid_count"],
+        rejected_count=summary["rejected_count"],
+        items=items,
+    )
+
+
+@router.get("/partner/terms", response_model=PartnerTermsResponse)
+async def api_partner_terms() -> PartnerTermsResponse:
+    if not _partner_enabled():
+        raise HTTPException(404, "Partner program disabled")
+    return PartnerTermsResponse(items=partner_terms())
 
 
 # --- Payments (Stripe) ---
@@ -653,6 +916,11 @@ async def api_stripe_webhook(request: Request) -> Response:
     pool = await get_pool()
     if not pool:
         raise HTTPException(503, "Database not configured")
+    ev_id = str(getattr(event, "id", "") or "")
+    if ev_id:
+        is_new = await referral_mark_processed_event(pool, ev_id)
+        if not is_new:
+            return Response(status_code=200)
     ev_type = getattr(event, "type", None)
     data = getattr(event, "data", None) or {}
     obj = data.get("object") if isinstance(data, dict) else getattr(data, "object", None)
@@ -673,6 +941,13 @@ async def api_stripe_webhook(request: Request) -> Response:
             get_user_id_by_stripe_customer=user_get_id_by_stripe_customer_id,
             user_update_subscription=user_update_subscription,
         )
+    elif ev_type == "invoice.payment_succeeded" and obj:
+        if _partner_enabled():
+            await process_first_paid_invoice_commission(
+                pool,
+                invoice=obj,
+                stripe_event_id=ev_id or None,
+            )
     return Response(status_code=200)
 
 
@@ -1259,6 +1534,10 @@ async def api_analyze(req: AnalyzeRequest, user: dict | None = Depends(get_optio
     if not settings.google_api_key:
         raise HTTPException(503, "GOOGLE_API_KEY not set. Add it to .env and restart the backend.")
 
+    audit_uid = None
+    if user and user.get("id") and str(user["id"]) != "local":
+        audit_uid = str(user["id"])
+
     job_text = req.job_text
     if req.job_url and not job_text:
         url = _sanitize_url(req.job_url)
@@ -1270,14 +1549,22 @@ async def api_analyze(req: AnalyzeRequest, user: dict | None = Depends(get_optio
         try:
             job_text = await asyncio.to_thread(scrape_job_posting, url)
         except CloudflareBlockedError:
+            pool = await get_pool()
+            await log_usage_event(
+                pool, audit_uid, "analyze_job_scrape", None, success=False, error_message="Cloudflare blocked"
+            )
             raise HTTPException(422, "Job URL blocked by bot protection. Paste text instead.")
         except Exception as e:
+            pool = await get_pool()
+            await log_usage_event(
+                pool, audit_uid, "analyze_job_scrape", None, success=False, error_message=str(e)[:2000]
+            )
             raise HTTPException(422, str(e))
     if not job_text:
         raise HTTPException(400, "Provide job_text or job_url")
 
     try:
-        job = await parse_job_posting(job_text)
+        job = await parse_job_posting(job_text, audit_user_id=audit_uid)
     except Exception as e:
         logger.exception("analyze job parse failed: %s", e)
         if _is_api_key_invalid(e):
@@ -1289,8 +1576,8 @@ async def api_analyze(req: AnalyzeRequest, user: dict | None = Depends(get_optio
     kw_result = await asyncio.to_thread(check_keywords, resume_stripped, job)
     # Run ATS and breakdown (Skills/Experience/Portfolio) in parallel
     ats_score, breakdown = await asyncio.gather(
-        score_resume_vs_job(resume_stripped, job),
-        get_breakdown_scores(resume_stripped, job, output_language=out_lang),
+        score_resume_vs_job(resume_stripped, job, audit_user_id=audit_uid),
+        get_breakdown_scores(resume_stripped, job, output_language=out_lang, audit_user_id=audit_uid),
     )
     job_out = JobPostingOut(
         title=job.title,
@@ -1331,6 +1618,7 @@ async def _run_optimize(
 ) -> OptimizeResponse:
     """Run full optimization; optionally push (percent, message) to progress_queue."""
     user_id = str(user["id"]) if user and user.get("id") else None
+    audit_uid = user_id if user_id and user_id != "local" else None
     if user_id and user_id != "local" and not _is_admin_user(user):
         pool = await get_pool()
         if pool:
@@ -1364,6 +1652,10 @@ async def _run_optimize(
             job_text = await asyncio.to_thread(scrape_job_posting, url)
             _put_progress(progress_queue, 5, "Job loaded")
         except CloudflareBlockedError:
+            pool = await get_pool()
+            await log_usage_event(
+                pool, audit_uid, "optimize_job_scrape", None, success=False, error_message="Cloudflare blocked"
+            )
             return OptimizeResponse(
                 success=False,
                 validation=ValidationResultOut(passed=False, results=[]),
@@ -1371,6 +1663,10 @@ async def _run_optimize(
                 error="Job URL blocked by bot protection. Paste job text instead.",
             )
         except Exception as e:
+            pool = await get_pool()
+            await log_usage_event(
+                pool, audit_uid, "optimize_job_scrape", None, success=False, error_message=str(e)[:2000]
+            )
             return OptimizeResponse(
                 success=False,
                 validation=ValidationResultOut(passed=False, results=[]),
@@ -1383,13 +1679,17 @@ async def _run_optimize(
     source = ResumeSource(content=req.resume_content)
     _put_progress(progress_queue, 7, "Extracting name from resume…")
     try:
-        first_name, last_name = await extract_name(req.resume_content)
+        first_name, last_name = await extract_name(req.resume_content, audit_user_id=audit_uid)
         source.first_name = first_name
         source.last_name = last_name
         _put_progress(progress_queue, 10, "Name extracted")
     except Exception as e:
         logger.exception("Optimize failed")
         err_msg = _API_KEY_INVALID_MSG if _is_api_key_invalid(e) else str(e)
+        pool = await get_pool()
+        await log_usage_event(
+            pool, audit_uid, "optimize_extract_name", None, success=False, error_message=err_msg[:2000]
+        )
         return OptimizeResponse(
             success=False,
             validation=ValidationResultOut(passed=False, results=[]),
@@ -1410,10 +1710,15 @@ async def _run_optimize(
             on_progress=on_progress if progress_queue is not None else None,
             no_shame=req.aggressive_tailoring,
             output_language=out_lang,
+            audit_user_id=audit_uid,
         )
     except Exception as e:
         logger.exception("Optimize failed")
         err_msg = _API_KEY_INVALID_MSG if _is_api_key_invalid(e) else str(e)
+        pool = await get_pool()
+        await log_usage_event(
+            pool, audit_uid, "optimize_pipeline", None, success=False, error_message=err_msg[:2000]
+        )
         return OptimizeResponse(
             success=False,
             validation=ValidationResultOut(passed=False, results=[]),
@@ -1516,6 +1821,18 @@ async def _run_optimize(
         pdf_filename = pdf_path.name
         pdf_b64 = base64.b64encode(optimized.pdf_bytes).decode()
     _put_progress(progress_queue, 100, "Done")
+
+    pool_done = await get_pool()
+    if audit_uid and pool_done:
+        ok = validation.passed and bool(optimized and optimized.pdf_bytes)
+        await log_usage_event(
+            pool_done,
+            audit_uid,
+            "optimize_complete",
+            None,
+            success=ok,
+            metadata={"validation_passed": validation.passed, "has_pdf": bool(optimized and optimized.pdf_bytes)},
+        )
 
     return OptimizeResponse(
         success=validation.passed and bool(optimized and optimized.pdf_bytes),
@@ -1642,6 +1959,7 @@ async def api_admin_users(
             created_at=u["created_at"].isoformat() if u.get("created_at") else "",
             subscription_status=(u.get("subscription_status") or "free").lower() if u.get("subscription_status") is not None else "free",
             subscription_plan=(u.get("subscription_plan") or "free").lower() if u.get("subscription_plan") is not None else "free",
+            partner_program_access=bool(u.get("partner_program_access")),
         )
         for u in users
     ]
@@ -1666,6 +1984,7 @@ async def api_admin_config(
         max_iterations=settings.max_iterations,
         frontend_url=settings.frontend_url or "",
         adzuna_configured=bool((settings.adzuna_app_id or "").strip() and (settings.adzuna_app_key or "").strip()),
+        partner_program_enabled=bool(settings.partner_program_enabled),
     )
 
 
@@ -1702,6 +2021,169 @@ async def api_admin_activity(
                 user_email=None,
             ))
     return AdminActivityResponse(items=items)
+
+
+@router.get("/admin/usage-audit", response_model=AdminUsageAuditResponse)
+async def api_admin_usage_audit(
+    _admin: dict = Depends(get_admin_user),
+    limit: int = Query(200, ge=1, le=2000),
+) -> AdminUsageAuditResponse:
+    """LLM usage, models, tokens, and logged errors per user (admin)."""
+    pool = await get_pool()
+    if not pool:
+        raise HTTPException(503, "Database not configured")
+    rows = await usage_audit_list_admin(pool, limit=limit)
+    items: list[AdminUsageAuditItem] = []
+    for r in rows:
+        meta = r.get("metadata") or {}
+        if hasattr(meta, "keys") and not isinstance(meta, dict):
+            meta = dict(meta)
+        elif not isinstance(meta, dict):
+            meta = {}
+        items.append(
+            AdminUsageAuditItem(
+                id=str(r["id"]),
+                user_email=r.get("user_email"),
+                action=r.get("action") or "",
+                model=r.get("model"),
+                success=bool(r.get("success", True)),
+                error_message=r.get("error_message"),
+                input_tokens=int(r.get("input_tokens") or 0),
+                output_tokens=int(r.get("output_tokens") or 0),
+                metadata=meta,
+                created_at=r["created_at"].isoformat() if r.get("created_at") else "",
+            )
+        )
+    return AdminUsageAuditResponse(items=items)
+
+
+@router.patch("/admin/users/{user_id}/partner-access")
+async def api_admin_user_partner_access(
+    user_id: str,
+    body: AdminPartnerAccessBody,
+    _admin: dict = Depends(get_admin_user),
+) -> dict:
+    pool = await get_pool()
+    if not pool:
+        raise HTTPException(503, "Database not configured")
+    ok = await user_set_partner_program_access(pool, user_id, body.partner_program_access)
+    if not ok:
+        raise HTTPException(404, "User not found")
+    return {"ok": True, "partner_program_access": body.partner_program_access}
+
+
+@router.get("/admin/referrals/chains", response_model=AdminReferralChainsResponse)
+async def api_admin_referral_chains(
+    _admin: dict = Depends(get_admin_user),
+    limit: int = Query(200, ge=1, le=1000),
+) -> AdminReferralChainsResponse:
+    if not _partner_enabled():
+        raise HTTPException(404, "Partner program disabled")
+    pool = await get_pool()
+    if not pool:
+        raise HTTPException(503, "Database not configured")
+    rows = await referral_admin_chains(pool, limit=limit)
+    items = [
+        AdminReferralChainItem(
+            id=str(r["id"]),
+            first_seen_at=r["first_seen_at"].isoformat() if r.get("first_seen_at") else "",
+            expires_at=r["expires_at"].isoformat() if r.get("expires_at") else "",
+            attribution_status=r.get("attribution_status") or "",
+            attribution_reason=r.get("attribution_reason"),
+            code=r.get("code") or "",
+            referrer_email=r.get("referrer_email"),
+            invited_email=r.get("invited_email"),
+            commission_id=str(r["commission_id"]) if r.get("commission_id") else None,
+            amount_cents=int(r["amount_cents"]) if r.get("amount_cents") is not None else None,
+            currency=r.get("currency"),
+            commission_status=r.get("commission_status"),
+            commission_reason=r.get("commission_reason"),
+        )
+        for r in rows
+    ]
+    return AdminReferralChainsResponse(items=items)
+
+
+@router.get("/admin/referrals/events", response_model=AdminReferralEventsResponse)
+async def api_admin_referral_events(
+    _admin: dict = Depends(get_admin_user),
+    limit: int = Query(300, ge=1, le=2000),
+) -> AdminReferralEventsResponse:
+    if not _partner_enabled():
+        raise HTTPException(404, "Partner program disabled")
+    pool = await get_pool()
+    if not pool:
+        raise HTTPException(503, "Database not configured")
+    rows = await referral_admin_events(pool, limit=limit)
+    items = [
+        AdminReferralEventItem(
+            id=str(r["id"]),
+            event_type=r.get("event_type") or "",
+            stripe_event_id=r.get("stripe_event_id"),
+            user_email=r.get("user_email"),
+            referrer_email=r.get("referrer_email"),
+            invited_email=r.get("invited_email"),
+            metadata=r.get("metadata") or {},
+            created_at=r["created_at"].isoformat() if r.get("created_at") else "",
+        )
+        for r in rows
+    ]
+    return AdminReferralEventsResponse(items=items)
+
+
+async def _admin_update_commission_status(
+    admin_user: dict,
+    req: AdminReferralActionRequest,
+    *,
+    status: str,
+) -> dict[str, bool]:
+    if not _partner_enabled():
+        raise HTTPException(404, "Partner program disabled")
+    pool = await get_pool()
+    if not pool:
+        raise HTTPException(503, "Database not configured")
+    ok = await referral_admin_update_commission_status(
+        pool,
+        req.commission_id,
+        status=status,
+        reason=req.reason,
+        reviewer_user_id=str(admin_user["id"]),
+    )
+    if not ok:
+        raise HTTPException(404, "Commission not found")
+    return {"ok": True}
+
+
+@router.post("/admin/referrals/approve")
+async def api_admin_referral_approve(
+    req: AdminReferralActionRequest,
+    admin_user: dict = Depends(get_admin_user),
+) -> dict[str, bool]:
+    return await _admin_update_commission_status(admin_user, req, status="approved")
+
+
+@router.post("/admin/referrals/reject")
+async def api_admin_referral_reject(
+    req: AdminReferralActionRequest,
+    admin_user: dict = Depends(get_admin_user),
+) -> dict[str, bool]:
+    return await _admin_update_commission_status(admin_user, req, status="rejected")
+
+
+@router.post("/admin/referrals/hold")
+async def api_admin_referral_hold(
+    req: AdminReferralActionRequest,
+    admin_user: dict = Depends(get_admin_user),
+) -> dict[str, bool]:
+    return await _admin_update_commission_status(admin_user, req, status="hold")
+
+
+@router.post("/admin/referrals/block")
+async def api_admin_referral_block(
+    req: AdminReferralActionRequest,
+    admin_user: dict = Depends(get_admin_user),
+) -> dict[str, bool]:
+    return await _admin_update_commission_status(admin_user, req, status="blocked")
 
 
 @router.get("/history", response_model=HistoryResponse)

@@ -1,11 +1,26 @@
-import { useEffect, useState } from "react";
-import { getAdminUsers, type AdminUserOut } from "../../api";
+import { useCallback, useEffect, useState } from "react";
+import { getAdminUsers, patchAdminUserPartnerAccess, type AdminUserOut } from "../../api";
 import { t } from "../../i18n";
 
 export default function AdminUsers() {
   const [users, setUsers] = useState<AdminUserOut[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [savingId, setSavingId] = useState<string | null>(null);
+
+  const togglePartner = useCallback(async (u: AdminUserOut, enabled: boolean) => {
+    setSavingId(u.id);
+    try {
+      await patchAdminUserPartnerAccess(u.id, enabled);
+      setUsers((prev) =>
+        prev.map((x) => (x.id === u.id ? { ...x, partner_program_access: enabled } : x))
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSavingId(null);
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -69,6 +84,13 @@ export default function AdminUsers() {
                 <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
                   {t("admin.users.createdAt")}
                 </th>
+                <th
+                  scope="col"
+                  className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]"
+                  title={t("admin.users.partnerAccessHint")}
+                >
+                  {t("admin.users.partnerAccess")}
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#EBEDF5]">
@@ -90,6 +112,16 @@ export default function AdminUsers() {
                   </td>
                   <td className="px-4 py-3 text-sm text-[var(--text-tertiary)] tabular-nums">
                     {u.created_at ? new Date(u.created_at).toLocaleString() : "—"}
+                  </td>
+                  <td className="px-4 py-3">
+                    <input
+                      type="checkbox"
+                      checked={!!u.partner_program_access}
+                      disabled={savingId === u.id}
+                      onChange={(ev) => togglePartner(u, ev.target.checked)}
+                      className="h-4 w-4 rounded border-[#CBD5E1] text-[#4578FC] focus:ring-[#4578FC]"
+                      aria-label={`${t("admin.users.partnerAccess")} ${u.email}`}
+                    />
                   </td>
                 </tr>
               ))}

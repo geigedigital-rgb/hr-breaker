@@ -32,10 +32,35 @@ def get_job_parser_agent() -> Agent:
     )
 
 
-async def parse_job_posting(text: str) -> JobPosting:
+async def parse_job_posting(text: str, audit_user_id: str | None = None) -> JobPosting:
     """Parse job posting text into structured data."""
+    from hr_breaker.config import get_settings
+    from hr_breaker.services.db import get_pool
+    from hr_breaker.services.usage_audit import log_usage_event, tokens_from_run_result
+
     agent = get_job_parser_agent()
-    result = await agent.run(f"Parse this job posting:\n\n{text}")
-    job = result.output
-    job.raw_text = text
-    return job
+    settings = get_settings()
+    model = settings.gemini_flash_model
+    try:
+        result = await agent.run(f"Parse this job posting:\n\n{text}")
+        job = result.output
+        job.raw_text = text
+        if audit_user_id:
+            pool = await get_pool()
+            inp, out = tokens_from_run_result(result)
+            await log_usage_event(
+                pool, audit_user_id, "job_parse", model, input_tokens=inp, output_tokens=out
+            )
+        return job
+    except Exception as e:
+        if audit_user_id:
+            pool = await get_pool()
+            await log_usage_event(
+                pool,
+                audit_user_id,
+                "job_parse",
+                model,
+                success=False,
+                error_message=str(e)[:2000],
+            )
+        raise

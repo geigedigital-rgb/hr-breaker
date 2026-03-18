@@ -7,6 +7,8 @@ import {
   ShieldCheckIcon,
   AdjustmentsHorizontalIcon,
   ClockIcon,
+  UserPlusIcon,
+  CpuChipIcon,
 } from "@heroicons/react/24/outline";
 import { useAuth } from "./contexts/AuthContext";
 import { t } from "./i18n";
@@ -15,6 +17,8 @@ const adminNav = [
   { to: "/admin", end: true, label: t("admin.nav.dashboard"), icon: ChartBarIcon },
   { to: "/admin/users", end: false, label: t("admin.nav.users"), icon: UserGroupIcon },
   { to: "/admin/activity", end: false, label: t("admin.nav.activity"), icon: ClockIcon },
+  { to: "/admin/usage", end: false, label: t("admin.nav.usage"), icon: CpuChipIcon },
+  { to: "/admin/referrals", end: false, label: t("admin.nav.referrals"), icon: UserPlusIcon },
   { to: "/admin/config", end: false, label: t("admin.nav.config"), icon: AdjustmentsHorizontalIcon },
   { to: "/admin/app", end: false, label: t("admin.nav.app"), icon: Cog6ToothIcon },
 ];

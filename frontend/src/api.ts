@@ -404,25 +404,44 @@ export type AuthUser = {
   name: string | null;
   readiness?: Readiness | null;
   subscription?: Subscription | null;
+  partner_program_access?: boolean;
 };
 export type LoginResponse = { access_token: string; user: AuthUser };
 
-export async function login(email: string, password: string): Promise<LoginResponse> {
+export async function login(
+  email: string,
+  password: string,
+  referral?: { code?: string | null; source_url?: string | null }
+): Promise<LoginResponse> {
   const r = await fetch(`${API}/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({
+      email,
+      password,
+      referral_code: referral?.code ?? undefined,
+      referral_source_url: referral?.source_url ?? undefined,
+    }),
   });
   const data = await parseJsonOrThrow<LoginResponse & { detail?: string }>(r);
   if (!r.ok) throw new Error(data.detail || r.statusText);
   return data;
 }
 
-export async function register(email: string, password: string): Promise<LoginResponse> {
+export async function register(
+  email: string,
+  password: string,
+  referral?: { code?: string | null; source_url?: string | null }
+): Promise<LoginResponse> {
   const r = await fetch(`${API}/auth/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({
+      email,
+      password,
+      referral_code: referral?.code ?? undefined,
+      referral_source_url: referral?.source_url ?? undefined,
+    }),
   });
   const data = await parseJsonOrThrow<LoginResponse & { detail?: string }>(r);
   if (!r.ok) throw new Error(data.detail || r.statusText);
@@ -443,11 +462,20 @@ export function getGoogleLoginUrl(redirectUri?: string): string {
   return `${API}/auth/google?redirect_uri=${encodeURIComponent(redirectUri)}`;
 }
 
-export async function exchangeGoogleCode(code: string, redirectUri?: string): Promise<LoginResponse> {
+export async function exchangeGoogleCode(
+  code: string,
+  redirectUri?: string,
+  referral?: { code?: string | null; source_url?: string | null }
+): Promise<LoginResponse> {
   const r = await fetch(`${API}/auth/google/callback`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
-    body: JSON.stringify({ code, redirect_uri: redirectUri }),
+    body: JSON.stringify({
+      code,
+      redirect_uri: redirectUri,
+      referral_code: referral?.code ?? undefined,
+      referral_source_url: referral?.source_url ?? undefined,
+    }),
   });
   const data = await parseJsonOrThrow<LoginResponse & { detail?: string }>(r);
   if (!r.ok) throw new Error(data.detail || r.statusText);
@@ -540,6 +568,7 @@ export type AdminUserOut = {
   created_at: string;
   subscription_status?: string | null;
   subscription_plan?: string | null;
+  partner_program_access?: boolean;
 };
 
 export type AdminUsersResponse = { items: AdminUserOut[] };
@@ -595,4 +624,163 @@ export async function getAdminActivity(limit?: number): Promise<AdminActivityRes
   const data = await parseJsonOrThrow<AdminActivityResponse & { detail?: string }>(r);
   if (!r.ok) throw new Error(data.detail || r.statusText);
   return data;
+}
+
+export type AdminUsageAuditItem = {
+  id: string;
+  user_email: string | null;
+  action: string;
+  model: string | null;
+  success: boolean;
+  error_message: string | null;
+  input_tokens: number;
+  output_tokens: number;
+  metadata: Record<string, unknown>;
+  created_at: string;
+};
+
+export type AdminUsageAuditResponse = { items: AdminUsageAuditItem[] };
+
+export async function getAdminUsageAudit(limit?: number): Promise<AdminUsageAuditResponse> {
+  const sp = limit != null ? `?limit=${limit}` : "";
+  const r = await fetch(`${API}/admin/usage-audit${sp}`, { headers: authHeaders() });
+  const data = await parseJsonOrThrow<AdminUsageAuditResponse & { detail?: string }>(r);
+  if (!r.ok) throw new Error(data.detail || r.statusText);
+  return data;
+}
+
+export async function patchAdminUserPartnerAccess(
+  userId: string,
+  partner_program_access: boolean
+): Promise<{ ok: boolean }> {
+  const r = await fetch(`${API}/admin/users/${encodeURIComponent(userId)}/partner-access`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ partner_program_access }),
+  });
+  const data = await parseJsonOrThrow<{ ok?: boolean; detail?: string }>(r);
+  if (!r.ok) throw new Error(data.detail || r.statusText);
+  return { ok: true };
+}
+
+// --- Partner ---
+export type PartnerCommissionItem = {
+  invited_email: string | null;
+  amount_cents: number;
+  currency: string;
+  status: string;
+  created_at: string;
+  reason: string | null;
+};
+
+export type PartnerMeResponse = {
+  referral_link: string;
+  payout_threshold_cents: number;
+  eligible_cents: number;
+  paid_cents: number;
+  eligible_count: number;
+  pending_count: number;
+  paid_count: number;
+  rejected_count: number;
+  items: PartnerCommissionItem[];
+};
+
+export type PartnerTermsResponse = { items: string[] };
+export type PartnerLinkResponse = { code: string; referral_link: string };
+
+export async function getPartnerMe(): Promise<PartnerMeResponse> {
+  const r = await fetch(`${API}/partner/me`, { headers: authHeaders() });
+  const data = await parseJsonOrThrow<PartnerMeResponse & { detail?: string }>(r);
+  if (!r.ok) throw new Error(data.detail || r.statusText);
+  return data;
+}
+
+export async function createPartnerLink(): Promise<PartnerLinkResponse> {
+  const r = await fetch(`${API}/partner/link`, { method: "POST", headers: authHeaders() });
+  const data = await parseJsonOrThrow<PartnerLinkResponse & { detail?: string }>(r);
+  if (!r.ok) throw new Error(data.detail || r.statusText);
+  return data;
+}
+
+export async function getPartnerTerms(): Promise<PartnerTermsResponse> {
+  const r = await fetch(`${API}/partner/terms`, { headers: authHeaders() });
+  const data = await parseJsonOrThrow<PartnerTermsResponse & { detail?: string }>(r);
+  if (!r.ok) throw new Error(data.detail || r.statusText);
+  return data;
+}
+
+export type AdminReferralChainItem = {
+  id: string;
+  first_seen_at: string;
+  expires_at: string;
+  attribution_status: string;
+  attribution_reason: string | null;
+  code: string;
+  referrer_email: string | null;
+  invited_email: string | null;
+  commission_id: string | null;
+  amount_cents: number | null;
+  currency: string | null;
+  commission_status: string | null;
+  commission_reason: string | null;
+};
+
+export type AdminReferralChainsResponse = { items: AdminReferralChainItem[] };
+
+export type AdminReferralEventItem = {
+  id: string;
+  event_type: string;
+  stripe_event_id: string | null;
+  user_email: string | null;
+  referrer_email: string | null;
+  invited_email: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+};
+
+export type AdminReferralEventsResponse = { items: AdminReferralEventItem[] };
+
+export async function getAdminReferralChains(limit?: number): Promise<AdminReferralChainsResponse> {
+  const sp = limit != null ? `?limit=${limit}` : "";
+  const r = await fetch(`${API}/admin/referrals/chains${sp}`, { headers: authHeaders() });
+  const data = await parseJsonOrThrow<AdminReferralChainsResponse & { detail?: string }>(r);
+  if (!r.ok) throw new Error(data.detail || r.statusText);
+  return data;
+}
+
+export async function getAdminReferralEvents(limit?: number): Promise<AdminReferralEventsResponse> {
+  const sp = limit != null ? `?limit=${limit}` : "";
+  const r = await fetch(`${API}/admin/referrals/events${sp}`, { headers: authHeaders() });
+  const data = await parseJsonOrThrow<AdminReferralEventsResponse & { detail?: string }>(r);
+  if (!r.ok) throw new Error(data.detail || r.statusText);
+  return data;
+}
+
+async function adminReferralAction(
+  action: "approve" | "reject" | "hold" | "block",
+  commission_id: string,
+  reason?: string
+): Promise<void> {
+  const r = await fetch(`${API}/admin/referrals/${action}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ commission_id, reason }),
+  });
+  if (!r.ok) {
+    const data = await parseJsonOrThrow<{ detail?: string }>(r);
+    throw new Error(data.detail || r.statusText);
+  }
+}
+
+export function adminReferralApprove(commission_id: string, reason?: string): Promise<void> {
+  return adminReferralAction("approve", commission_id, reason);
+}
+export function adminReferralReject(commission_id: string, reason?: string): Promise<void> {
+  return adminReferralAction("reject", commission_id, reason);
+}
+export function adminReferralHold(commission_id: string, reason?: string): Promise<void> {
+  return adminReferralAction("hold", commission_id, reason);
+}
+export function adminReferralBlock(commission_id: string, reason?: string): Promise<void> {
+  return adminReferralAction("block", commission_id, reason);
 }
