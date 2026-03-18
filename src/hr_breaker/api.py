@@ -1896,14 +1896,27 @@ async def api_optimize_stream(req: OptimizeRequest, user: dict | None = Depends(
     )
 
 
-@router.get("/health", response_model=HealthResponse)
-async def api_health() -> HealthResponse:
-    """Check if DB is configured and reachable (DATABASE_URL)."""
+class HealthLiveResponse(BaseModel):
+    """Fast response for load balancers (Railway). Do not call DB here — first DB connect runs migrations and can exceed healthcheck timeout."""
+
+    ok: bool = True
+    service: str = "hr-breaker"
+
+
+@router.get("/health", response_model=HealthLiveResponse)
+async def api_health() -> HealthLiveResponse:
+    return HealthLiveResponse()
+
+
+@router.get("/health/db", response_model=HealthResponse)
+async def api_health_db() -> HealthResponse:
+    """Postgres reachability (can be slow on cold start while migrations run)."""
     settings = get_settings()
     if not (settings.database_url or "").strip():
         return HealthResponse(database="disabled", detail="DATABASE_URL not set")
     try:
         from hr_breaker.services.db import get_pool
+
         pool = await get_pool()
         if pool is None:
             return HealthResponse(database="error", detail="Pool not created (asyncpg missing or connection failed)")
@@ -1911,7 +1924,7 @@ async def api_health() -> HealthResponse:
             await conn.fetchval("SELECT 1")
         return HealthResponse(database="connected")
     except Exception as e:
-        logger.exception("Health check failed: %s", e)
+        logger.exception("Health DB check failed: %s", e)
         return HealthResponse(database="error", detail=str(e))
 
 
@@ -2429,19 +2442,24 @@ async def api_vacancies_search(
     return VacancySearchResponse(items=items, total=total, page=page, page_size=page_size)
 
 
-@app.on_event("startup")
-async def startup_seed_and_backfill() -> None:
-    """Ensure seed user exists and backfill user_id on existing resume records."""
-    pool = await get_pool()
-    if pool is None:
-        return
+async def _startup_seed_and_backfill() -> None:
+    """Runs after app listens — avoids Railway healthcheck timeout when DB connect/migrations are slow."""
     try:
+        pool = await get_pool()
+        if pool is None:
+            return
         user_id = await ensure_seed_user(pool)
         n = await backfill_user_id(pool, user_id)
         if n:
             logger.info("Backfilled %d history record(s) to user marichakgroup@gmail.com", n)
     except Exception as e:
         logger.exception("Startup seed/backfill failed: %s", e)
+
+
+@app.on_event("startup")
+async def startup_deferred_seed() -> None:
+    """Do not await DB here: Neon/asyncpg connect + migrations can exceed healthcheck window (503)."""
+    asyncio.create_task(_startup_seed_and_backfill())
 
 
 app.include_router(router)
