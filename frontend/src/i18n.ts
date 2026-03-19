@@ -50,7 +50,7 @@ const en = {
   },
   home: {
     resumeMatchScore: "Resume match score",
-    resumeMatchDesc: "See how well your resume fits the job. ATS score, keywords, and improvement tips in minutes.",
+    resumeMatchDesc: "Instantly check your resume vs a job description. Get a match score and fix what’s missing.",
     checkChance: "Check your interview chances",
     myResumes: "My resumes",
     myResumesDesc: "PDF resumes you've uploaded",
