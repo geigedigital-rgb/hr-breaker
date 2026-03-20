@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useId } from "react";
 import { useLocation, useNavigate, useSearchParams, Link } from "react-router-dom";
 import { Disclosure, DisclosureButton, DisclosurePanel, RadioGroup } from "@headlessui/react";
-import { SparklesIcon, ArrowUpTrayIcon, ArrowDownTrayIcon, ArrowPathIcon, BriefcaseIcon, ClipboardDocumentIcon, LinkIcon, ExclamationTriangleIcon, CheckCircleIcon, ArrowTopRightOnSquareIcon, LockClosedIcon } from "@heroicons/react/24/outline";
+import { SparklesIcon, ArrowUpTrayIcon, ArrowDownTrayIcon, ArrowPathIcon, BriefcaseIcon, ClipboardDocumentIcon, ExclamationTriangleIcon, CheckCircleIcon, LockClosedIcon } from "@heroicons/react/24/outline";
 import * as api from "../api";
 import { useAuth } from "../contexts/AuthContext";
 import { t } from "../i18n";
@@ -16,17 +16,6 @@ const SCRAPE_FAILED_PASTE_MARKER = "Paste";
 
 function isOfferPasteAsTextError(msg: string): boolean {
   return msg.includes(JOB_LIST_URL_MARKER) || msg.includes(SCRAPE_FAILED_PASTE_MARKER);
-}
-
-function isValidHttpUrl(value: string): boolean {
-  const trimmed = value.trim();
-  if (!trimmed) return false;
-  try {
-    const parsed = new URL(trimmed);
-    return (parsed.protocol === "http:" || parsed.protocol === "https:") && !!parsed.hostname;
-  } catch {
-    return false;
-  }
 }
 
 /** Shared block: resume thumbnail image. */
@@ -469,6 +458,36 @@ function BarScoreRow({ label, percent, compact }: { label: string; percent: numb
   );
 }
 
+function getRiskLevelLabel(riskPct: number): string {
+  const r = Math.max(0, Math.min(100, Math.round(riskPct)));
+  if (r >= 80) return "Critical";
+  if (r >= 60) return "High";
+  if (r >= 40) return "Elevated";
+  if (r >= 20) return "Moderate";
+  return "Low";
+}
+
+function MiniMetricRow({ label, percent }: { label: string; percent: number }) {
+  const pct = Math.max(0, Math.min(100, percent));
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-baseline justify-between gap-2">
+        <p className="text-[12px] font-medium text-[var(--text-muted)]">{label}</p>
+        <p className="text-[13px] font-semibold text-[#181819] tabular-nums">{Math.round(pct)}%</p>
+      </div>
+      <div className="h-1.5 rounded-full bg-[#E9EDF4] overflow-hidden">
+        <div
+          className="h-full rounded-full"
+          style={{
+            width: `${pct}%`,
+            background: "linear-gradient(90deg, #dc2626 0%, #f59e0b 22%, #16a34a 58%, #16a34a 100%)",
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
 const RESUME_SECTION_HEADERS = /^(SPRACHEN|KENNTNISSE|ERFAHRUNG|BILDUNG|PERSONLICHE\s+DATEN|EDUCATION|EXPERIENCE|SKILLS|SUMMARY|QUALIFICATIONS|ОПЫТ|ОБРАЗОВАНИЕ|НАВЫКИ|КОНТАКТЫ)$/i;
 
 function looksLikeSectionHeader(line: string): boolean {
@@ -812,7 +831,7 @@ function ScoreGauge({
   );
 }
 
-export { ScoreCard, ScoreGauge };
+export { CircleScore, BarScoreRow, ScoreCard, ScoreGauge };
 
 export default function Optimize() {
   const location = useLocation();
@@ -822,7 +841,7 @@ export default function Optimize() {
   const [resumeContent, setResumeContent] = useState("");
   const [resumeName, setResumeName] = useState<{ first?: string; last?: string } | null>(null);
   const [jobInput, setJobInput] = useState("");
-  const [jobMode, setJobMode] = useState<"url" | "text">("url");
+  const [jobMode, setJobMode] = useState<"url" | "text">("text");
   const [stage, setStage] = useState<Stage>("landing");
   const [result, setResult] = useState<api.OptimizeResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -839,7 +858,7 @@ export default function Optimize() {
   const [loadingHintIndex, setLoadingHintIndex] = useState(0);
   const [resumeSummaryFromApi, setResumeSummaryFromApi] = useState<api.ExtractResumeSummaryResponse | null>(null);
   const [isExtractingSummary, setIsExtractingSummary] = useState(false);
-  const [isFetchingJobUrl, _setIsFetchingJobUrl] = useState(false);
+  const [_isFetchingJobUrl, _setIsFetchingJobUrl] = useState(false);
   const [resumeInputMode, setResumeInputMode] = useState<"file" | "text">("file");
   const [resumeSourceWasPdf, setResumeSourceWasPdf] = useState(false);
   const [offerPasteAsText, setOfferPasteAsText] = useState(false);
@@ -854,7 +873,6 @@ export default function Optimize() {
 
   const plan = user?.subscription?.plan || "free";
   const subStatus = user?.subscription?.status || "free";
-  const canUseJobUrl = api.isAdminUser(user);
   const hasPaidPlan = (plan === "trial" || plan === "monthly") && (subStatus === "active" || subStatus === "trial");
   const freeAnalysesCount = user?.subscription?.free_analyses_count || 0;
   const canAnalyzeSubscription = hasPaidPlan || freeAnalysesCount < 1;
@@ -906,9 +924,7 @@ export default function Optimize() {
 
   const hasResume = !!resumeContent.trim();
   const hasJobInput = !!jobInput.trim();
-  const isValidJobUrl = jobMode !== "url" || isValidHttpUrl(jobInput);
-  const hasJob = hasJobInput && isValidJobUrl;
-  const showInvalidUrlHint = jobMode === "url" && hasJobInput && !isValidJobUrl;
+  const hasJob = hasJobInput;
   const canImprove = hasResume && hasJob && stage === "assessment" && result === null;
 
   // Сброс при неполных данных
@@ -932,16 +948,6 @@ export default function Optimize() {
   useEffect(() => {
     if (!resumeContent.trim()) setResumeSummaryFromApi(null);
   }, [resumeContent]);
-
-  // Job URL mode is admin-only in step 2. Non-admin users use text mode.
-  useEffect(() => {
-    if (!canUseJobUrl && jobMode === "url") {
-      setJobMode("text");
-      setJobInput("");
-      setParsedJob(null);
-      setOfferPasteAsText(false);
-    }
-  }, [canUseJobUrl, jobMode]);
 
   // Прокрутка к полю вакансии при показе подсказки «вставьте текстом»
   useEffect(() => {
@@ -1153,10 +1159,6 @@ export default function Optimize() {
 
   function handleStartScan() {
     if (!hasResume || !hasJob) return;
-    if (jobMode === "url" && !isValidJobUrl) {
-      setError(t("optimize.jobUrlInvalid"));
-      return;
-    }
     if (!canAnalyzeSubscription && user?.id !== "local") {
       setError("Free plan limit reached (1 scan). Please upgrade to a paid plan for unlimited ATS scans.");
       return;
@@ -1319,16 +1321,17 @@ export default function Optimize() {
         const resumeSummary = getResumeSummary(resumeContent, resumeName);
         const atsPct = result && atsValue != null ? atsValue : preScores?.ats_score ?? 0;
         const kwPct = result && keywordsValue != null ? Math.round(keywordsValue.score * 100) : preScores != null ? Math.round(preScores.keyword_score * 100) : 0;
-        const atsCat = result && atsValue != null ? getAtsCategory(atsValue) : preScores != null ? getAtsCategory(preScores.ats_score) : { category: "—", description: "" };
-        const kwCat = result && keywordsValue != null ? getKeywordsCategory(Math.round(keywordsValue.score * 100)) : preScores != null ? getKeywordsCategory(Math.round(preScores.keyword_score * 100)) : { category: "—", description: "" };
         const overallPct = Math.round((atsPct + kwPct) / 2);
+        const riskPct = preScores?.rejection_risk_score != null
+          ? Math.max(0, Math.min(100, Math.round(preScores.rejection_risk_score)))
+          : Math.max(0, 100 - overallPct);
         const skillsPct = preScores?.skills_score ?? kwPct;
         const experiencePct = preScores?.experience_score ?? atsPct;
         const portfolioPct = preScores?.portfolio_score ?? overallPct;
         const displayName = resumeSummaryFromApi?.full_name?.trim() || resumeSummary.name;
         const displaySpecialty = resumeSummaryFromApi?.specialty?.trim() || resumeSummary.specialty;
         const displaySkills = resumeSummaryFromApi?.skills?.trim() || resumeSummary.skillsLine;
-        return { atsPct, kwPct, atsCat, kwCat, overallPct, skillsPct, experiencePct, portfolioPct, displayName, displaySpecialty, displaySkills };
+        return { atsPct, kwPct, overallPct, riskPct, skillsPct, experiencePct, portfolioPct, displayName, displaySpecialty, displaySkills };
       })()
     : null;
   const scanResultParagraphs = summaryData
@@ -1336,7 +1339,7 @@ export default function Optimize() {
         aiTips: preScores?.improvement_tips,
         fallbackAts: getAtsCategory(summaryData.atsPct).description,
         fallbackKeywords: getKeywordsCategory(summaryData.kwPct).description,
-        addImproveNotice: summaryData.overallPct < 60,
+        addImproveNotice: summaryData.riskPct > 45 || summaryData.overallPct < 60,
       })
     : [];
 
@@ -1377,47 +1380,32 @@ export default function Optimize() {
               </div>
             </div>
           </div>
-          {/* ATS + Ключевые слова + Общий балл + Skills / Experience / Portfolio */}
+          {/* Rejection risk (primary) + compact Skills/Experience/Portfolio */}
           <div className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-4 sm:p-6 flex flex-col gap-2.5 min-h-0 min-w-0">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 min-h-0 min-w-0">
-              <div className="flex flex-col gap-1 min-w-0 min-h-0">
-                <p className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider shrink-0 mb-1">ATS match</p>
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <CircleScore percent={summaryData.atsPct} size={44} />
-                  <div className="flex flex-col gap-0 min-w-0">
-                    <p className="text-lg font-bold text-[#181819] tabular-nums">{Math.round(summaryData.atsPct)}%</p>
-                    <p className="text-[11px] text-[var(--text-tertiary)] leading-tight">{summaryData.atsCat.category}</p>
-                  </div>
-                </div>
-              </div>
-              <div className="flex flex-col gap-1 min-w-0 min-h-0">
-                <p className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider shrink-0 mb-1">{t("optimize.keywords")}</p>
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <CircleScore percent={summaryData.kwPct} size={44} />
-                  <div className="flex flex-col gap-0 min-w-0">
-                    <p className="text-lg font-bold text-[#181819] tabular-nums">{Math.round(summaryData.kwPct)}%</p>
-                    <p className="text-[11px] text-[var(--text-tertiary)] leading-tight">{summaryData.kwCat.category}</p>
-                  </div>
-                </div>
-              </div>
-              <div className="flex flex-col gap-1 min-w-0 min-h-0">
-                <p className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider shrink-0 mb-1">{t("optimize.overallMatchScore")}</p>
-                <div className="flex items-center gap-2.5 min-w-0 w-full">
-                  <CircleScore percent={summaryData.overallPct} size={40} />
-                  <div className="flex flex-col gap-0 min-w-0">
-                    <p className="text-lg font-bold text-[#181819] tabular-nums">{summaryData.overallPct}%</p>
-                    <p className="text-[11px] text-[var(--text-tertiary)] leading-tight">
-                      {summaryData.overallPct <= 55 ? t("optimize.highRiskRejection") : summaryData.overallPct <= 75 ? t("optimize.mediumChancesScreening") : t("optimize.highChancesPassing")}
+            <div className="rounded-xl bg-white border border-[#ECEFF5] p-3.5 sm:p-4.5">
+              <div className="flex flex-col lg:flex-row lg:items-center gap-4 lg:gap-6">
+                <div className="flex items-center gap-3 sm:gap-4 lg:min-w-[290px]">
+                  <CircleScore percent={100 - summaryData.riskPct} size={92} />
+                  <div>
+                    <p className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider">
+                      Rejection risk ({getRiskLevelLabel(summaryData.riskPct)})
+                    </p>
+                    <p className="mt-1 text-[30px] leading-none font-bold text-[#181819] tabular-nums">
+                      {summaryData.riskPct}%
+                    </p>
+                    <p className="mt-1 text-[11px] text-[var(--text-tertiary)] leading-relaxed max-w-[320px]">
+                      {summaryData.riskPct >= 45
+                        ? "Without applying recommendations, rejection risk remains high."
+                        : "Resume aligns better with the vacancy and rejection risk is reduced."}
                     </p>
                   </div>
                 </div>
+                <div className="flex-1 lg:max-w-[280px] space-y-3">
+                  <MiniMetricRow label="Skills" percent={summaryData.skillsPct} />
+                  <MiniMetricRow label="Experience" percent={summaryData.experiencePct} />
+                  <MiniMetricRow label="Portfolio" percent={summaryData.portfolioPct} />
+                </div>
               </div>
-            </div>
-            <div className="border-t border-[#EBEDF5] pt-2" role="separator" />
-            <div className="flex flex-col sm:flex-row sm:items-end gap-2.5 sm:gap-3">
-              <BarScoreRow label="Skills" percent={summaryData.skillsPct} compact />
-              <BarScoreRow label="Experience" percent={summaryData.experiencePct} compact />
-              <BarScoreRow label="Portfolio" percent={summaryData.portfolioPct} compact />
             </div>
           </div>
           {/* Расшифровка резюме */}
@@ -1934,23 +1922,10 @@ export default function Optimize() {
                       <BriefcaseIcon className="w-3.5 h-3.5 text-[#4578FC]" aria-hidden />
                     </span>
                     <strong className="text-sm font-semibold text-[#181819] truncate min-w-0 max-w-[50vw]" title={jobInput.trim()}>
-                      {jobMode === "url" ? jobInput.trim() : jobInput.trim().slice(0, 60) + (jobInput.trim().length > 60 ? "…" : "")}
+                      {jobInput.trim().slice(0, 60) + (jobInput.trim().length > 60 ? "…" : "")}
                     </strong>
                   </div>
                   {(() => {
-                    const hasStructured = parsedJob && (parsedJob.title || parsedJob.company || parsedJob.requirements?.length || parsedJob.description);
-                    const isPreviewLoading = jobMode === "url" && isFetchingJobUrl;
-                    if (isPreviewLoading) {
-                      return (
-                        <div className="relative flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 w-full">
-                          <p className="text-xs text-[var(--text-tertiary)] min-w-0">{t("optimize.loadingJob")}</p>
-                          <span className="absolute left-0 top-2 h-4 w-4 border-2 border-[#EBEDF5] border-t-[#4578FC] rounded-full animate-spin sm:static sm:order-last" aria-hidden />
-                        </div>
-                      );
-                    }
-                    if (jobMode === "url" && !hasStructured) {
-                      return null;
-                    }
                     return (
                       <JobPreviewContent parsedJob={parsedJob} rawText={jobInput} isParsing={false} />
                     );
@@ -2004,74 +1979,16 @@ export default function Optimize() {
                       </p>
                     </div>
                   )}
-                  <div className="flex flex-wrap gap-2">
-                    {canUseJobUrl && (
-                      <button
-                        type="button"
-                        onClick={() => { setJobMode("url"); setOfferPasteAsText(false); }}
-                        className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-xl transition-colors focus:outline-none focus:ring-2 focus:ring-[#4578FC]/30 focus:ring-offset-2 focus:ring-offset-[#F5F6FA] ${
-                          jobMode === "url"
-                            ? "bg-[#4578FC]/12 text-[#4578FC] hover:bg-[#4578FC]/18"
-                            : "bg-[#EBEDF5] text-[#181819] hover:bg-[#E0E4EE]"
-                        }`}
-                        title={t("optimize.pasteJobLinkTitle")}
-                      >
-                        <LinkIcon className="w-4 h-4 shrink-0" aria-hidden />
-                        Link
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => { setJobMode("text"); setOfferPasteAsText(false); }}
-                      className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-xl transition-colors focus:outline-none focus:ring-2 focus:ring-[#4578FC]/30 focus:ring-offset-2 focus:ring-offset-[#F5F6FA] ${
-                        jobMode === "text"
-                          ? "bg-[#4578FC]/12 text-[#4578FC] hover:bg-[#4578FC]/18"
-                          : "bg-[#EBEDF5] text-[#181819] hover:bg-[#E0E4EE]"
-                      }`}
-                      title={t("optimize.pasteJobTextTitle")}
-                    >
-                      <ClipboardDocumentIcon className="w-4 h-4 shrink-0" aria-hidden />
-                      Text
-                    </button>
-                  </div>
-                  {jobMode === "url" ? (
-                    <div className="space-y-2">
-                      <div className={`flex items-center gap-3 w-full rounded-full border bg-white px-4 py-3 text-left shadow-sm focus-within:ring-2 focus-within:border-[#4578FC]/40 ${showInvalidUrlHint ? "border-red-300 focus-within:ring-red-200/70" : "border-[#d1d5db] focus-within:ring-[#4578FC]/25"}`}>
-                        <LinkIcon className="w-5 h-5 shrink-0 text-[#6b7280]" aria-hidden />
-                        <input
-                          type="url"
-                          value={jobInput}
-                          onChange={(e) => {
-                            setJobInput(e.target.value);
-                            setError(null);
-                            if (e.target.value.trim().length > 100) setOfferPasteAsText(false);
-                          }}
-                          placeholder={t("optimize.pasteJobLinkPlaceholder")}
-                          className="flex-1 min-w-0 bg-transparent text-sm text-[#181819] placeholder:text-[#9ca3af] focus:outline-none"
-                          aria-describedby={showInvalidUrlHint ? "job-url-invalid-hint" : offerPasteAsText ? "paste-job-hint" : undefined}
-                        />
-                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#f3f4f6] text-[#6b7280]" aria-hidden>
-                          <ArrowTopRightOnSquareIcon className="w-4 h-4" />
-                        </span>
-                      </div>
-                      {showInvalidUrlHint && (
-                        <p id="job-url-invalid-hint" className="text-xs text-red-600">
-                          {t("optimize.jobUrlInvalid")}
-                        </p>
-                      )}
-                    </div>
-                  ) : (
-                    <textarea
-                      value={jobInput}
-                      onChange={(e) => {
-                        setJobInput(e.target.value);
-                        if (e.target.value.trim().length > 100) setOfferPasteAsText(false);
-                      }}
-                      placeholder={t("optimize.jobTextPlaceholder")}
-                      className="w-full min-h-[7rem] rounded-xl border border-[#EBEDF5] bg-white px-4 py-3 text-sm text-[#181819] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-2 focus:ring-[#4578FC]/25 focus:border-[#4578FC]/40 resize-none"
-                      aria-describedby={offerPasteAsText ? "paste-job-hint" : undefined}
-                    />
-                  )}
+                  <textarea
+                    value={jobInput}
+                    onChange={(e) => {
+                      setJobInput(e.target.value);
+                      if (e.target.value.trim().length > 100) setOfferPasteAsText(false);
+                    }}
+                    placeholder={t("optimize.jobTextPlaceholder")}
+                    className="w-full min-h-[7rem] rounded-xl border border-[#EBEDF5] bg-white px-4 py-3 text-sm text-[#181819] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-2 focus:ring-[#4578FC]/25 focus:border-[#4578FC]/40 resize-none"
+                    aria-describedby={offerPasteAsText ? "paste-job-hint" : undefined}
+                  />
                 </div>
               )}
               </div>

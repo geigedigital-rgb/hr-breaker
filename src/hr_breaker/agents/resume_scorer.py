@@ -2,7 +2,7 @@
 
 from functools import lru_cache
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from pydantic_ai import Agent
 
 from hr_breaker.config import get_model_settings, get_settings
@@ -85,15 +85,30 @@ class BreakdownScores(BaseModel):
     skills: int  # match of skills/keywords to job
     experience: int  # relevance of work experience to job
     portfolio: int  # projects, achievements, certifications relevance
+    rejection_risk_score: int  # 0-100, where 100 means very high rejection risk
+    critical_issues: list[str] = Field(default_factory=list)  # 1-2 short issues that drive rejection risk
+    risk_summary: str | None = None  # short plain-language explanation of the risk
     improvement_tips: str | None = None  # optional: short text with headers and tips for better match
 
 
-BREAKDOWN_SYSTEM = """You are an ATS analyst. Given a resume (plain text) and a job posting summary, output three independent scores 0-100 and optional improvement tips.
+BREAKDOWN_SYSTEM = """You are an ATS analyst. Given a resume (plain text) and a job posting summary, output independent scores and risk analysis.
 
 SCORES (required, integers 0-100):
 - skills: How well the resume's skills and keywords match the job requirements (tools, technologies, methodologies).
 - experience: How relevant the candidate's work experience is to the role (titles, domains, seniority).
 - portfolio: How well projects, achievements, certifications, or education match what the job values.
+- rejection_risk_score: Probability of rejection at screening stage (0-100). Higher means worse.
+
+RISK CONSISTENCY RULES (required):
+- If there are critical gaps (missing core skills, missing quantified impact, weak role relevance), rejection_risk_score MUST be elevated.
+- If you output critical_issues, rejection_risk_score should usually not be low.
+- Very low risk (<30) is only valid when resume is strongly aligned across skills, experience and portfolio.
+
+CRITICAL ISSUES (required, list of 1-2 short strings):
+- Provide the top issues that most likely cause rejection. Each issue should be short and concrete.
+
+RISK SUMMARY (optional, short string):
+- One concise sentence explaining the current rejection risk and why.
 
 IMPROVEMENT_TIPS (optional): If the resume could be improved for this job, provide a short text (2-4 blocks). Each block: a clear header (e.g. "Keywords", "Experience", "Structure") and 1-2 short sentences with concrete tips for better match. Use line breaks between blocks. Write improvement_tips in the language specified in the user message (default: English). If the resume is already an excellent match (scores high), you may leave improvement_tips empty or null.
 
@@ -117,7 +132,7 @@ async def get_breakdown_scores(
     output_language: str | None = None,
     audit_user_id: str | None = None,
 ) -> BreakdownScores:
-    """Return independent Skills, Experience, Portfolio scores 0-100 and optional improvement_tips from LLM.
+    """Return independent Skills/Experience/Portfolio and rejection-risk fields from LLM.
     output_language: e.g. 'en', 'ru'. Default English. Used for improvement_tips text."""
     from hr_breaker.services.db import get_pool
     from hr_breaker.services.usage_audit import log_usage_event, tokens_from_run_result
@@ -148,6 +163,11 @@ async def get_breakdown_scores(
     tips = getattr(out, "improvement_tips", None)
     if isinstance(tips, str):
         tips = tips.strip() or None
+    risk_summary = getattr(out, "risk_summary", None)
+    if isinstance(risk_summary, str):
+        risk_summary = risk_summary.strip() or None
+    critical_issues = [str(x).strip() for x in (getattr(out, "critical_issues", None) or []) if str(x).strip()]
+    critical_issues = critical_issues[:2]
     if audit_user_id:
         pool = await get_pool()
         inp, out_tok = tokens_from_run_result(result)
@@ -158,5 +178,8 @@ async def get_breakdown_scores(
         skills=max(0, min(100, out.skills)),
         experience=max(0, min(100, out.experience)),
         portfolio=max(0, min(100, out.portfolio)),
+        rejection_risk_score=max(0, min(100, out.rejection_risk_score)),
+        critical_issues=critical_issues,
+        risk_summary=risk_summary,
         improvement_tips=tips,
     )

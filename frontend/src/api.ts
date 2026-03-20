@@ -204,6 +204,12 @@ export type AnalyzeResponse = {
   skills_score?: number | null;
   experience_score?: number | null;
   portfolio_score?: number | null;
+  /** LLM-provided rejection risk 0-100 */
+  rejection_risk_score?: number | null;
+  /** Top reasons that drive rejection risk */
+  critical_issues?: string[];
+  /** One-line explanation for rejection risk */
+  risk_summary?: string | null;
   /** LLM-generated tips with headers for recommendations block */
   improvement_tips?: string | null;
 };
