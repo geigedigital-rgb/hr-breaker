@@ -21,6 +21,7 @@ import AdminConfig from "./pages/admin/AdminConfig";
 import AdminActivity from "./pages/admin/AdminActivity";
 import AdminUsage from "./pages/admin/AdminUsage";
 import AdminReferrals from "./pages/admin/AdminReferrals";
+import AdminVisualTest from "./pages/admin/AdminVisualTest";
 import { t } from "./i18n";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -108,6 +109,7 @@ function App() {
               <Route path="referrals" element={<AdminReferrals />} />
               <Route path="config" element={<AdminConfig />} />
               <Route path="app" element={<AdminApp />} />
+              <Route path="visual" element={<AdminVisualTest />} />
             </Route>
           </Routes>
         </AuthProvider>

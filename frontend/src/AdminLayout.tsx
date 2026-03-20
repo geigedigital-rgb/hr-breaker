@@ -10,6 +10,7 @@ import {
   ClockIcon,
   UserPlusIcon,
   CpuChipIcon,
+  SwatchIcon,
   Bars3Icon,
   XMarkIcon,
 } from "@heroicons/react/24/outline";
@@ -24,6 +25,7 @@ const adminNav = [
   { to: "/admin/referrals", end: false, label: t("admin.nav.referrals"), icon: UserPlusIcon },
   { to: "/admin/config", end: false, label: t("admin.nav.config"), icon: AdjustmentsHorizontalIcon },
   { to: "/admin/app", end: false, label: t("admin.nav.app"), icon: Cog6ToothIcon },
+  { to: "/admin/visual", end: false, label: t("admin.nav.visual"), icon: SwatchIcon },
 ];
 
 export default function AdminLayout() {

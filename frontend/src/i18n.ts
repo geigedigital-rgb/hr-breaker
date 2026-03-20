@@ -376,6 +376,7 @@ const en = {
       activity: "Activity",
       usage: "Usage & LLM",
       referrals: "Referrals",
+      visual: "Visual Sandbox",
     },
     dashboard: {
       title: "Overview",

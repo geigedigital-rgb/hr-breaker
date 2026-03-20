@@ -204,6 +204,10 @@ class AnalyzeResponse(BaseModel):
     skills_score: int | None = None
     experience_score: int | None = None
     portfolio_score: int | None = None
+    # LLM-provided rejection risk 0-100 and top critical reasons
+    rejection_risk_score: int | None = None
+    critical_issues: list[str] = Field(default_factory=list)
+    risk_summary: str | None = None
     improvement_tips: str | None = None  # LLM-generated tips with headers for "recommendations" block
 
 
@@ -1217,6 +1221,13 @@ async def api_landing_analyze(
         has_requirements=bool(job.requirements),
     )
     logger.info("Landing analyze OK ip=%s ats=%s", ip, ats_score)
+    risk_score = _normalize_rejection_risk(
+        model_risk=breakdown.rejection_risk_score,
+        critical_issues=breakdown.critical_issues,
+        ats_score=ats_score,
+        keyword_score=kw_result.score,
+        keyword_threshold=settings.filter_keyword_threshold,
+    )
     return AnalyzeResponse(
         ats_score=ats_score,
         keyword_score=kw_result.score,
@@ -1226,6 +1237,9 @@ async def api_landing_analyze(
         skills_score=breakdown.skills,
         experience_score=breakdown.experience,
         portfolio_score=breakdown.portfolio,
+        rejection_risk_score=risk_score,
+        critical_issues=breakdown.critical_issues,
+        risk_summary=breakdown.risk_summary,
         improvement_tips=breakdown.improvement_tips,
     )
 
@@ -1510,6 +1524,30 @@ def _build_recommendations(
     ]
 
 
+def _normalize_rejection_risk(
+    model_risk: int,
+    critical_issues: list[str],
+    ats_score: int,
+    keyword_score: float,
+    keyword_threshold: float,
+) -> int:
+    """Keep LLM risk consistent with critical gaps and base ATS/keyword signals."""
+    risk = max(0, min(100, int(model_risk)))
+    issues_count = len([x for x in critical_issues if str(x).strip()])
+    floors: list[int] = []
+    if issues_count >= 1:
+        floors.append(45)
+    if issues_count >= 2:
+        floors.append(55)
+    if ats_score < 70 or keyword_score < keyword_threshold:
+        floors.append(45)
+    if ats_score < 60 or keyword_score < max(0.55, keyword_threshold - 0.1):
+        floors.append(60)
+    if floors:
+        risk = max(risk, max(floors))
+    return risk
+
+
 @router.post("/analyze", response_model=AnalyzeResponse)
 async def api_analyze(req: AnalyzeRequest, user: dict | None = Depends(get_optional_user)) -> AnalyzeResponse:
     """Pre-assessment: score current resume vs job (ATS + keywords) before optimization."""
@@ -1598,6 +1636,13 @@ async def api_analyze(req: AnalyzeRequest, user: dict | None = Depends(get_optio
         pool = await get_pool()
         if pool:
             await user_increment_readiness(pool, str(user["id"]), delta=READINESS_DELTA_ANALYSIS)
+    risk_score = _normalize_rejection_risk(
+        model_risk=breakdown.rejection_risk_score,
+        critical_issues=breakdown.critical_issues,
+        ats_score=ats_score,
+        keyword_score=kw_result.score,
+        keyword_threshold=settings.filter_keyword_threshold,
+    )
     return AnalyzeResponse(
         ats_score=ats_score,
         keyword_score=kw_result.score,
@@ -1607,6 +1652,9 @@ async def api_analyze(req: AnalyzeRequest, user: dict | None = Depends(get_optio
         skills_score=breakdown.skills,
         experience_score=breakdown.experience,
         portfolio_score=breakdown.portfolio,
+        rejection_risk_score=risk_score,
+        critical_issues=breakdown.critical_issues,
+        risk_summary=breakdown.risk_summary,
         improvement_tips=breakdown.improvement_tips,
     )
 
