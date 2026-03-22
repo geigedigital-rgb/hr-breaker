@@ -1,12 +1,10 @@
 import { useMemo, useState, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { Disclosure, DisclosureButton, DisclosurePanel, RadioGroup } from "@headlessui/react";
+import { Disclosure, DisclosureButton, DisclosurePanel } from "@headlessui/react";
 import {
   SparklesIcon,
   ArrowDownTrayIcon,
   ChevronDownIcon,
-  ChevronUpIcon,
-  PaperAirplaneIcon,
   PlusIcon,
   PuzzlePieceIcon,
   ChatBubbleLeftEllipsisIcon,
@@ -14,8 +12,6 @@ import {
   ArrowUpIcon,
   DocumentTextIcon,
   CodeBracketIcon,
-  DevicePhoneMobileIcon,
-  PaintBrushIcon,
   EllipsisHorizontalIcon,
 } from "@heroicons/react/24/outline";
 import { t } from "../../i18n";
@@ -238,7 +234,6 @@ function MiniMetricRow({ label, percent }: { label: string; percent: number }) {
 
 export default function AdminVisualTest() {
   const [viewMode, setViewMode] = useState<ViewMode>("both");
-  const [aggressiveTailoring, setAggressiveTailoring] = useState(false);
 
   const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
   const [mockThumbUrl, setMockThumbUrl] = useState<string | null>(null);
@@ -249,11 +244,14 @@ export default function AdminVisualTest() {
     // Fetch a real thumbnail from history to use as mock
     const token = api.getStoredToken();
     if (token) {
-      api.getHistory(token).then((res) => {
-        if (res.documents && res.documents.length > 0) {
-          setMockThumbUrl(api.historyThumbnailUrl(res.documents[0].filename, token));
-        }
-      }).catch(() => {});
+      api
+        .getHistory()
+        .then((res) => {
+          if (res.items?.length) {
+            setMockThumbUrl(api.historyThumbnailUrl(res.items[0].filename, token));
+          }
+        })
+        .catch(() => {});
     }
   }, []);
 
@@ -271,7 +269,6 @@ export default function AdminVisualTest() {
   );
 
   const topIssues = problemLabels.slice(0, 2);
-  const badLabelsCount = problemLabels.length;
   const scanSummaryText =
     "The current resume looks acceptable at first glance, but key proof points are missing. This is why responses stay low.";
 
