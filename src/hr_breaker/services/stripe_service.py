@@ -34,6 +34,60 @@ def _stripe():
     return stripe
 
 
+def _validate_trial_prices(stripe_mod, monthly_price_id: str, trial_price_id: str) -> None:
+    """
+    Fail fast with a clear message before Checkout Session.create.
+
+    Stripe requires STRIPE_PRICE_TRIAL_ID to be one-time; currencies of monthly + trial must match.
+    """
+    try:
+        mp = stripe_mod.Price.retrieve(monthly_price_id)
+        tp = stripe_mod.Price.retrieve(trial_price_id)
+    except stripe_mod.StripeError as e:
+        raise ValueError(
+            f"Could not load Stripe prices (check IDs and STRIPE_SECRET_KEY test/live mode): {e}"
+        ) from e
+
+    m_type = getattr(mp, "type", None) or ""
+    t_type = getattr(tp, "type", None) or ""
+    if t_type != "one_time":
+        raise ValueError(
+            f"STRIPE_PRICE_TRIAL_ID ({trial_price_id}) must be a One-time price in Stripe; "
+            f"current type is {t_type!r}. Recreate the price as One-off."
+        )
+    if m_type != "recurring":
+        raise ValueError(
+            f"STRIPE_PRICE_MONTHLY_ID ({monthly_price_id}) must be a Recurring price; "
+            f"current type is {m_type!r}."
+        )
+    mc = (getattr(mp, "currency", None) or "").lower()
+    tc = (getattr(tp, "currency", None) or "").lower()
+    if mc != tc:
+        raise ValueError(
+            f"Currency mismatch: monthly price is {mc.upper()}, trial price is {tc.upper()}. "
+            "Create the $2.99 one-time price in the same currency as the monthly subscription."
+        )
+
+
+def _stripe_error_detail(exc: BaseException) -> str:
+    """Human-readable Stripe API error for API responses / logs."""
+    parts: list[str] = [str(exc).strip() or type(exc).__name__]
+    code = getattr(exc, "code", None)
+    if code:
+        parts.append(f"code={code}")
+    json_body = getattr(exc, "json_body", None)
+    if isinstance(json_body, dict):
+        err = json_body.get("error")
+        if isinstance(err, dict):
+            msg = err.get("message")
+            if msg and msg not in parts[0]:
+                parts.append(str(msg))
+            ptype = err.get("type")
+            if ptype and f"type={ptype}" not in " ".join(parts):
+                parts.append(f"type={ptype}")
+    return " | ".join(parts)
+
+
 def get_price_id(price_key: str) -> str:
     settings = get_settings()
     if price_key == PRICE_KEY_TRIAL:
@@ -96,8 +150,16 @@ async def create_checkout_session(
                 "webhook after success (fragile). Add a one-time $2.99 Price and set STRIPE_PRICE_TRIAL_ID."
             )
         session_params["subscription_data"] = sub_data
-    session = stripe.checkout.Session.create(**session_params)
-    return session.url or ""
+        if trial_fee_price:
+            _validate_trial_prices(stripe, price_id, trial_fee_price)
+
+    try:
+        session = stripe.checkout.Session.create(**session_params)
+        return session.url or ""
+    except stripe.StripeError as e:
+        detail = _stripe_error_detail(e)
+        logger.error("Stripe Checkout Error: %s", detail)
+        raise ValueError(f"Stripe Checkout: {detail}") from e
 
 
 def construct_event(payload: bytes, sig_header: str) -> object:

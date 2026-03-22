@@ -833,6 +833,12 @@ function ScoreGauge({
 
 export { CircleScore, BarScoreRow, ScoreCard, ScoreGauge };
 
+/** True on first paint if URL has ?pending= (landing → login → optimize flow). */
+function pendingTokenInUrl(): boolean {
+  if (typeof window === "undefined") return false;
+  return Boolean(new URLSearchParams(window.location.search).get("pending"));
+}
+
 export default function Optimize() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -842,7 +848,9 @@ export default function Optimize() {
   const [resumeName, setResumeName] = useState<{ first?: string; last?: string } | null>(null);
   const [jobInput, setJobInput] = useState("");
   const [jobMode, setJobMode] = useState<"url" | "text">("text");
-  const [stage, setStage] = useState<Stage>("landing");
+  /** Until claim finishes, don't reset stage to idle (avoids hero flash + broken state). */
+  const [claimGate, setClaimGate] = useState(pendingTokenInUrl);
+  const [stage, setStage] = useState<Stage>(() => (pendingTokenInUrl() ? "scanning" : "landing"));
   const [result, setResult] = useState<api.OptimizeResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -901,10 +909,13 @@ export default function Optimize() {
         setResult(null);
         setError(null);
         setStage("scanning");
+        setClaimGate(false);
       })
       .catch((e) => {
         setError(e instanceof Error ? e.message : t("optimize.claimError"));
         claimedPendingRef.current = null;
+        setClaimGate(false);
+        setStage("idle");
       });
   }, [pendingToken, user, setSearchParams]);
 
@@ -927,14 +938,15 @@ export default function Optimize() {
   const hasJob = hasJobInput;
   const canImprove = hasResume && hasJob && stage === "assessment" && result === null;
 
-  // Сброс при неполных данных
+  // Сброс при неполных данных (не трогаем пока ждём claim с лендинга)
   useEffect(() => {
     if (!hasResume || !hasJob) {
+      if (claimGate) return;
       if (stage !== "landing" && stage !== "idle") {
         setStage("idle");
       }
     }
-  }, [hasResume, hasJob, stage]);
+  }, [hasResume, hasJob, stage, claimGate]);
 
   // После загрузки файла резюме — сразу прокрутить к шагу 2
   useEffect(() => {
@@ -975,7 +987,8 @@ export default function Optimize() {
   const SCAN_DURATION_MS = 1800;
   const SCAN_TICK_MS = 80;
   useEffect(() => {
-    if (stage !== "scanning") return;
+    // Не запускаем таймер до данных с лендинга — иначе уйдём в assessment до claim/analyze
+    if (stage !== "scanning" || !hasResume || !hasJob) return;
     setScanProgress(0);
     const step = (100 * SCAN_TICK_MS) / SCAN_DURATION_MS;
     const interval = setInterval(() => {
@@ -993,7 +1006,7 @@ export default function Optimize() {
       clearTimeout(t);
       clearInterval(interval);
     };
-  }, [stage]);
+  }, [stage, hasResume, hasJob]);
 
   // Запуск анализа сразу при входе в «Сканирование»; при размонтировании (перезагрузка) — не обновляем state
   const analyzeMountedRef = useRef(true);
@@ -1287,7 +1300,10 @@ export default function Optimize() {
     experience: normalizeScorePercent(preScores?.experience_score),
     portfolio: normalizeScorePercent(preScores?.portfolio_score),
   });
-  const isLoadingAssessment = stage === "scanning" || (stage === "assessment" && preScores == null);
+  /** Ждём claim `/landing/claim` после ?pending= — показываем лоадер вместо hero */
+  const awaitingLandingClaim = stage === "scanning" && claimGate && (!hasResume || !hasJob);
+  const isLoadingAssessment =
+    awaitingLandingClaim || stage === "scanning" || (stage === "assessment" && preScores == null);
   const badLabelsCount = recommendationGroups.reduce((acc, group) => {
     return acc + group.labels.filter((label) => !isPositiveRecommendationLabel(label)).length;
   }, 0);
@@ -1809,39 +1825,40 @@ export default function Optimize() {
                       aria-hidden
                     />
                     <div className="relative p-6 flex flex-col items-center gap-4 flex-1 justify-center">
-                      <div className="rounded-full bg-white/90 border border-[#4578FC]/20 p-3 shadow-sm" aria-hidden>
+                      <div className="hidden sm:flex rounded-full bg-white/90 border border-[#4578FC]/20 p-3 shadow-sm" aria-hidden>
                         <ArrowUpTrayIcon className="w-8 h-8 text-[#4578FC]" />
                       </div>
-                      <p className="text-[13px] sm:text-sm font-bold text-[#181819] uppercase tracking-wide">
+                      <p className="hidden sm:block text-[13px] sm:text-sm font-bold text-[#181819] uppercase tracking-wide">
                         {t("optimize.dragHere")}
                       </p>
-                      <p className="text-xs text-[var(--text-tertiary)]">
+                      <p className="hidden sm:block text-xs text-[var(--text-tertiary)]">
                         {t("optimize.orFormats")}
                       </p>
-                      <div className="flex flex-wrap justify-center gap-2">
+                      <div className="flex flex-col sm:flex-row flex-wrap justify-center gap-3 sm:gap-2 w-full sm:w-auto mt-2 sm:mt-0">
                         <button
                           type="button"
                           onClick={() => { setResumeInputMode("file"); fileInputRef.current?.click(); }}
-                          className={`inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-xl transition-colors focus:outline-none focus:ring-2 focus:ring-[#4578FC]/50 focus:ring-offset-2 ${
+                          className={`inline-flex justify-center items-center gap-2 px-4 py-3 sm:px-3 sm:py-2 text-base sm:text-sm font-medium rounded-xl transition-colors focus:outline-none focus:ring-2 focus:ring-[#4578FC]/50 focus:ring-offset-2 w-full sm:w-auto ${
                             resumeInputMode === "file"
                               ? "bg-[#4578FC]/15 text-[#4578FC] border border-[#4578FC]/50 hover:bg-[#4578FC]/25"
                               : "border border-[#b8bed0] bg-white text-[var(--text)] hover:bg-[#F5F6FA]"
                           }`}
                         >
-                          <ArrowUpTrayIcon className="w-4 h-4 shrink-0" aria-hidden />
-                          File
+                          <ArrowUpTrayIcon className="w-5 h-5 sm:w-4 sm:h-4 shrink-0" aria-hidden />
+                          <span className="sm:hidden">{t("optimize.uploadFile")}</span>
+                          <span className="hidden sm:inline">{t("optimize.file")}</span>
                         </button>
                         <button
                           type="button"
                           onClick={() => { setResumeInputMode("text"); setResumeSourceWasPdf(false); }}
-                          className={`inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-xl transition-colors focus:outline-none focus:ring-2 focus:ring-[#4578FC]/30 focus:ring-offset-2 ${
+                          className={`inline-flex justify-center items-center gap-2 px-4 py-3 sm:px-3 sm:py-2 text-base sm:text-sm font-medium rounded-xl transition-colors focus:outline-none focus:ring-2 focus:ring-[#4578FC]/30 focus:ring-offset-2 w-full sm:w-auto ${
                             resumeInputMode === "text"
                               ? "bg-[#d4f090]/60 text-[#181819] border border-[#b8d86a] hover:bg-[#d4f090]/80"
                               : "border border-[#b8bed0] bg-white text-[var(--text)] hover:bg-[#F5F6FA]"
                           }`}
                         >
-                          <ClipboardDocumentIcon className="w-4 h-4 shrink-0" aria-hidden />
-                          Text
+                          <ClipboardDocumentIcon className="w-5 h-5 sm:w-4 sm:h-4 shrink-0" aria-hidden />
+                          {t("optimize.pasteAsText")}
                         </button>
                       </div>
                       {resumeInputMode === "text" && (
@@ -1997,12 +2014,13 @@ export default function Optimize() {
         </div>
       ) : (
       <div className="flex-1 min-w-0 flex flex-col gap-5 overflow-auto">
-        {(stage === "scanning" || stage === "loading" || stage === "assessment" || stage === "result") && hasResume && hasJob && (
+        {(stage === "scanning" || stage === "loading" || stage === "assessment" || stage === "result") &&
+          (hasResume && hasJob || awaitingLandingClaim) && (
           <>
             {(stage === "scanning" || (stage === "assessment" && preScores == null)) && (
               <div className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-8 flex flex-col items-center justify-center gap-5">
                 <div className="w-14 h-14 rounded-2xl bg-[#EBEDF5] flex items-center justify-center" aria-hidden>
-                  {stage === "scanning" ? (
+                  {stage === "scanning" || awaitingLandingClaim ? (
                     <SparklesIcon className="w-7 h-7 text-[#4578FC] animate-pulse" />
                   ) : (
                     <span
@@ -2012,17 +2030,29 @@ export default function Optimize() {
                   )}
                 </div>
                 <p className="text-[#181819] font-medium">
-                  {stage === "scanning" ? t("optimize.scanningLabel") : t("optimize.analysisLabel")}
+                  {awaitingLandingClaim
+                    ? t("optimize.preparingLandingCheck")
+                    : stage === "scanning"
+                      ? t("optimize.scanningLabel")
+                      : t("optimize.analysisLabel")}
                 </p>
-                <p className="text-sm text-[var(--text-tertiary)]">
-                  {stage === "scanning"
-                    ? t("optimize.analyzingResume")
-                    : t("optimize.analysisSubLabel")}
+                <p className="text-sm text-[var(--text-tertiary)] text-center max-w-sm">
+                  {awaitingLandingClaim
+                    ? t("optimize.preparingLandingCheckSub")
+                    : stage === "scanning"
+                      ? t("optimize.analyzingResume")
+                      : t("optimize.analysisSubLabel")}
                 </p>
-                <p className="text-xs text-[var(--text-muted)] text-center max-w-sm">
-                  {activeLoadingHint}
-                </p>
-                {stage === "scanning" ? (
+                {!awaitingLandingClaim && (
+                  <p className="text-xs text-[var(--text-muted)] text-center max-w-sm">
+                    {activeLoadingHint}
+                  </p>
+                )}
+                {awaitingLandingClaim ? (
+                  <div className="w-full max-w-xs h-2 rounded-full bg-[#EBEDF5] overflow-hidden" aria-hidden>
+                    <div className="h-full w-2/5 rounded-full bg-[#4578FC] animate-pulse" />
+                  </div>
+                ) : stage === "scanning" ? (
                   <div className="w-full max-w-xs space-y-2">
                     <div className="h-2 rounded-full bg-[#EBEDF5] overflow-hidden">
                       <div
