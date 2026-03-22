@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useId } from "react";
 import { useLocation, useNavigate, useSearchParams, Link } from "react-router-dom";
 import { Disclosure, DisclosureButton, DisclosurePanel, RadioGroup } from "@headlessui/react";
-import { SparklesIcon, ArrowUpTrayIcon, ArrowDownTrayIcon, ArrowPathIcon, BriefcaseIcon, ClipboardDocumentIcon, ExclamationTriangleIcon, CheckCircleIcon, LockClosedIcon } from "@heroicons/react/24/outline";
+import { SparklesIcon, ArrowUpTrayIcon, ArrowDownTrayIcon, ArrowPathIcon, BriefcaseIcon, ClipboardDocumentIcon, ExclamationTriangleIcon, CheckCircleIcon, LockClosedIcon, CheckIcon } from "@heroicons/react/24/outline";
 import * as api from "../api";
 import { useAuth } from "../contexts/AuthContext";
 import { t } from "../i18n";
@@ -833,6 +833,117 @@ function ScoreGauge({
 
 export { CircleScore, BarScoreRow, ScoreCard, ScoreGauge };
 
+/** Upsell modal content when the free ATS scan is used; trial card matches /upgrade styling. */
+function OptimizeFreeLimitWall({
+  checkoutError,
+  checkoutLoading,
+  onEditSetup,
+  onStartTrial,
+}: {
+  checkoutError: string | null;
+  checkoutLoading: boolean;
+  onEditSetup: () => void;
+  onStartTrial: () => void;
+}) {
+  return (
+    <div className="w-full max-w-xl mx-auto space-y-6 rounded-2xl bg-[#FAFAFC] p-4 sm:p-6 shadow-xl border border-[#EBEDF5]">
+      <section
+        className="rounded-2xl border border-[#E8DCC8] bg-gradient-to-br from-amber-50/90 to-[#FFFBF5] p-6 sm:p-7 shadow-sm"
+        aria-labelledby="free-limit-heading"
+      >
+        <div className="flex flex-col sm:flex-row sm:items-start gap-4">
+          <div className="shrink-0 w-12 h-12 rounded-2xl bg-white border border-amber-200/80 flex items-center justify-center shadow-sm">
+            <LockClosedIcon className="w-6 h-6 text-amber-700" strokeWidth={1.75} aria-hidden />
+          </div>
+          <div className="min-w-0 space-y-2">
+            <h1 id="free-limit-heading" className="text-xl sm:text-2xl font-bold tracking-tight text-[#181819]">
+              {t("optimize.freeLimitWallTitle")}
+            </h1>
+            <p className="text-sm sm:text-[15px] text-[var(--text-muted)] leading-relaxed">
+              {t("optimize.freeLimitWallSubtitle")}
+            </p>
+            <button
+              type="button"
+              onClick={onEditSetup}
+              className="mt-3 text-sm font-semibold text-[#4578FC] hover:text-[#3d6ae6] underline-offset-2 hover:underline focus:outline-none focus:ring-2 focus:ring-[#4578FC]/30 rounded"
+            >
+              {t("optimize.freeLimitWallEditSetup")}
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {checkoutError && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800" role="alert">
+          {checkoutError}
+        </div>
+      )}
+
+      <section
+        className="rounded-2xl border border-purple-200/60 p-6 sm:p-7 flex flex-col relative overflow-hidden shadow-sm"
+        style={{
+          background:
+            "linear-gradient(135deg, rgba(233, 213, 255, 0.4) 0%, rgba(216, 180, 254, 0.25) 40%, rgba(196, 181, 253, 0.15) 70%, rgba(232, 121, 249, 0.2) 100%)",
+        }}
+        aria-labelledby="inline-trial-heading"
+      >
+        <div
+          className="absolute top-0 right-0 -mr-6 -mt-6 w-24 h-24 rounded-full bg-purple-300/30 blur-2xl pointer-events-none"
+          aria-hidden
+        />
+        <div className="absolute top-0 right-0 rounded-bl-xl bg-purple-600 px-3 py-1.5 text-[10px] font-bold text-white uppercase tracking-wide z-10 shadow-sm">
+          {t("upgrade.recommended")}
+        </div>
+        <h2 id="inline-trial-heading" className="relative z-10 text-base font-semibold text-purple-950 pr-24">
+          {t("upgrade.trialTitle")}
+        </h2>
+        <p className="relative z-10 mt-2 text-2xl font-bold text-purple-950">{t("upgrade.trialPrice")}</p>
+        <p className="relative z-10 mt-1 text-xs font-medium text-purple-800/80">{t("upgrade.trialDesc")}</p>
+        <p className="relative z-10 mt-1.5 text-[11px] leading-snug text-purple-900/60 font-medium">
+          {t("upgrade.trialAutoRenew")}
+        </p>
+        <ul className="relative z-10 mt-6 space-y-3 text-sm font-medium text-purple-950">
+          <li className="flex items-start gap-2.5">
+            <CheckIcon className="w-5 h-5 text-purple-700 shrink-0" />
+            <span>{t("upgrade.trialFeature1")}</span>
+          </li>
+          <li className="flex items-start gap-2.5">
+            <CheckIcon className="w-5 h-5 text-purple-700 shrink-0" />
+            <span>{t("upgrade.trialFeature2")}</span>
+          </li>
+          <li className="flex items-start gap-2.5">
+            <CheckIcon className="w-5 h-5 text-purple-700 shrink-0" />
+            <span>{t("upgrade.trialFeature3")}</span>
+          </li>
+          <li className="flex items-start gap-2.5">
+            <CheckIcon className="w-5 h-5 text-purple-700 shrink-0" />
+            <span>{t("upgrade.trialFeature4")}</span>
+          </li>
+        </ul>
+        <div className="relative z-10 mt-6 flex flex-col gap-3">
+          <button
+            type="button"
+            disabled={checkoutLoading}
+            onClick={onStartTrial}
+            className="flex items-center justify-center w-full rounded-xl bg-purple-600 text-sm font-semibold text-white py-3 px-4 shadow-sm hover:bg-purple-700 transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500/40 focus:ring-offset-2 disabled:opacity-70"
+          >
+            {checkoutLoading ? t("upgrade.redirectingStripe") : t("upgrade.startTrial")}
+          </button>
+          <Link
+            to="/upgrade"
+            className="text-center text-sm font-semibold text-purple-900/80 hover:text-purple-950 underline-offset-2 hover:underline"
+          >
+            {t("optimize.freeLimitWallComparePlans")}
+          </Link>
+        </div>
+        <p className="relative z-10 mt-4 text-[11px] text-purple-900/55 text-center leading-snug">
+          {t("optimize.freeLimitWallPaymentNote")}
+        </p>
+      </section>
+    </div>
+  );
+}
+
 /** True on first paint if URL has ?pending= (landing → login → optimize flow). */
 function pendingTokenInUrl(): boolean {
   if (typeof window === "undefined") return false;
@@ -885,6 +996,10 @@ export default function Optimize() {
   const freeAnalysesCount = user?.subscription?.free_analyses_count || 0;
   const canAnalyzeSubscription = hasPaidPlan || freeAnalysesCount < 1;
   const canOptimizeSubscription = user?.id === "local" || hasPaidPlan;
+  /** When true, user closed the free-limit overlay to edit resume/job; compact CTA remains in step 2. */
+  const [freeLimitUpsellDismissed, setFreeLimitUpsellDismissed] = useState(false);
+  const [freeLimitCheckoutLoading, setFreeLimitCheckoutLoading] = useState(false);
+  const [freeLimitCheckoutError, setFreeLimitCheckoutError] = useState<string | null>(null);
 
   // Claim pending landing upload after login: подставляем резюме и вакансию и запускаем анализ
   const pendingToken = searchParams.get("pending");
@@ -919,6 +1034,21 @@ export default function Optimize() {
       });
   }, [pendingToken, user, setSearchParams]);
 
+  // Return from Stripe checkout (trial / subscription) — refresh profile
+  useEffect(() => {
+    const co = searchParams.get("checkout");
+    if (co !== "success" && co !== "cancel") return;
+    void refreshUser();
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("checkout");
+        return next;
+      },
+      { replace: true },
+    );
+  }, [searchParams, setSearchParams, refreshUser]);
+
   // Редирект с главной после загрузки файла — сразу шаг 2 (файл уже есть)
   useEffect(() => {
     const state = location.state as { resumeContent?: string; uploadedFileName?: string; sourceWasPdf?: boolean } | null;
@@ -937,6 +1067,27 @@ export default function Optimize() {
   const hasJobInput = !!jobInput.trim();
   const hasJob = hasJobInput;
   const canImprove = hasResume && hasJob && stage === "assessment" && result === null;
+
+  const freeLimitIdleBlock =
+    stage === "idle" &&
+    !canAnalyzeSubscription &&
+    user?.id !== "local" &&
+    hasResume &&
+    hasJob;
+  const showFreeLimitOverlay = freeLimitIdleBlock && !freeLimitUpsellDismissed;
+
+  useEffect(() => {
+    if (!hasResume || !hasJob) setFreeLimitUpsellDismissed(false);
+  }, [hasResume, hasJob]);
+
+  useEffect(() => {
+    if (!showFreeLimitOverlay) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setFreeLimitUpsellDismissed(true);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showFreeLimitOverlay]);
 
   // Сброс при неполных данных (не трогаем пока ждём claim с лендинга)
   useEffect(() => {
@@ -1177,6 +1328,31 @@ export default function Optimize() {
       return;
     }
     setStage("scanning");
+  }
+
+  async function handleFreeLimitStartTrial() {
+    if (!user || user.id === "local") {
+      navigate("/login");
+      return;
+    }
+    setFreeLimitCheckoutError(null);
+    setFreeLimitCheckoutLoading(true);
+    const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
+    const successUrl = `${baseUrl}/optimize?checkout=success`;
+    const cancelUrl = `${baseUrl}/optimize?checkout=cancel`;
+    try {
+      const { url } = await api.createCheckoutSession({
+        price_key: "trial",
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+      });
+      if (url) window.location.href = url;
+      else setFreeLimitCheckoutError(t("upgrade.getPaymentLinkError"));
+    } catch (e) {
+      setFreeLimitCheckoutError(e instanceof Error ? e.message : t("upgrade.checkoutError"));
+    } finally {
+      setFreeLimitCheckoutLoading(false);
+    }
   }
 
   async function handleImprove() {
@@ -1709,7 +1885,8 @@ export default function Optimize() {
           </div>
         </div>
       ) : stage === "idle" ? (
-        /* Два блока на одной странице: слева Шаг 1 (резюме), справа Шаг 2 (вакансия). Шаг 2 затемнён до загрузки резюме. */
+        /* Шаги 1–2 всегда видны; при исчерпанном free scan — модалка поверх (проверка не стартует). */
+        <div className="relative flex-1 flex flex-col min-h-[50vh]">
         <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 p-3 sm:p-4 lg:p-6 max-w-6xl mx-auto w-full items-stretch content-start">
           {/* Шаг 1 — слева */}
           <section
@@ -1867,7 +2044,7 @@ export default function Optimize() {
                           onChange={(e) => setResumeContent(e.target.value)}
                           onBlur={handleResumePaste}
                           placeholder={t("optimize.jobTextPlaceholder")}
-                          className="w-full min-h-[5rem] max-w-md rounded-xl border border-[#c8cddc] bg-white/80 px-3 py-2.5 text-sm text-[#181819] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[#4578FC]/30 focus:border-[#4578FC]/50 resize-none"
+                          className="w-full min-h-[5rem] max-w-md rounded-xl border border-[#c8cddc] bg-white/80 px-3 py-2.5 text-base sm:text-sm text-[#181819] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[#4578FC]/30 focus:border-[#4578FC]/50 resize-none"
                         />
                       )}
                     </div>
@@ -1947,7 +2124,7 @@ export default function Optimize() {
                       <JobPreviewContent parsedJob={parsedJob} rawText={jobInput} isParsing={false} />
                     );
                   })()}
-                  {stage === "idle" && (
+                  {stage === "idle" && !showFreeLimitOverlay && (
                     <div className="mt-5 pt-4 border-t border-[#EBEDF5]">
                       {!canAnalyzeSubscription && user?.id !== "local" ? (
                         <div className="flex flex-col items-center gap-3">
@@ -1967,6 +2144,15 @@ export default function Optimize() {
                               {t("optimize.upgradeToImproveSuffix")}
                             </span>
                           </div>
+                          {freeLimitUpsellDismissed && (
+                            <button
+                              type="button"
+                              onClick={() => setFreeLimitUpsellDismissed(false)}
+                              className="text-sm font-semibold text-[#4578FC] hover:text-[#3d6ae6] underline-offset-2 hover:underline focus:outline-none focus:ring-2 focus:ring-[#4578FC]/30 rounded px-1"
+                            >
+                              {t("optimize.freeLimitShowPlansAgain")}
+                            </button>
+                          )}
                         </div>
                       ) : (
                         <>
@@ -2003,7 +2189,7 @@ export default function Optimize() {
                       if (e.target.value.trim().length > 100) setOfferPasteAsText(false);
                     }}
                     placeholder={t("optimize.jobTextPlaceholder")}
-                    className="w-full min-h-[7rem] rounded-xl border border-[#EBEDF5] bg-white px-4 py-3 text-sm text-[#181819] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-2 focus:ring-[#4578FC]/25 focus:border-[#4578FC]/40 resize-none"
+                    className="w-full min-h-[7rem] rounded-xl border border-[#EBEDF5] bg-white px-4 py-3 text-base sm:text-sm text-[#181819] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-2 focus:ring-[#4578FC]/25 focus:border-[#4578FC]/40 resize-none"
                     aria-describedby={offerPasteAsText ? "paste-job-hint" : undefined}
                   />
                 </div>
@@ -2011,6 +2197,28 @@ export default function Optimize() {
               </div>
             </div>
           </section>
+        </div>
+        {showFreeLimitOverlay && (
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="free-limit-heading"
+            className="absolute inset-0 z-[30] flex items-start justify-center overflow-y-auto py-4 sm:py-8 px-3 sm:px-4 bg-[#0f172a]/45 backdrop-blur-[3px]"
+            onClick={() => setFreeLimitUpsellDismissed(true)}
+          >
+            <div
+              className="w-full max-w-xl pb-6 sm:pb-10"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <OptimizeFreeLimitWall
+                checkoutError={freeLimitCheckoutError}
+                checkoutLoading={freeLimitCheckoutLoading}
+                onEditSetup={() => setFreeLimitUpsellDismissed(true)}
+                onStartTrial={() => void handleFreeLimitStartTrial()}
+              />
+            </div>
+          </div>
+        )}
         </div>
       ) : (
       <div className="flex-1 min-w-0 flex flex-col gap-5 overflow-auto">

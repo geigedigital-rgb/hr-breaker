@@ -506,6 +506,19 @@ export async function createCheckoutSession(params: {
   return data;
 }
 
+export async function createBillingPortalSession(params: {
+  return_url: string;
+}): Promise<CreateCheckoutResponse> {
+  const r = await fetch(`${API}/payments/create-portal-session`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(params),
+  });
+  const data = await parseJsonOrThrow<CreateCheckoutResponse & { detail?: string }>(r);
+  if (!r.ok) throw new Error(data.detail || r.statusText);
+  return data;
+}
+
 // --- Vacancy search (Adzuna proxy) ---
 export type VacancyCard = {
   id: string;

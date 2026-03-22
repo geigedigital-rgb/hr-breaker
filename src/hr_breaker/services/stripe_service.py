@@ -1,7 +1,7 @@
 """
 Stripe checkout and webhook handling for HR-Breaker subscriptions.
 
-- Trial: subscription $29/mo with 7-day trial + one-time $2.99 on first invoice (STRIPE_PRICE_TRIAL_ID).
+- Trial: subscription $29/mo with 7-day trial + one-time $2.99 as a second Checkout line item (STRIPE_PRICE_TRIAL_ID).
   Checkout shows $2.99 due today; after trial ends Stripe charges $29/mo.
 - If STRIPE_PRICE_TRIAL_ID is unset: Checkout shows $0 (subscription in trial only); legacy webhook charges $2.99 after — confusing UX.
 - Monthly: subscription $29/month, no trial.
@@ -102,6 +102,24 @@ def get_price_id(price_key: str) -> str:
     return pid
 
 
+def create_billing_portal_session(customer_id: str, return_url: str) -> str:
+    """
+    Stripe Customer Portal — cancel subscription, update payment method, etc.
+    Portal must be enabled in Stripe Dashboard → Settings → Customer portal.
+    """
+    stripe = _stripe()
+    try:
+        session = stripe.billing_portal.Session.create(
+            customer=customer_id,
+            return_url=return_url,
+        )
+        return session.url or ""
+    except stripe.StripeError as e:
+        detail = _stripe_error_detail(e)
+        logger.error("Stripe Billing Portal Error: %s", detail)
+        raise ValueError(f"Stripe Billing Portal: {detail}") from e
+
+
 async def create_checkout_session(
     user_id: str,
     user_email: str,
@@ -114,7 +132,7 @@ async def create_checkout_session(
 ) -> str:
     """
     Create Stripe Checkout session.
-    Trial = subscription to monthly price with 7-day trial (then we charge $2.99 in webhook).
+    Trial = monthly subscription with 7-day trial; $2.99 is a one-time line item when STRIPE_PRICE_TRIAL_ID is set.
     Monthly = subscription to monthly price, no trial.
     """
     stripe = _stripe()
@@ -129,29 +147,29 @@ async def create_checkout_session(
     settings = get_settings()
     trial_fee_price = (settings.stripe_price_trial_id or "").strip()
 
+    line_items: list[dict] = [{"price": price_id, "quantity": 1}]
     session_params = {
         "customer": customer_id,
         "mode": "subscription",
-        "line_items": [{"price": price_id, "quantity": 1}],
+        "line_items": line_items,
         "success_url": success_url,
         "cancel_url": cancel_url,
         "metadata": {"hr_breaker_user_id": user_id, "price_key": price_key},
         "allow_promotion_codes": True,
     }
     if is_trial:
+        # One-time fee: add as a second line item (Stripe puts one-time prices on the initial invoice only).
+        # Do NOT use subscription_data.add_invoice_items — it is not a valid Checkout Session parameter.
         sub_data: dict = {"trial_period_days": TRIAL_DAYS}
-        # One-time $2.99 on the first invoice so Checkout shows "due today" correctly.
-        # Create in Stripe: Product → one-time Price $2.99 (same currency as monthly).
         if trial_fee_price:
-            sub_data["add_invoice_items"] = [{"price": trial_fee_price, "quantity": 1}]
+            _validate_trial_prices(stripe, price_id, trial_fee_price)
+            line_items.append({"price": trial_fee_price, "quantity": 1})
         else:
             logger.warning(
                 "STRIPE_PRICE_TRIAL_ID unset: Checkout shows $0 for trial; $2.99 is charged only via "
                 "webhook after success (fragile). Add a one-time $2.99 Price and set STRIPE_PRICE_TRIAL_ID."
             )
         session_params["subscription_data"] = sub_data
-        if trial_fee_price:
-            _validate_trial_prices(stripe, price_id, trial_fee_price)
 
     try:
         session = stripe.checkout.Session.create(**session_params)
@@ -214,7 +232,7 @@ async def handle_checkout_session_completed(
         )
         logger.info("Trial subscription created for user %s until %s", user_id, period_end)
 
-        # $2.99: if STRIPE_PRICE_TRIAL_ID is set, Checkout already collected it (add_invoice_items).
+        # $2.99: if STRIPE_PRICE_TRIAL_ID is set, Checkout already collected it (one-time line item on first invoice).
         # Legacy: no trial price id → charge here (user saw $0 on Checkout).
         if price_key == PRICE_KEY_TRIAL and not (get_settings().stripe_price_trial_id or "").strip():
             try:

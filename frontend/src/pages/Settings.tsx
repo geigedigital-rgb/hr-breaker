@@ -20,6 +20,7 @@ export default function Settings() {
   const { user, loading: authLoading, logout } = useAuth();
   const [settings, setSettings] = useState<api.SettingsResponse | null>(null);
   const [language, setLanguage] = useState(getInitialLanguage);
+  const [billingPortalLoading, setBillingPortalLoading] = useState(false);
 
   useEffect(() => {
     api.setOutputLanguage(language.id as "en" | "ru");
@@ -33,6 +34,26 @@ export default function Settings() {
   }, []);
 
   const loading = authLoading && !user && !settings;
+
+  const canOpenBillingPortal =
+    !!user &&
+    user.id !== "local" &&
+    (user.subscription?.plan === "monthly" || user.subscription?.plan === "trial") &&
+    (user.subscription?.status === "active" || user.subscription?.status === "trial");
+
+  async function openBillingPortal() {
+    if (!canOpenBillingPortal || billingPortalLoading) return;
+    const returnUrl = `${window.location.origin}/settings`;
+    setBillingPortalLoading(true);
+    try {
+      const { url } = await api.createBillingPortalSession({ return_url: returnUrl });
+      if (url) window.location.href = url;
+    } catch {
+      window.alert(t("settings.billingPortalError"));
+    } finally {
+      setBillingPortalLoading(false);
+    }
+  }
 
   if (loading) {
     return (
@@ -67,6 +88,19 @@ export default function Settings() {
               >
                   {t("settings.logoutButton")}
               </button>
+              {canOpenBillingPortal && (
+                <div className="pt-5 mt-1 border-t border-[#F0F1F5]">
+                  <button
+                    type="button"
+                    disabled={billingPortalLoading}
+                    onClick={() => void openBillingPortal()}
+                    title={t("settings.cancelSubscriptionHint")}
+                    className="text-[11px] font-normal text-[#b4b8c5] hover:text-[#8b90a0] underline-offset-2 hover:underline focus:outline-none focus:ring-2 focus:ring-[#4578FC]/20 rounded px-0 py-1 disabled:opacity-60"
+                  >
+                    {billingPortalLoading ? t("settings.openingBillingPortal") : t("settings.cancelSubscriptionLink")}
+                  </button>
+                </div>
+              )}
             </>
           ) : (
             <p className="text-sm text-[var(--text-muted)]">

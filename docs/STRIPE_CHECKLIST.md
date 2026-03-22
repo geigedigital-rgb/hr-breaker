@@ -27,6 +27,16 @@
    - `customer.subscription.deleted`
 4. После сохранения скопировать **Signing secret** (whsec_...) в `STRIPE_WEBHOOK_SECRET`.
 
+## Customer Portal (отмена подписки в Settings)
+
+В **Settings → Account** есть неприметная ссылка **Cancel subscription** — открывается Stripe Billing Portal.
+
+1. **Stripe Dashboard → Settings → Billing → Customer portal** (или [Customer portal](https://dashboard.stripe.com/settings/billing/portal)).
+2. Включите портал и разрешите действия: **Cancel subscriptions** (и при необходимости обновление способа оплаты).
+3. Укажите продукты/цены, которые клиенты могут видеть (обычно ваша месячная подписка).
+
+Без активации портала API `billing_portal.Session.create` вернёт ошибку.
+
 ## Проверка
 
 - В приложении: **Upgrade** → выбор Trial или Monthly → редирект на Stripe Checkout.

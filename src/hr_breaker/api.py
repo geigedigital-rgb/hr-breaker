@@ -908,6 +908,43 @@ async def api_create_checkout_session(
     return CreateCheckoutResponse(url=url)
 
 
+class CreatePortalRequest(BaseModel):
+    return_url: str = Field(..., description="URL to return to after leaving Stripe Customer Portal")
+
+
+@router.post("/payments/create-portal-session", response_model=CreateCheckoutResponse)
+async def api_create_portal_session(
+    req: CreatePortalRequest,
+    user: dict | None = Depends(get_current_user),
+) -> CreateCheckoutResponse:
+    """Open Stripe Customer Portal (cancel subscription, payment methods). Requires auth + Stripe customer."""
+    if not user:
+        raise HTTPException(401, "Not authenticated")
+    pool = await get_pool()
+    if not pool:
+        raise HTTPException(503, "Database not configured")
+    settings = get_settings()
+    if not settings.stripe_secret_key:
+        raise HTTPException(503, "Stripe not configured")
+    urow = await user_get_by_id(pool, str(user["id"]))
+    if not urow:
+        raise HTTPException(404, "User not found")
+    customer_id = (urow.get("stripe_customer_id") or "").strip()
+    if not customer_id:
+        raise HTTPException(
+            400,
+            "No billing profile yet. Complete a subscription checkout first, then you can manage or cancel here.",
+        )
+    from hr_breaker.services.stripe_service import create_billing_portal_session
+
+    try:
+        url = create_billing_portal_session(customer_id, req.return_url)
+    except Exception as e:
+        logger.error("Billing portal session failed: %s", e)
+        raise HTTPException(400, str(e))
+    return CreateCheckoutResponse(url=url)
+
+
 @router.post("/payments/webhook")
 async def api_stripe_webhook(request: Request) -> Response:
     """Stripe webhook: verify signature and handle checkout.session.completed, subscription updated/deleted."""
