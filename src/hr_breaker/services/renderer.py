@@ -105,16 +105,26 @@ class HTMLRenderer(BaseRenderer):
             import weasyprint  # noqa: F401
             cls._weasyprint_imported = True
         except OSError as e:
-            if "libgobject" in str(e) or "libpango" in str(e):
-                raise RenderError(
-                    "WeasyPrint libraries not found.\n"
-                    "On macOS, run:\n"
-                    "  brew install pango gdk-pixbuf libffi\n\n"
-                    "Then either:\n"
-                    "  export DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib\n"
-                    "or run:\n"
-                    "  DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib hr-breaker ..."
-                ) from e
+            import sys
+            if "libgobject" in str(e) or "libpango" in str(e) or "cairo" in str(e).lower():
+                if sys.platform == "darwin":
+                    raise RenderError(
+                        "WeasyPrint libraries not found.\n"
+                        f"Original error: {e}\n\n"
+                        "On macOS, run:\n"
+                        "  brew install pango gdk-pixbuf libffi\n\n"
+                        "Then either:\n"
+                        "  export DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib\n"
+                        "or run:\n"
+                        "  DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib hr-breaker ..."
+                    ) from e
+                else:
+                    raise RenderError(
+                        "WeasyPrint libraries not found.\n"
+                        f"Original error: {e}\n\n"
+                        "On Linux (Debian/Ubuntu), make sure you have installed:\n"
+                        "  apt-get install libpango-1.0-0 libpangoft2-1.0-0 libpangocairo-1.0-0 libcairo2 libgdk-pixbuf-2.0-0 libffi-dev shared-mime-info\n"
+                    ) from e
             raise
 
     # -------------------------

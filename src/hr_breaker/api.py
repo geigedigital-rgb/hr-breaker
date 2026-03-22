@@ -891,16 +891,20 @@ async def api_create_checkout_session(
     )
     if req.price_key not in (PRICE_KEY_TRIAL, PRICE_KEY_MONTHLY):
         raise HTTPException(400, "price_key must be 'trial' or 'monthly'")
-    url = await stripe_create_checkout(
-        user_id=str(user["id"]),
-        user_email=user["email"],
-        price_key=req.price_key,
-        success_url=req.success_url,
-        cancel_url=req.cancel_url,
-        pool=pool,
-        get_or_create_customer_id=_get_or_create_stripe_customer_id,
-        set_stripe_customer_id=user_set_stripe_customer_id,
-    )
+    try:
+        url = await stripe_create_checkout(
+            user_id=str(user["id"]),
+            user_email=user["email"],
+            price_key=req.price_key,
+            success_url=req.success_url,
+            cancel_url=req.cancel_url,
+            pool=pool,
+            get_or_create_customer_id=_get_or_create_stripe_customer_id,
+            set_stripe_customer_id=user_set_stripe_customer_id,
+        )
+    except Exception as e:
+        logger.error("Checkout creation failed: %s", e)
+        raise HTTPException(400, str(e))
     return CreateCheckoutResponse(url=url)
 
 

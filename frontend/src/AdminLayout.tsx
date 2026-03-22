@@ -151,14 +151,21 @@ export default function AdminLayout() {
         <header className="shrink-0 bg-[var(--card)] border-b border-[#EBEDF5] flex items-center justify-between px-4 md:px-6 h-14 z-10 gap-3">
           <button
             type="button"
-            className="md:hidden inline-flex items-center justify-center rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-[#F5F6FA] hover:text-[#181819]"
+            className="md:hidden inline-flex items-center justify-center rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-[#F5F6FA] hover:text-[#181819] shrink-0"
             onClick={() => setMobileMenuOpen(true)}
             aria-label="Open admin mobile menu"
           >
             <Bars3Icon className="w-6 h-6" />
           </button>
-          <h1 className="text-base font-semibold text-[var(--text)]">{t("admin.title")}</h1>
-          <div className="md:hidden w-6" aria-hidden />
+
+          {location.pathname.includes("/admin/visual") ? (
+            <div id="admin-header-portal" className="flex-1 flex items-center min-w-0" />
+          ) : (
+            <>
+              <h1 className="text-base font-semibold text-[var(--text)]">{t("admin.title")}</h1>
+              <div className="md:hidden w-6 shrink-0" aria-hidden />
+            </>
+          )}
         </header>
 
         <main className="flex-1 min-h-0 overflow-auto pt-3 md:pt-4 pb-6 md:pb-8 px-3 md:px-6" role="main">
