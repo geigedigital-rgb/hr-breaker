@@ -14,6 +14,7 @@ import Upgrade from "./pages/Upgrade";
 import Partner from "./pages/Partner";
 import Login from "./pages/Login";
 import AuthCallback from "./pages/AuthCallback";
+import SignupSuccess from "./pages/SignupSuccess";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminUsers from "./pages/admin/AdminUsers";
 import AdminApp from "./pages/admin/AdminApp";
@@ -90,6 +91,7 @@ function App() {
         <AuthProvider>
           <Routes>
             <Route path="/login" element={<Login />} />
+            <Route path="/signup-success" element={<SignupSuccess />} />
             <Route path="/auth/callback" element={<AuthCallback />} />
             <Route path="/" element={<RequireAuth><Layout /></RequireAuth>}>
               <Route index element={<Home />} />

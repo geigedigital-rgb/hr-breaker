@@ -374,9 +374,14 @@ export default function AdminVisualTest() {
             }}
           >
             <div className="rounded-[21px] bg-white p-4 sm:p-5">
-              <p className="text-[15px] sm:text-base font-semibold text-[#181819] leading-tight">
-                Why you are not getting callbacks
-              </p>
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-[1.5px] border-[#C92A4B] text-[#C92A4B] text-[13px] font-bold">
+                  !
+                </span>
+                <p className="text-[15px] sm:text-base font-semibold text-[#181819] leading-tight">
+                  Why you are not getting callbacks
+                </p>
+              </div>
               <p className="mt-1.5 text-[13px] text-[#4B5563] leading-relaxed">{scanSummaryText}</p>
 
               <div className="mt-4 space-y-2.5">
@@ -686,55 +691,50 @@ export default function AdminVisualTest() {
           </svg>
           <span className="text-[17px] sm:text-[24px] font-normal text-[#181819] leading-tight">Next step: improve your resume.</span>
         </div>
-        <h2 className="text-[26px] sm:text-[44px] font-normal text-[#181819] tracking-tight leading-tight">
+        <h2 className="text-[26px] sm:text-[44px] font-normal text-[#181819] tracking-tight leading-tight mb-8">
           What would you like to change?
         </h2>
+        
+        {/* Quick action chips (static position above chat) */}
+        <div className="flex flex-wrap items-center justify-center gap-2 max-w-2xl mx-auto">
+          {[
+            { label: "Light polish", icon: SparklesIcon, accent: true },
+            { label: "Deep rewrite", icon: DocumentTextIcon },
+            { label: "Add more metrics", icon: CodeBracketIcon },
+            { label: "Focus on leadership", icon: ArrowUpIcon },
+          ].map((chip) => {
+            if (chip.accent) {
+              return (
+                <div key={chip.label} className="relative shrink-0 flex rounded-full p-[1px] overflow-hidden group shadow-[0_2px_8px_-4px_rgba(20,25,40,0.08)] bg-[#4578FC]/20 cursor-pointer hover:scale-[1.02] active:scale-[0.98] transition-transform">
+                  <div className="absolute inset-[-1000%] animate-[spin_2s_linear_infinite] bg-[conic-gradient(from_90deg_at_50%_50%,rgba(69,120,252,0)_0%,#4578FC_50%,rgba(69,120,252,0)_100%)] opacity-80 group-hover:opacity-100 transition-opacity" />
+                  <button
+                    type="button"
+                    className="relative flex items-center gap-2 rounded-full bg-[#F0F5FF] px-3.5 py-2 text-[14px] font-medium text-[#4578FC] hover:bg-[#E6EFFF] transition-colors"
+                  >
+                    <chip.icon className="h-4 w-4 text-[#4578FC]" />
+                    {chip.label}
+                  </button>
+                </div>
+              );
+            }
+            return (
+              <button
+                key={chip.label}
+                type="button"
+                className="shrink-0 flex items-center gap-2 rounded-full border px-3.5 py-2 text-[14px] font-medium shadow-[0_2px_8px_-4px_rgba(20,25,40,0.08)] transition-all bg-white text-[#4B5563] border-[#E8ECF4] hover:bg-[#F5F6FA] hover:text-[#181819] hover:border-[#DCE3F0] hover:scale-[1.02] active:scale-[0.98]"
+              >
+                <chip.icon className="h-4 w-4 text-[#8A94A6]" />
+                {chip.label}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Floating AI Chat Panel */}
       <div className="fixed bottom-6 left-0 right-0 md:left-64 z-30 flex justify-center px-4 pointer-events-none">
         <div className="pointer-events-auto w-full max-w-3xl flex flex-col gap-3">
           
-          {/* Quick action chips (above input) */}
-          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar px-4 sm:justify-center"
-               style={{
-                 maskImage: "linear-gradient(to right, transparent 0%, black 15px, black calc(100% - 15px), transparent 100%)",
-                 WebkitMaskImage: "linear-gradient(to right, transparent 0%, black 15px, black calc(100% - 15px), transparent 100%)"
-               }}>
-            {[
-              { label: "Light polish", icon: SparklesIcon, accent: true },
-              { label: "Deep rewrite", icon: DocumentTextIcon },
-              { label: "Add more metrics", icon: CodeBracketIcon },
-              { label: "Focus on leadership", icon: ArrowUpIcon },
-              { label: "More", icon: EllipsisHorizontalIcon, noText: true },
-            ].map((chip) => {
-              if (chip.accent) {
-                return (
-                  <div key={chip.label} className="relative shrink-0 flex rounded-full p-[1px] overflow-hidden group shadow-[0_2px_8px_-4px_rgba(20,25,40,0.08)] bg-[#4578FC]/20">
-                    <div className="absolute inset-[-1000%] animate-[spin_2s_linear_infinite] bg-[conic-gradient(from_90deg_at_50%_50%,rgba(69,120,252,0)_0%,#4578FC_50%,rgba(69,120,252,0)_100%)] opacity-80 group-hover:opacity-100 transition-opacity" />
-                    <button
-                      type="button"
-                      className="relative flex items-center gap-2 rounded-full bg-[#F0F5FF] px-3.5 py-1.5 text-[13px] font-medium text-[#4578FC] hover:bg-[#E6EFFF] transition-colors"
-                    >
-                      <chip.icon className="h-4 w-4 text-[#4578FC]" />
-                      {!chip.noText && chip.label}
-                    </button>
-                  </div>
-                );
-              }
-              return (
-                <button
-                  key={chip.label}
-                  type="button"
-                  className="shrink-0 flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-[13px] font-medium shadow-[0_2px_8px_-4px_rgba(20,25,40,0.08)] transition-all bg-white text-[#4B5563] border-[#E8ECF4] hover:bg-[#F5F6FA] hover:text-[#181819] hover:border-[#DCE3F0]"
-                >
-                  <chip.icon className="h-4 w-4 text-[#8A94A6]" />
-                  {!chip.noText && chip.label}
-                </button>
-              );
-            })}
-          </div>
-
           {/* Input Area */}
           <div className="relative flex w-full flex-col rounded-[28px] border border-[#E8ECF4] bg-white shadow-[0_8px_30px_-12px_rgba(20,25,40,0.12)] transition-shadow focus-within:shadow-[0_8px_40px_-12px_rgba(20,25,40,0.2)] focus-within:border-[#DCE3F0]">
             <textarea

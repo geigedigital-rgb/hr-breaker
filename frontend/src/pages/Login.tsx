@@ -8,6 +8,8 @@ import { t } from "../i18n";
 const LANDING_PENDING_KEY = "landing_pending_token";
 const PARTNER_REF_CODE_KEY = "partner_ref_code";
 const PARTNER_REF_SRC_KEY = "partner_ref_source";
+const SIGNUP_SUCCESS_KEY = "signup_success_pending";
+const SIGNUP_NEXT_KEY = "signup_success_next";
 
 export default function Login() {
   const { user, loading, login, register, loginWithGoogle, setUserFromToken } = useAuth();
@@ -54,6 +56,10 @@ export default function Login() {
 
   useEffect(() => {
     if (!loading && user && user.id !== "local") {
+      if (sessionStorage.getItem(SIGNUP_SUCCESS_KEY) === "1") {
+        navigate("/signup-success", { replace: true });
+        return;
+      }
       const pending = sessionStorage.getItem(LANDING_PENDING_KEY) || pendingToken;
       if (pending) {
         sessionStorage.removeItem(LANDING_PENDING_KEY);
@@ -86,6 +92,13 @@ export default function Login() {
       };
       if (isRegister) {
         await register(email, password, referral);
+        const nextPath = pendingToken
+          ? `/optimize?pending=${encodeURIComponent(pendingToken)}`
+          : "/optimize";
+        sessionStorage.setItem(SIGNUP_SUCCESS_KEY, "1");
+        sessionStorage.setItem(SIGNUP_NEXT_KEY, nextPath);
+        navigate("/signup-success", { replace: true });
+        return;
       } else {
         await login(email, password, referral);
       }
