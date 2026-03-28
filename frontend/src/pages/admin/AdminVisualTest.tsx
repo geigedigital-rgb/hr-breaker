@@ -12,7 +12,6 @@ import {
   ArrowUpIcon,
   DocumentTextIcon,
   CodeBracketIcon,
-  EllipsisHorizontalIcon,
 } from "@heroicons/react/24/outline";
 import { t } from "../../i18n";
 import * as api from "../../api";
