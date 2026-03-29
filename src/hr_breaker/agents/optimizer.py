@@ -304,6 +304,13 @@ Return JSON with:
 - changes: Array of change groups. Each object: { "category": "string", "description": "optional short text", "items": ["label1", "label2", ...] }.
   Use the SAME language as the job posting for categories and all text. Examples: German job → Struktur, Erfahrung, Fähigkeiten, Schlüsselwörter; English → Structure, Experience, Skills, Keywords; Russian → Структура, Опыт, Навыки, Ключевые слова. For skills/technologies put each as an item. Keep items short (single words or short phrases). Do not transliterate (e.g. use "Erfahrung" not "Opyt" for German).
 
+KEY CHANGES — TONE (critical):
+- Do NOT write changelog-style labels ("Added…", "Included…", "Fixed…", "Added missing contact header").
+- Write short outcome-focused lines: what got better for screening/ATS, not what was inserted.
+- Good (adapt to job language): "Optimized for ATS screening", "Stronger keyword alignment with the role", "Clearer impact metrics", "Tighter structure for parsers", "Improved section hierarchy for recruiters".
+- Bad: "Added contact block", "Included phone number", "Added LinkedIn link".
+- Prefer meaning like: optimized / strengthened / clarified / aligned for ATS (and natural equivalents in German, Russian, etc.).
+
 Output ONLY valid JSON. The html field should contain the raw HTML string.
 """
 

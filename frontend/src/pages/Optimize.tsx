@@ -1131,6 +1131,14 @@ export default function Optimize() {
   const [freeLimitUpsellDismissed, setFreeLimitUpsellDismissed] = useState(false);
   const [freeLimitCheckoutLoading, setFreeLimitCheckoutLoading] = useState(false);
   const [freeLimitCheckoutError, setFreeLimitCheckoutError] = useState<string | null>(null);
+  const [serverMaxIterations, setServerMaxIterations] = useState(5);
+
+  useEffect(() => {
+    void api
+      .getSettings()
+      .then((s) => setServerMaxIterations(Math.max(1, s.max_iterations)))
+      .catch(() => {});
+  }, []);
 
   // Claim pending landing upload after login: подставляем резюме и вакансию и запускаем анализ
   const pendingToken = searchParams.get("pending");
@@ -1681,7 +1689,7 @@ export default function Optimize() {
     setIsImprovingMore(true);
     setStage("loading");
     setLoadProgress(0);
-    setLoadMessage("Making your resume even better…");
+    setLoadMessage(t("optimize.improvingResume"));
     const improvedContent = result.optimized_resume_text?.trim() || resumeContent.trim();
     const params = {
       resume_content: improvedContent,
@@ -1689,7 +1697,7 @@ export default function Optimize() {
       job_url: jobMode === "url" ? jobInput.trim() : undefined,
       parallel: true,
       aggressive_tailoring: true,
-      max_iterations: 1,
+      max_iterations: serverMaxIterations + 2,
       pre_ats_score: preScores?.ats_score ?? undefined,
       pre_keyword_score: preScores?.keyword_score ?? undefined,
       source_was_pdf: resumeSourceWasPdf,
@@ -1721,11 +1729,15 @@ export default function Optimize() {
 
   const atsValue = result ? getAtsScore(result) : null;
   const keywordsValue = result ? getKeywordsScore(result) : null;
-  const showImproveMore =
-    result &&
-    !result.error &&
-    ((atsValue != null && atsValue < 85) ||
-      (keywordsValue != null && Math.round(keywordsValue.score * 100) < 85));
+  const resultKeywordPct = keywordsValue != null ? Math.round(keywordsValue.score * 100) : null;
+  const resultOverallScore =
+    atsValue != null && resultKeywordPct != null
+      ? Math.round((atsValue + resultKeywordPct) / 2)
+      : atsValue != null
+        ? atsValue
+        : resultKeywordPct;
+  const showOptimizeAgainForAts =
+    Boolean(result && !result.error && resultOverallScore != null && resultOverallScore < 69);
 
   const showSummaryBlocks = (stage === "assessment" && preScores != null) || stage === "result";
   const recommendationGroups = groupRecommendations(preScores?.recommendations, {
@@ -2122,13 +2134,22 @@ export default function Optimize() {
                     </p>
                 {result.pdf_filename && result.pdf_base64 && (
                   <section aria-label={t("optimize.downloadResume")} className="flex flex-wrap items-center gap-2">
-                    <a href={`data:application/pdf;base64,${result.pdf_base64}`} download={result.pdf_filename} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-[#181819] text-sm font-medium hover:opacity-95 transition-opacity" style={{ background: "linear-gradient(128deg, #EAFCB6 0%, #d4f090 18%, #b0d8ff 52%, #5e8afc 88%, #4578FC 100%)" }}>
-                      <ArrowDownTrayIcon className="w-4 h-4" />
+                    <a
+                      href={`data:application/pdf;base64,${result.pdf_base64}`}
+                      download={result.pdf_filename}
+                      className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-[#4578FC] border-2 border-[#4578FC] bg-transparent hover:bg-[#4578FC]/[0.06] active:bg-[#4578FC]/10 transition-colors focus:outline-none focus:ring-2 focus:ring-[#4578FC]/30 focus:ring-offset-2"
+                    >
+                      <ArrowDownTrayIcon className="w-4 h-4 shrink-0" />
                       {t("optimize.downloadPdf")}
                     </a>
-                    {showImproveMore && (
-                      <button type="button" onClick={handleImproveMore} disabled={isImprovingMore} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#F5F6FA] text-[#181819] text-sm font-medium hover:bg-[#EBEDF5] transition-colors disabled:opacity-50">
-                        {isImprovingMore ? t("optimize.improving") : t("optimize.improveMoreLabel")}
+                    {showOptimizeAgainForAts && (
+                      <button
+                        type="button"
+                        onClick={() => void handleImproveMore()}
+                        disabled={isImprovingMore}
+                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white bg-[#4578FC] border-2 border-[#3d6ae6] shadow-[0_2px_10px_-4px_rgba(69,120,252,0.55)] hover:bg-[#3d6ae6] hover:border-[#355fcd] disabled:opacity-50 disabled:shadow-none transition-colors focus:outline-none focus:ring-2 focus:ring-[#4578FC]/40 focus:ring-offset-2"
+                      >
+                        {isImprovingMore ? t("optimize.improving") : t("optimize.optimizeAgainForAts")}
                       </button>
                     )}
                   </section>

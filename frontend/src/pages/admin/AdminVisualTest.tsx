@@ -42,18 +42,18 @@ const MOCK = {
   resultKeyChanges: [
     {
       category: "Professional Summary",
-      description: "Rewritten to emphasize product strategy and leadership over operational detail.",
-      items: ["Added Cross-functional Leadership", "Added CI/CD context", "Quantified portfolio impact"],
+      description: "Stronger alignment with the role and clearer value proposition for screening.",
+      items: ["Optimized for ATS screening", "Stronger leadership signal", "Clearer impact framing"],
     },
     {
       category: "Experience",
-      description: "Bullet points restructured with STAR method. Added metrics.",
-      items: ["Revenue +35% YoY", "Team of 12 engineers", "3 product launches"],
+      description: "Tighter bullets and metrics that parsers and recruiters scan faster.",
+      items: ["Quantified outcomes highlighted", "Role-relevant keywords aligned", "STAR-style clarity"],
     },
     {
       category: "Skills Section",
       description: null,
-      items: ["Figma", "CI/CD", "OKR Framework", "A/B Testing"],
+      items: ["Keyword alignment with posting", "Stack grouped for ATS", "Nice-to-have tools surfaced"],
     },
   ],
   resultFilters: [
@@ -555,17 +555,16 @@ export default function AdminVisualTest() {
         <section className="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-[#181819] text-sm font-medium hover:opacity-95 transition-opacity"
-            style={{ background: "linear-gradient(128deg, #EAFCB6 0%, #d4f090 18%, #b0d8ff 52%, #5e8afc 88%, #4578FC 100%)" }}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-[#4578FC] border-2 border-[#4578FC] bg-transparent hover:bg-[#4578FC]/[0.06]"
           >
-            <ArrowDownTrayIcon className="w-4 h-4" />
+            <ArrowDownTrayIcon className="w-4 h-4 shrink-0" />
             {t("optimize.downloadPdf")}
           </button>
           <button
             type="button"
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#F5F6FA] text-[#181819] text-sm font-medium hover:bg-[#EBEDF5] transition-colors border border-[#E8ECF4]"
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white bg-[#4578FC] border-2 border-[#3d6ae6] shadow-[0_2px_10px_-4px_rgba(69,120,252,0.55)]"
           >
-            {t("optimize.improveMoreLabel")}
+            {t("optimize.optimizeAgainForAts")}
           </button>
         </section>
 

@@ -210,6 +210,8 @@ const en = {
     done: "Done.",
     errorLabel: "Error",
     improveMoreLabel: "Improve further",
+    /** Shown when post-optimize match score is still below threshold; runs standard depth + 2 extra iterations */
+    optimizeAgainForAts: "Optimize again for ATS",
     autoImproveLabel: "Auto improve",
     softLabel: "Light touch",
     strictLabel: "Full optimization",
