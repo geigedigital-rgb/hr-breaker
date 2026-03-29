@@ -1,13 +1,16 @@
-import { useState, useEffect, useRef, useId } from "react";
+import { useState, useEffect, useLayoutEffect, useRef, useId } from "react";
 import { useLocation, useNavigate, useSearchParams, Link } from "react-router-dom";
-import { Disclosure, DisclosureButton, DisclosurePanel, RadioGroup } from "@headlessui/react";
-import { SparklesIcon, ArrowUpTrayIcon, ArrowDownTrayIcon, ArrowPathIcon, BriefcaseIcon, ClipboardDocumentIcon, ExclamationTriangleIcon, CheckCircleIcon, LockClosedIcon, CheckIcon } from "@heroicons/react/24/outline";
+import { Disclosure, DisclosureButton, DisclosurePanel } from "@headlessui/react";
+import { SparklesIcon, ArrowUpTrayIcon, ArrowDownTrayIcon, ArrowPathIcon, BriefcaseIcon, ClipboardDocumentIcon, ExclamationTriangleIcon, CheckCircleIcon, LockClosedIcon, CheckIcon, ChevronDownIcon } from "@heroicons/react/24/outline";
 import * as api from "../api";
 import { useAuth } from "../contexts/AuthContext";
 import { t } from "../i18n";
 
 const RESUME_FILE_ACCEPT = ".txt,.md,.html,.htm,.tex,.pdf,.doc,.docx";
 const RESUME_TEXT_EXTS = ["txt", "md", "html", "htm", "tex", "pdf", "doc", "docx"];
+
+const OPTIMIZE_CHECKOUT_SNAPSHOT_KEY = "pitchcv_optimize_checkout_snapshot_v1";
+const OPTIMIZE_PENDING_AUTO_IMPROVE_KEY = "pitchcv_optimize_pending_auto_improve";
 
 /** Backend message when URL is a job search page, not a single job */
 const JOB_LIST_URL_MARKER = "job search page";
@@ -458,15 +461,6 @@ function BarScoreRow({ label, percent, compact }: { label: string; percent: numb
   );
 }
 
-function getRiskLevelLabel(riskPct: number): string {
-  const r = Math.max(0, Math.min(100, Math.round(riskPct)));
-  if (r >= 80) return "Critical";
-  if (r >= 60) return "High";
-  if (r >= 40) return "Elevated";
-  if (r >= 20) return "Moderate";
-  return "Low";
-}
-
 function MiniMetricRow({ label, percent }: { label: string; percent: number }) {
   const pct = Math.max(0, Math.min(100, percent));
   return (
@@ -486,6 +480,132 @@ function MiniMetricRow({ label, percent }: { label: string; percent: number }) {
       </div>
     </div>
   );
+}
+
+function mixHex(a: string, b: string, t: number): string {
+  const ah = a.replace("#", "");
+  const bh = b.replace("#", "");
+  const ar = parseInt(ah.slice(0, 2), 16);
+  const ag = parseInt(ah.slice(2, 4), 16);
+  const ab = parseInt(ah.slice(4, 6), 16);
+  const br = parseInt(bh.slice(0, 2), 16);
+  const bg = parseInt(bh.slice(2, 4), 16);
+  const bb = parseInt(bh.slice(4, 6), 16);
+  const r = Math.round(ar + (br - ar) * t);
+  const g = Math.round(ag + (bg - ag) * t);
+  const bl = Math.round(ab + (bb - ab) * t);
+  return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${bl.toString(16).padStart(2, "0")}`;
+}
+
+function scoreProgressColor(pct: number): string {
+  const p = Math.max(0, Math.min(100, pct));
+  if (p <= 25) return mixHex("#dc2626", "#f59e0b", p / 25);
+  if (p <= 45) return "#f59e0b";
+  if (p <= 60) return mixHex("#f59e0b", "#16a34a", (p - 45) / 15);
+  return "#16a34a";
+}
+
+function ScoreRing({
+  percent,
+  size = 46,
+  thickness = 6,
+}: {
+  percent: number;
+  size?: number;
+  thickness?: number;
+}) {
+  const pct = Math.max(0, Math.min(100, percent));
+  const angle = (pct / 100) * 360;
+  const startDeg = 270;
+  const ringMask = `radial-gradient(farthest-side, transparent calc(100% - ${thickness}px), #000 calc(100% - ${thickness}px))`;
+  const qualityColor = scoreProgressColor(pct);
+  const filledGradient =
+    "conic-gradient(from 270deg, #dc2626 0%, #f59e0b 25%, #f59e0b 45%, #16a34a 60%, #16a34a 100%)";
+  const markerRadius = Math.max(2.5, thickness / 2 + 0.5);
+  const orbit = size / 2 - thickness / 2 - 0.25;
+  const markerDeg = startDeg + angle;
+  const markerRad = (markerDeg * Math.PI) / 180;
+  const markerX = size / 2 + orbit * Math.sin(markerRad) - markerRadius;
+  const markerY = size / 2 - orbit * Math.cos(markerRad) - markerRadius;
+
+  return (
+    <div className="relative shrink-0" style={{ width: size, height: size }} aria-hidden>
+      <div
+        className="absolute inset-0 rounded-full"
+        style={{
+          background: filledGradient,
+          WebkitMaskImage: ringMask,
+          maskImage: ringMask,
+        }}
+      />
+      <div
+        className="absolute inset-0 rounded-full"
+        style={{
+          background:
+            pct <= 0
+              ? "#E5E7EB"
+              : pct >= 100
+                ? "transparent"
+                : `conic-gradient(from ${startDeg}deg, transparent 0deg ${angle}deg, #E5E7EB ${angle}deg 360deg)`,
+          WebkitMaskImage: ringMask,
+          maskImage: ringMask,
+        }}
+      />
+      <span
+        className="absolute rounded-full ring-2 ring-white"
+        style={{
+          width: markerRadius * 2,
+          height: markerRadius * 2,
+          left: markerX,
+          top: markerY,
+          backgroundColor: qualityColor,
+        }}
+      />
+    </div>
+  );
+}
+
+function getQualityLevelLabel(qualityPct: number): string {
+  const q = Math.max(0, Math.min(100, Math.round(qualityPct)));
+  if (q >= 80) return t("optimize.resumeQualityLevelExcellent");
+  if (q >= 60) return t("optimize.resumeQualityLevelStrong");
+  if (q >= 45) return t("optimize.resumeQualityLevelGood");
+  if (q >= 25) return t("optimize.resumeQualityLevelFair");
+  return t("optimize.resumeQualityLevelLow");
+}
+
+function cleanRecommendationReason(label: string): string {
+  return label
+    .replace(/\s*-\s*(missing|weak mention|none listed|ok|present)$/i, "")
+    .trim();
+}
+
+function impactFromRecommendationLabel(label: string): string {
+  const l = label.toLowerCase();
+  if (l.includes("ci/cd")) return "ATS treats you as less production-ready and lowers shortlist priority.";
+  if (l.includes("figma")) return "Cross-team collaboration signal is weak for product roles.";
+  if (l.includes("metrics")) return "Without numbers, recruiters cannot estimate your real impact.";
+  if (l.includes("leadership")) return "You look like an individual contributor instead of a leader.";
+  return "This gap reduces relevance and weakens your position at screening.";
+}
+
+function fixFromRecommendationLabel(label: string): string {
+  const l = label.toLowerCase();
+  if (l.includes("ci/cd")) return "Add one bullet showing CI/CD ownership and release impact.";
+  if (l.includes("figma")) return "Mention collaboration with design and product discovery artifacts.";
+  if (l.includes("metrics")) return "Rewrite 2–3 bullets with measurable outcomes (%, $, team size).";
+  if (l.includes("leadership")) return "Add one leadership example with team scope and business result.";
+  return "Add a focused bullet in summary or experience tied to this requirement.";
+}
+
+function recommendationPriorityScore(label: string): number {
+  const l = label.toLowerCase();
+  let score = 1;
+  if (l.includes("missing")) score += 3;
+  if (l.includes("none")) score += 3;
+  if (l.includes("weak")) score += 2;
+  if (l.includes("metrics") || l.includes("leadership") || l.includes("ci/cd")) score += 2;
+  return score;
 }
 
 const RESUME_SECTION_HEADERS = /^(SPRACHEN|KENNTNISSE|ERFAHRUNG|BILDUNG|PERSONLICHE\s+DATEN|EDUCATION|EXPERIENCE|SKILLS|SUMMARY|QUALIFICATIONS|ОПЫТ|ОБРАЗОВАНИЕ|НАВЫКИ|КОНТАКТЫ)$/i;
@@ -972,8 +1092,13 @@ export default function Optimize() {
   const [_isAnalyzing, setIsAnalyzing] = useState(false);
   const [loadProgress, setLoadProgress] = useState(0);
   const [loadMessage, setLoadMessage] = useState("");
-  const [aggressiveTailoring, setAggressiveTailoring] = useState(false);
   const [isImprovingMore, setIsImprovingMore] = useState(false);
+  const [optimizePaywallOpen, setOptimizePaywallOpen] = useState(false);
+  const [optimizePaywallCheckoutLoading, setOptimizePaywallCheckoutLoading] = useState(false);
+  const [optimizePaywallCheckoutError, setOptimizePaywallCheckoutError] = useState<string | null>(null);
+  const [pendingAutoImproveAfterCheckout, setPendingAutoImproveAfterCheckout] = useState(false);
+  const checkoutSnapshotRestoredRef = useRef(false);
+  const autoImproveStartedRef = useRef(false);
   const [loadingHintIndex, setLoadingHintIndex] = useState(0);
   const [resumeSummaryFromApi, setResumeSummaryFromApi] = useState<api.ExtractResumeSummaryResponse | null>(null);
   const [isExtractingSummary, setIsExtractingSummary] = useState(false);
@@ -989,6 +1114,12 @@ export default function Optimize() {
   const step2SectionRef = useRef<HTMLDivElement>(null);
   const prevHadResumeRef = useRef(false);
   const claimedPendingRef = useRef<string | null>(null);
+  const autoImproveGateRef = useRef<{
+    preScores: api.AnalyzeResponse | null;
+    resumeContent: string;
+    jobInput: string;
+    stage: Stage;
+  }>({ preScores: null, resumeContent: "", jobInput: "", stage: "landing" });
 
   const plan = user?.subscription?.plan || "free";
   const subStatus = user?.subscription?.status || "free";
@@ -1034,10 +1165,53 @@ export default function Optimize() {
       });
   }, [pendingToken, user, setSearchParams]);
 
+  // Restore analyze state after trial checkout (before paint) so data is ready for auto-improve
+  useLayoutEffect(() => {
+    if (typeof window === "undefined" || checkoutSnapshotRestoredRef.current) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("checkout") !== "success") return;
+    const pending = sessionStorage.getItem(OPTIMIZE_PENDING_AUTO_IMPROVE_KEY) === "1";
+    const raw = sessionStorage.getItem(OPTIMIZE_CHECKOUT_SNAPSHOT_KEY);
+    if (!pending || !raw) return;
+    try {
+      const p = JSON.parse(raw) as {
+        v: number;
+        resumeContent?: string;
+        jobInput?: string;
+        jobMode?: "url" | "text";
+        preScores?: api.AnalyzeResponse;
+        parsedJob?: api.JobPostingOut | null;
+        resumeSourceWasPdf?: boolean;
+        uploadedFileName?: string | null;
+        resumeSummaryFromApi?: api.ExtractResumeSummaryResponse | null;
+      };
+      if (p.v !== 1 || !p.preScores) return;
+      setResumeContent(p.resumeContent ?? "");
+      setJobInput(p.jobInput ?? "");
+      setJobMode(p.jobMode === "url" ? "url" : "text");
+      setPreScores(p.preScores);
+      setParsedJob(p.parsedJob ?? null);
+      setResumeSourceWasPdf(!!p.resumeSourceWasPdf);
+      setUploadedFileName(p.uploadedFileName ?? null);
+      setResumeSummaryFromApi(p.resumeSummaryFromApi ?? null);
+      setResult(null);
+      setError(null);
+      setStage("assessment");
+      setPendingAutoImproveAfterCheckout(true);
+      checkoutSnapshotRestoredRef.current = true;
+      sessionStorage.removeItem(OPTIMIZE_CHECKOUT_SNAPSHOT_KEY);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   // Return from Stripe checkout (trial / subscription) — refresh profile
   useEffect(() => {
     const co = searchParams.get("checkout");
     if (co !== "success" && co !== "cancel") return;
+    if (co === "cancel") {
+      sessionStorage.removeItem(OPTIMIZE_PENDING_AUTO_IMPROVE_KEY);
+    }
     void refreshUser();
     setSearchParams(
       (prev) => {
@@ -1199,6 +1373,22 @@ export default function Optimize() {
       });
   }, [stage, hasResume, hasJob, jobMode, jobInput, resumeContent, result, refreshUser]);
 
+  // PDF thumbnail for compact match card if not yet loaded from Step 1 preview
+  useEffect(() => {
+    if (stage !== "assessment" || !lastUploadedPdfFile || resumeThumbnailUrl) return;
+    if (!lastUploadedPdfFile.name.toLowerCase().endsWith(".pdf")) return;
+    let cancelled = false;
+    api
+      .getResumeThumbnailUrl(lastUploadedPdfFile)
+      .then((url) => {
+        if (!cancelled) setResumeThumbnailUrl(url);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [stage, lastUploadedPdfFile, resumeThumbnailUrl]);
+
   // После успешного анализа сохранить загруженный PDF в «Мои резюме», если пользователь авторизован
   useEffect(() => {
     if (!preScores || !lastUploadedPdfFile || !user) return;
@@ -1355,12 +1545,54 @@ export default function Optimize() {
     }
   }
 
-  async function handleImprove() {
-    if (!canImprove) return;
-    if (!canOptimizeSubscription && user?.id !== "local") {
-      setError("AI auto-optimization is not available on the free plan. Please upgrade to a paid plan.");
+  function persistOptimizeSnapshotForCheckout() {
+    try {
+      if (!preScores || !resumeContent.trim() || !jobInput.trim()) return;
+      const payload = {
+        v: 1 as const,
+        resumeContent,
+        jobInput,
+        jobMode,
+        preScores,
+        parsedJob,
+        resumeSourceWasPdf,
+        uploadedFileName,
+        resumeSummaryFromApi,
+      };
+      sessionStorage.setItem(OPTIMIZE_CHECKOUT_SNAPSHOT_KEY, JSON.stringify(payload));
+      sessionStorage.setItem(OPTIMIZE_PENDING_AUTO_IMPROVE_KEY, "1");
+    } catch {
+      /* ignore */
+    }
+  }
+
+  async function handleOptimizePaywallStartTrial() {
+    if (!user || user.id === "local") {
+      navigate("/login");
       return;
     }
+    persistOptimizeSnapshotForCheckout();
+    setOptimizePaywallCheckoutError(null);
+    setOptimizePaywallCheckoutLoading(true);
+    const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
+    const successUrl = `${baseUrl}/optimize?checkout=success`;
+    const cancelUrl = `${baseUrl}/optimize?checkout=cancel`;
+    try {
+      const { url } = await api.createCheckoutSession({
+        price_key: "trial",
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+      });
+      if (url) window.location.href = url;
+      else setOptimizePaywallCheckoutError(t("upgrade.getPaymentLinkError"));
+    } catch (e) {
+      setOptimizePaywallCheckoutError(e instanceof Error ? e.message : t("upgrade.checkoutError"));
+    } finally {
+      setOptimizePaywallCheckoutLoading(false);
+    }
+  }
+
+  async function runOptimizeResumeMax() {
     setError(null);
     setStage("loading");
     setLoadProgress(0);
@@ -1370,7 +1602,7 @@ export default function Optimize() {
       job_text: jobMode === "text" ? jobInput.trim() : undefined,
       job_url: jobMode === "url" ? jobInput.trim() : undefined,
       parallel: true,
-      aggressive_tailoring: aggressiveTailoring,
+      aggressive_tailoring: true,
       pre_ats_score: preScores?.ats_score ?? undefined,
       pre_keyword_score: preScores?.keyword_score ?? undefined,
       source_was_pdf: resumeSourceWasPdf,
@@ -1383,7 +1615,7 @@ export default function Optimize() {
           setLoadProgress(percent);
           setLoadMessage(message);
         });
-      } catch (streamErr) {
+      } catch {
         setLoadMessage(t("optimize.waitingResponse"));
         res = await api.optimize(params);
       }
@@ -1400,6 +1632,7 @@ export default function Optimize() {
       } else {
         setStage("result");
       }
+      await refreshUser();
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Optimization failed";
       if (!isOfferPasteAsTextError(msg)) setError(msg);
@@ -1415,6 +1648,32 @@ export default function Optimize() {
       }
     }
   }
+
+  async function handleImprove() {
+    if (!canImprove) return;
+    if (!canOptimizeSubscription && user?.id !== "local") {
+      setOptimizePaywallOpen(true);
+      return;
+    }
+    await runOptimizeResumeMax();
+  }
+
+  autoImproveGateRef.current = { preScores, resumeContent, jobInput, stage };
+
+  useEffect(() => {
+    if (!pendingAutoImproveAfterCheckout) return;
+    if (user?.id !== "local" && !hasPaidPlan) return;
+    const ctx = autoImproveGateRef.current;
+    if (!ctx.preScores || !ctx.resumeContent.trim() || !ctx.jobInput.trim() || ctx.stage !== "assessment") return;
+    if (autoImproveStartedRef.current) return;
+    autoImproveStartedRef.current = true;
+    setPendingAutoImproveAfterCheckout(false);
+    sessionStorage.removeItem(OPTIMIZE_CHECKOUT_SNAPSHOT_KEY);
+    sessionStorage.removeItem(OPTIMIZE_PENDING_AUTO_IMPROVE_KEY);
+    void runOptimizeResumeMax().finally(() => {
+      autoImproveStartedRef.current = false;
+    });
+  }, [pendingAutoImproveAfterCheckout, hasPaidPlan, user?.id]);
 
   async function handleImproveMore() {
     if (!result || !hasResume || !hasJob) return;
@@ -1480,9 +1739,6 @@ export default function Optimize() {
   const awaitingLandingClaim = stage === "scanning" && claimGate && (!hasResume || !hasJob);
   const isLoadingAssessment =
     awaitingLandingClaim || stage === "scanning" || (stage === "assessment" && preScores == null);
-  const badLabelsCount = recommendationGroups.reduce((acc, group) => {
-    return acc + group.labels.filter((label) => !isPositiveRecommendationLabel(label)).length;
-  }, 0);
   const loadingHints =
     stage === "scanning"
       ? [
@@ -1523,7 +1779,27 @@ export default function Optimize() {
         const displayName = resumeSummaryFromApi?.full_name?.trim() || resumeSummary.name;
         const displaySpecialty = resumeSummaryFromApi?.specialty?.trim() || resumeSummary.specialty;
         const displaySkills = resumeSummaryFromApi?.skills?.trim() || resumeSummary.skillsLine;
-        return { atsPct, kwPct, overallPct, riskPct, skillsPct, experiencePct, portfolioPct, displayName, displaySpecialty, displaySkills };
+        const qualityPct =
+          result && !result.error
+            ? Math.round(
+                ((atsValue != null ? atsValue : atsPct) +
+                  (keywordsValue != null ? Math.round(keywordsValue.score * 100) : kwPct)) /
+                  2,
+              )
+            : Math.max(0, Math.min(100, 100 - riskPct));
+        return {
+          atsPct,
+          kwPct,
+          overallPct,
+          riskPct,
+          qualityPct,
+          skillsPct,
+          experiencePct,
+          portfolioPct,
+          displayName,
+          displaySpecialty,
+          displaySkills,
+        };
       })()
     : null;
   const scanResultParagraphs = summaryData
@@ -1535,6 +1811,17 @@ export default function Optimize() {
       })
     : [];
 
+  const treatmentGroupsOptimize = recommendationGroups.map((group) => ({
+    category: group.category,
+    problems: group.labels.filter((label) => !isPositiveRecommendationLabel(label)),
+  }));
+  const problemLabelsSorted = recommendationGroups
+    .flatMap((g) => g.labels.filter((l) => !isPositiveRecommendationLabel(l)))
+    .sort((a, b) => recommendationPriorityScore(b) - recommendationPriorityScore(a));
+  const topIssuesOptimize = problemLabelsSorted.slice(0, 2);
+  const scanSummaryTextOptimize =
+    scanResultParagraphs.length > 0 ? scanResultParagraphs.join(" ") : t("optimize.lowScoreNeedsImprovement");
+
   return (
     <div className="flex flex-col gap-4 sm:gap-5 h-full min-h-0 overflow-auto">
         {error && !isOfferPasteAsTextError(error) && (
@@ -1545,66 +1832,239 @@ export default function Optimize() {
         )}
 
       {showSummaryBlocks && summaryData ? (
-        <div className="relative w-full flex flex-col">
-          {/* Results after scan */}
-        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-3 w-full content-start items-start">
-          {/* Scan results */}
-          <div className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-4 sm:p-6 flex flex-col gap-0 min-h-0 relative">
-            {(() => {
-              const desc = [getAtsCategory(summaryData.atsPct).description, getKeywordsCategory(summaryData.kwPct).description].filter(Boolean).join(" ");
-              const is90Rejection = /90%|rejection|90\s*%/.test(desc);
-              return is90Rejection ? (
-                <span className="absolute top-2.5 right-2.5 text-[10px] font-semibold text-[var(--text-tertiary)] uppercase tracking-wider">
-                  {t("optimize.rejectionGuaranteed")}
-                </span>
-              ) : null;
-            })()}
-            <p className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider shrink-0 mb-1.5">
-              {t("optimize.scanResults")}
-            </p>
-            <div className="rounded-lg bg-[#EEF0F5] px-3 py-2.5 min-w-0 border border-[#E2E6EE]">
-              <div className="space-y-1.5">
-                {scanResultParagraphs.map((paragraph, idx) => (
-                  <p key={idx} className="text-[13px] leading-snug text-[#334155] min-w-0 font-medium break-words [overflow-wrap:anywhere]">
-                    {paragraph}
-                  </p>
-                ))}
-              </div>
-            </div>
-          </div>
-          {/* Rejection risk (primary) + compact Skills/Experience/Portfolio */}
-          <div className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-4 sm:p-6 flex flex-col gap-2.5 min-h-0 min-w-0">
-            <div className="rounded-xl bg-white border border-[#ECEFF5] p-3.5 sm:p-4.5">
-              <div className="flex flex-col lg:flex-row lg:items-center gap-4 lg:gap-6">
-                <div className="flex items-center gap-3 sm:gap-4 lg:min-w-[290px]">
-                  <CircleScore percent={100 - summaryData.riskPct} size={92} />
-                  <div>
-                    <p className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider">
-                      Rejection risk ({getRiskLevelLabel(summaryData.riskPct)})
-                    </p>
-                    <p className="mt-1 text-[30px] leading-none font-bold text-[#181819] tabular-nums">
-                      {summaryData.riskPct}%
-                    </p>
-                    <p className="mt-1 text-[11px] text-[var(--text-tertiary)] leading-relaxed max-w-[320px]">
-                      {summaryData.riskPct >= 45
-                        ? "Without applying recommendations, rejection risk remains high."
-                        : "Resume aligns better with the vacancy and rejection risk is reduced."}
-                    </p>
+        <div className="relative flex flex-col gap-4 w-full max-w-3xl mx-auto px-1 sm:px-0">
+          <style>{`
+            @keyframes criticalBorderShimmer {
+              0% { background-position: 0 0, 0 0, 200% 0; }
+              100% { background-position: 0 0, 0 0, -200% 0; }
+            }
+          `}</style>
+          {(() => {
+            const resultViewOk = stage === "result" && result && !result.error;
+            const q = summaryData.qualityPct;
+            const ringSizes = [
+              { cls: "sm:hidden", size: 104, thick: 12, fs: "text-[19px]" },
+              { cls: "hidden sm:block lg:hidden", size: 110, thick: 13, fs: "text-[21px]" },
+              { cls: "hidden lg:block", size: 118, thick: 14, fs: "text-[22px]" },
+            ];
+            return (
+              <section className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-4 sm:p-5">
+                <p className="text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider mb-3">{t("optimize.overallMatchScore")}</p>
+                <div
+                  className={`rounded-xl border p-3.5 sm:p-4.5 ${
+                    resultViewOk ? "bg-[#F0FDF4] border-[#BBF7D0]" : "bg-white border-[#ECEFF5]"
+                  }`}
+                >
+                  <div className="flex flex-col gap-4 sm:gap-5">
+                    <div className="flex flex-col lg:flex-row items-center lg:items-center gap-5 lg:gap-6">
+                      <div className="flex items-center gap-3 shrink-0">
+                        <div className="w-[72px] sm:w-[84px] shrink-0 rounded bg-white shadow-[0_2px_8px_-4px_rgba(20,25,40,0.12)] border border-[#E8ECF4] flex flex-col relative aspect-[210/297] overflow-hidden group">
+                          {(() => {
+                            const isPdfFromHistory = uploadedFileName?.toLowerCase().endsWith(".pdf");
+                            if (resumeThumbnailUrl) {
+                              return (
+                                <img
+                                  src={resumeThumbnailUrl}
+                                  alt=""
+                                  className="absolute inset-0 w-full h-full object-cover object-top opacity-90"
+                                />
+                              );
+                            }
+                            if (lastUploadedPdfFile && lastUploadedPdfFile.name.toLowerCase().endsWith(".pdf")) {
+                              if (!resumeThumbnailUrl) {
+                                return <div className="absolute inset-0 bg-[#F8FAFD] animate-pulse" aria-hidden />;
+                              }
+                              return (
+                                <img
+                                  src={resumeThumbnailUrl}
+                                  alt=""
+                                  className="absolute inset-0 w-full h-full object-cover object-top opacity-90"
+                                />
+                              );
+                            }
+                            if (isPdfFromHistory && user?.id && user.id !== "local" && !lastUploadedPdfFile && uploadedFileName) {
+                              return <ResumeHistoryThumbnailPreview filename={uploadedFileName} />;
+                            }
+                            return (
+                              <ResumeSheetPreview
+                                name={
+                                  resumeName?.first || resumeName?.last
+                                    ? [resumeName.first, resumeName.last].filter(Boolean).join(" ")
+                                    : "Resume"
+                                }
+                              />
+                            );
+                          })()}
+                          <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/5 backdrop-blur-[1px] pointer-events-none">
+                            <span
+                              className={`text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded shadow-sm ${
+                                resultViewOk ? "text-[#166534] bg-white/95" : "text-[#181819] bg-white/95"
+                              }`}
+                            >
+                              {t("home.resume")}
+                            </span>
+                          </div>
+                        </div>
+                        <span className="text-[#8A94A6] text-xl font-light">+</span>
+                        <div className="w-[72px] sm:w-[84px] shrink-0 rounded bg-white shadow-[0_2px_8px_-4px_rgba(20,25,40,0.12)] border border-[#E8ECF4] flex flex-col relative aspect-[210/297] p-2 text-center justify-center">
+                          <p className="text-[10px] sm:text-[11px] font-semibold text-[#181819] leading-tight line-clamp-4">
+                            {parsedJob?.title?.trim() || jobInput.trim().slice(0, 72) || "—"}
+                            {parsedJob?.title ? "" : jobInput.trim().length > 72 ? "…" : ""}
+                          </p>
+                          <p className="text-[8px] sm:text-[9px] text-[#6B7280] mt-1.5 line-clamp-2">
+                            {parsedJob?.company?.trim() || ""}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="hidden lg:block w-px h-[100px] bg-[#E8ECF4] shrink-0" />
+                      <div className="lg:hidden w-full h-px bg-[#E8ECF4]" />
+                      <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-4 flex-1 w-full justify-center sm:justify-start">
+                        {ringSizes.map(({ cls, size, thick, fs }) => (
+                          <div key={cls} className={`${cls} shrink-0 relative`} style={{ width: size, height: size }}>
+                            <ScoreRing percent={q} size={size} thickness={thick} />
+                            <span
+                              className={`absolute inset-0 flex items-center justify-center font-bold tabular-nums ${fs} ${
+                                resultViewOk ? "text-[#166534]" : "text-[#181819]"
+                              }`}
+                            >
+                              {q}%
+                            </span>
+                          </div>
+                        ))}
+                        <div className="text-center sm:text-left flex-1 min-w-0">
+                          <p
+                            className={`text-[11px] font-semibold uppercase tracking-wider ${
+                              resultViewOk ? "text-[#166534]" : "text-[#6B7280]"
+                            }`}
+                          >
+                            {t("optimize.resumeQuality")} ({getQualityLevelLabel(q)})
+                          </p>
+                          <p className="mt-1.5 sm:mt-1 text-[11px] sm:text-[12px] text-[#6B7280] leading-relaxed max-w-[280px] mx-auto sm:mx-0">
+                            {resultViewOk ? t("optimize.resumeQualityHintHigh") : t("optimize.resumeQualityHintLow")}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    <div
+                      className={`border-t pt-4 grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 ${
+                        resultViewOk ? "border-[#BBF7D0]" : "border-[#F3F4F6]"
+                      }`}
+                    >
+                      <MiniMetricRow label={t("optimize.skills")} percent={summaryData.skillsPct} />
+                      <MiniMetricRow label={t("optimize.experience")} percent={summaryData.experiencePct} />
+                      <MiniMetricRow label={t("optimize.portfolio")} percent={summaryData.portfolioPct} />
+                    </div>
                   </div>
                 </div>
-                <div className="flex-1 lg:max-w-[280px] space-y-3">
-                  <MiniMetricRow label="Skills" percent={summaryData.skillsPct} />
-                  <MiniMetricRow label="Experience" percent={summaryData.experiencePct} />
-                  <MiniMetricRow label="Portfolio" percent={summaryData.portfolioPct} />
+              </section>
+            );
+          })()}
+
+          {stage === "assessment" && topIssuesOptimize.length > 0 && (
+            <div className="mt-2">
+              <div
+                className="rounded-[22px] border border-transparent p-[1px]"
+                style={{
+                  background:
+                    "linear-gradient(#FAFAFC, #FAFAFC) padding-box, linear-gradient(120deg, #F36B7F 0%, #E94A63 45%, #C92A4B 100%) border-box, linear-gradient(120deg, rgba(255,255,255,0) 40%, rgba(255,255,255,0.85) 50%, rgba(255,255,255,0) 60%) border-box",
+                  backgroundSize: "100% 100%, 100% 100%, 240% 240%",
+                  backgroundPosition: "0 0, 0 0, 200% 0",
+                  animation: "criticalBorderShimmer 3.2s linear infinite",
+                }}
+              >
+                <div className="rounded-[21px] bg-white p-4 sm:p-5">
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-[1.5px] border-[#C92A4B] text-[#C92A4B] text-[13px] font-bold">
+                      !
+                    </span>
+                    <p className="text-[15px] sm:text-base font-semibold text-[#181819] leading-tight">
+                      {t("optimize.whyNoCallbacksTitle")}
+                    </p>
+                  </div>
+                  <p className="mt-1.5 text-[13px] text-[#4B5563] leading-relaxed">{scanSummaryTextOptimize}</p>
+                  <div className="mt-4 space-y-2.5">
+                    {topIssuesOptimize.map((issue) => (
+                      <Disclosure key={issue}>
+                        {({ open }) => (
+                          <div className="rounded-xl bg-white ring-1 ring-[#EDF1F7]">
+                            <DisclosureButton className="w-full flex items-center gap-3 px-3.5 py-3 text-left hover:bg-[#F8FAFD] transition-colors rounded-xl">
+                              <div className="min-w-0 flex-1">
+                                <p className="text-[13px] font-semibold text-[#181819] leading-snug">
+                                  {cleanRecommendationReason(issue)}
+                                </p>
+                                <div className="mt-0.5 inline-flex items-center gap-1.5">
+                                  <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#FDECEF] px-1.5 text-[11px] font-bold text-[#C92A4B]">
+                                    !
+                                  </span>
+                                  <p className="text-[11px] text-[#C92A4B] font-medium">{t("optimize.criticalReason")}</p>
+                                </div>
+                              </div>
+                              <ChevronDownIcon className={`w-4 h-4 text-[#6B7280] transition-transform shrink-0 ${open ? "rotate-180" : ""}`} />
+                            </DisclosureButton>
+                            <DisclosurePanel className="px-3.5 pb-3.5 pt-0">
+                              <div className="pt-2 border-t border-[#EDF1F7] mt-1">
+                                <p className="text-[12px] text-[#374151] leading-relaxed">
+                                  <span className="font-semibold text-[#181819]">{t("optimize.ifIgnored")}</span>{" "}
+                                  {impactFromRecommendationLabel(issue)}
+                                </p>
+                                <p className="text-[12px] text-[#374151] leading-relaxed mt-1.5">
+                                  <span className="font-semibold text-[#181819]">{t("optimize.whatToChange")}</span>{" "}
+                                  {fixFromRecommendationLabel(issue)}
+                                </p>
+                              </div>
+                            </DisclosurePanel>
+                          </div>
+                        )}
+                      </Disclosure>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-          {/* Расшифровка резюме */}
-          <div className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-4 sm:p-6 flex flex-col gap-0 min-w-0" aria-label={t("optimize.resumeBreakdown")}>
-            <p className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider shrink-0 mb-2">
-              {t("optimize.resumeBreakdown")}
-            </p>
+          )}
+
+          {stage === "assessment" && treatmentGroupsOptimize.some((g) => g.problems.length > 0) && (
+            <section className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-4 sm:p-5">
+              <p className="text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider">{t("optimize.recommendationsTitle")}</p>
+              <div className="mt-3 space-y-2.5">
+                {treatmentGroupsOptimize.map((group) =>
+                  group.problems.length === 0 ? null : (
+                    <Disclosure key={group.category}>
+                      {({ open }) => (
+                        <div className="rounded-xl bg-white ring-1 ring-[#EDF1F7]">
+                          <DisclosureButton className="w-full flex items-center gap-3 px-3.5 py-3 text-left">
+                            <div className="min-w-0 flex-1">
+                              <p className="text-[13px] font-semibold text-[#181819] leading-snug">{group.category}</p>
+                              <div className="mt-0.5 inline-flex items-center gap-1.5">
+                                <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#FFF4E5] px-1.5 text-[11px] font-semibold text-[#B45309]">
+                                  {group.problems.length}
+                                </span>
+                                <p className="text-[11px] text-[#6B7280]">{t("optimize.issuesToFix")}</p>
+                              </div>
+                            </div>
+                            <ChevronDownIcon className={`w-4 h-4 text-[#6B7280] transition-transform shrink-0 ${open ? "rotate-180" : ""}`} />
+                          </DisclosureButton>
+                          <DisclosurePanel className="px-3.5 pb-3.5 pt-0">
+                            <ul className="space-y-1.5 pl-0">
+                              {group.problems.map((label) => (
+                                <li key={`${group.category}-${label}`} className="px-0.5 py-1">
+                                  <p className="text-[12px] font-medium text-[#181819] leading-snug">{cleanRecommendationReason(label)}</p>
+                                  <p className="mt-0.5 text-[11px] text-[#6B7280] leading-relaxed">{fixFromRecommendationLabel(label)}</p>
+                                </li>
+                              ))}
+                            </ul>
+                          </DisclosurePanel>
+                        </div>
+                      )}
+                    </Disclosure>
+                  ),
+                )}
+              </div>
+            </section>
+          )}
+
+          <section className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-4 sm:p-5 flex flex-col gap-0 min-w-0" aria-label={t("optimize.resumeBreakdown")}>
+            <p className="text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider shrink-0 mb-2">{t("optimize.resumeBreakdown")}</p>
             <ResumePreviewContent
               rawContent={resumeContent}
               name={summaryData.displayName}
@@ -1612,128 +2072,42 @@ export default function Optimize() {
               skills={summaryData.displaySkills}
               isExtracting={isExtractingSummary && !resumeSummaryFromApi}
             />
-          </div>
-          {/* Нижняя секция, ряд 2: Рекомендации + Режим улучшения + кнопка + результат */}
-          <div className="flex flex-col gap-3 min-w-0">
-            {stage === "assessment" && (
-              <>
-                {recommendationGroups.length > 0 && (
-                  <div className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-4 sm:p-6 shrink-0">
-                    <p className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider shrink-0 mb-3">
-                      {t("optimize.recommendationsTitle")}
-                    </p>
-                    <div className="space-y-3">
-                      {recommendationGroups.map((group) => (
-                        <section key={group.category} className="space-y-1.5">
-                          <p className="text-[12px] font-semibold text-[#181819]">{group.category}</p>
-                          <ul className="flex flex-wrap gap-2">
-                            {group.labels.map((label) => (
-                              <li key={`${group.category}-${label}`} className="list-none">
-                                <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-medium text-[#374151] bg-[#F2F4F8]">
-                                  {isPositiveRecommendationLabel(label) ? (
-                                    <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-[#EAF9EF] text-[#15803D] shrink-0" aria-hidden>
-                                      <CheckCircleIcon className="w-3 h-3" />
-                                    </span>
-                                  ) : (
-                                    <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-[#FFF3E0] text-[#B45309] shrink-0" aria-hidden>
-                                      <ExclamationTriangleIcon className="w-3 h-3" />
-                                    </span>
-                                  )}
-                                  {label}
-                                </span>
-                              </li>
-                            ))}
-                          </ul>
-                        </section>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                <div className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-4 sm:p-6 space-y-3 shrink-0">
-                  <RadioGroup
-                      value={aggressiveTailoring ? "strict" : "soft"}
-                      onChange={(v) => setAggressiveTailoring(v === "strict")}
-                      className="space-y-2"
-                    >
-                      <RadioGroup.Label className="flex items-center gap-2 text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider">
-                        <span>Auto apply changes</span>
-                        <span className="inline-flex items-center justify-center min-w-[22px] h-5 px-1.5 rounded-md bg-[#FFF6DB] text-[#9A6700] font-semibold tabular-nums">
-                          {badLabelsCount}
-                        </span>
-                      </RadioGroup.Label>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        <RadioGroup.Option value="soft" className="rounded-xl outline-none focus:ring-2 focus:ring-[#4578FC]/30 focus:ring-offset-2 focus:ring-offset-[#FAFAFC]">
-                          {({ checked }) => (
-                            <div className={`relative flex flex-col rounded-lg px-3 py-2.5 cursor-pointer transition-colors ${checked ? "bg-[#4578FC]/10 ring-1 ring-[#4578FC]/30" : "bg-[#EBEDF5] hover:bg-[#E0E4EE]"}`}>
-                              <span className="text-[13px] font-medium text-[#181819]">{t("optimize.softLabel")}</span>
-                              <span className="mt-0.5 text-[11px] text-[var(--text-tertiary)] leading-snug">{t("optimize.softDesc")}</span>
-                            </div>
-                          )}
-                        </RadioGroup.Option>
-                        <RadioGroup.Option value="strict" className="rounded-lg outline-none focus:ring-2 focus:ring-[#4578FC]/30 focus:ring-offset-2 focus:ring-offset-[#FAFAFC]">
-                          {({ checked }) => (
-                            <div className={`relative flex flex-col rounded-lg px-3 py-2.5 cursor-pointer transition-colors ${checked ? "bg-[#4578FC]/10 ring-1 ring-[#4578FC]/30" : "bg-[#EBEDF5] hover:bg-[#E0E4EE]"}`}>
-<span className="text-[13px] font-medium text-[#181819]">{t("optimize.strictLabel")}</span>
-              <span className="mt-0.5 text-[11px] text-[var(--text-tertiary)] leading-snug">{t("optimize.aggressiveDesc")}</span>
-                            </div>
-                          )}
-                        </RadioGroup.Option>
-                      </div>
-                      {aggressiveTailoring ? (
-                        <div className="flex gap-2 rounded-xl bg-[#F7F9FC] border border-[#E6EAF2] px-3 py-2.5">
-                          <ExclamationTriangleIcon className="w-4 h-4 shrink-0 text-[#6B7280] mt-0.5" aria-hidden />
-                          <div className="text-[11px] leading-relaxed text-[#4B5563]">
-                            <p className="font-medium">{t("optimize.strictWarningTitle")}</p>
-                            <p className="text-[var(--text-muted)]">{t("optimize.strictNote")}</p>
-                          </div>
-                        </div>
-                      ) : (
-                        <p className="text-[11px] text-[var(--text-tertiary)] leading-relaxed">
-                          {t("optimize.softOnlyNote")}
-                        </p>
-                      )}
-                    </RadioGroup>
-                    {canOptimizeSubscription ? (
-                      <button
-                        type="button"
-                        onClick={handleImprove}
-                        disabled={!canImprove}
-                        className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-2xl text-[13px] font-semibold text-white bg-[#4578FC] hover:bg-[#3d6ae6] disabled:opacity-50 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-[#4578FC]/40 focus:ring-offset-2 focus:ring-offset-[#FAFAFC]"
-                      >
-                        <SparklesIcon className="w-5 h-5 shrink-0" />
-                        {t("optimize.improveResume")}
-                      </button>
-                    ) : (
-                      <div className="flex flex-wrap items-center justify-center gap-2">
-                        <button
-                          type="button"
-                          disabled
-                          className="inline-flex items-center justify-center gap-2 py-3 px-4 rounded-2xl text-[13px] font-semibold text-[#6B7280] bg-[#F3F4F6] border border-[#E5E7EB] cursor-not-allowed"
-                          title={t("optimize.upgradeToOptimize")}
-                        >
-                          <SparklesIcon className="w-4 h-4" />
-                          {t("optimize.improveResume")}
-                          <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-[#E5E7EB] text-[#6B7280]">
-                            <LockClosedIcon className="w-2.5 h-2.5" />
-                          </span>
-                        </button>
-                        <Link
-                          to="/upgrade"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center justify-center py-3 px-5 rounded-2xl text-[13px] font-semibold text-[#4578FC] border border-[#4578FC]/60 bg-transparent hover:bg-[#4578FC]/6 transition-colors focus:outline-none focus:ring-2 focus:ring-[#4578FC]/25 focus:ring-offset-2 focus:ring-offset-[#FAFAFC]"
-                        >
-                          {t("optimize.upgradeButton")}
-                        </Link>
-                        <span className="text-[13px] text-[var(--text-muted)]">
-                          {t("optimize.upgradeToImproveSuffix")}
-                        </span>
-                      </div>
-                    )}
-                </div>
-              </>
-            )}
-            {stage === "result" && result && (
+          </section>
+
+          {stage === "assessment" && (
+            <div className="mt-8 sm:mt-10 mb-6 flex flex-col items-center text-center px-2">
+              <div className="inline-flex items-center justify-center gap-2 sm:gap-3 mb-4 w-full max-w-[320px] sm:max-w-none">
+                <svg className="w-5 h-5 sm:w-7 sm:h-7 shrink-0" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+                  <path d="M12 1L14.8 8.2L22 11L14.8 13.8L12 21L9.2 13.8L2 11L9.2 8.2L12 1Z" fill="url(#sparkle-grad-opt)" />
+                  <defs>
+                    <linearGradient id="sparkle-grad-opt" x1="2" y1="2" x2="22" y2="22" gradientUnits="userSpaceOnUse">
+                      <stop stopColor="#4578FC" />
+                      <stop offset="0.5" stopColor="#5e8afc" />
+                      <stop offset="1" stopColor="#2E9FFF" />
+                    </linearGradient>
+                  </defs>
+                </svg>
+                <span className="text-[17px] sm:text-[22px] font-medium text-[#181819] leading-tight text-left sm:text-center">
+                  {t("optimize.nextStepImproveTitle")}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => void handleImprove()}
+                disabled={!canImprove}
+                className="inline-flex items-center justify-center gap-2 rounded-full px-8 py-3.5 text-[15px] font-semibold text-white shadow-[0_4px_14px_-4px_rgba(69,120,252,0.55)] hover:shadow-[0_6px_20px_-4px_rgba(69,120,252,0.45)] hover:opacity-[0.97] active:scale-[0.99] transition-all disabled:opacity-45 disabled:cursor-not-allowed disabled:shadow-none focus:outline-none focus:ring-2 focus:ring-[#4578FC]/35 focus:ring-offset-2"
+                style={{
+                  background: "linear-gradient(165deg, #5e8afc 0%, #4578FC 42%, #3d6ae6 100%)",
+                }}
+              >
+                <SparklesIcon className="w-5 h-5 shrink-0" aria-hidden />
+                {t("optimize.applyAutoImprove")}
+              </button>
+              <p className="mt-3 text-[11px] text-[#6B7280] max-w-md leading-relaxed">{t("optimize.strictNote")}</p>
+            </div>
+          )}
+
+          {stage === "result" && result && (
               <div className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-4 sm:p-6 space-y-4">
                 <header className="flex flex-wrap items-center gap-2">
                   <h2 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">{t("optimize.result")}</h2>
@@ -1744,7 +2118,7 @@ export default function Optimize() {
                 ) : (
                   <>
                     <p className="text-[13px] text-[var(--text-muted)] mb-2">
-                      {t("optimize.mode")}: <span className="font-medium text-[#181819]">{aggressiveTailoring ? t("optimize.aggressiveMode") : t("optimize.softMode")}</span>
+                      {t("optimize.mode")}: <span className="font-medium text-[#181819]">{t("optimize.aggressiveMode")}</span>
                     </p>
                 {result.pdf_filename && result.pdf_base64 && (
                   <section aria-label={t("optimize.downloadResume")} className="flex flex-wrap items-center gap-2">
@@ -1786,7 +2160,7 @@ export default function Optimize() {
                         </div>
                       </section>
                     )}
-                    {result.validation.results.length > 0 && (
+                    {(result.validation?.results?.length ?? 0) > 0 && (
                       <section className="pt-3 border-t border-[#EBEDF5]" aria-labelledby="filter-details-heading">
                         <Disclosure>
                           <DisclosureButton id="filter-details-heading" className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider hover:text-[#181819]">{t("optimize.filterDetails")}</DisclosureButton>
@@ -1795,7 +2169,7 @@ export default function Optimize() {
                               {t("optimize.filterDetailsDesc")}
                             </p>
                             <ul className="space-y-2" role="list">
-                              {result.validation.results.map((r) => (
+                              {(result.validation?.results ?? []).map((r) => (
                                 <li key={r.filter_name} className="flex flex-wrap items-center gap-2 text-[13px]">
                                   <span className={r.passed ? "text-green-600 font-medium" : "text-red-600 font-medium"}>{r.passed ? "✓" : "✗"} {r.filter_name}</span>
                                   <span className="text-[var(--text-tertiary)] tabular-nums">{r.score.toFixed(2)} / {r.threshold.toFixed(2)}</span>
@@ -1810,8 +2184,6 @@ export default function Optimize() {
                 )}
               </div>
             )}
-          </div>
-        </div>
         </div>
       ) : stage === "landing" ? (
         <div className="flex-1 flex flex-col items-center justify-start sm:justify-center pt-2 sm:pt-8 pb-8 sm:pb-16 px-3 sm:px-6 w-full max-w-5xl mx-auto min-h-0 overflow-auto">
@@ -2315,6 +2687,24 @@ export default function Optimize() {
         )}
 
       </div>
+      )}
+
+      {optimizePaywallOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-[45] flex items-start justify-center overflow-y-auto py-4 sm:py-10 px-3 sm:px-4 bg-[#0f172a]/50 backdrop-blur-[3px]"
+          onClick={() => setOptimizePaywallOpen(false)}
+        >
+          <div className="w-full max-w-xl pb-6 sm:pb-10 pt-2" onClick={(e) => e.stopPropagation()}>
+            <OptimizeFreeLimitWall
+              checkoutError={optimizePaywallCheckoutError}
+              checkoutLoading={optimizePaywallCheckoutLoading}
+              onEditSetup={() => setOptimizePaywallOpen(false)}
+              onStartTrial={() => void handleOptimizePaywallStartTrial()}
+            />
+          </div>
+        </div>
       )}
     </div>
   );
