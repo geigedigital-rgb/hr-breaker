@@ -23,6 +23,7 @@ import AdminConfig from "./pages/admin/AdminConfig";
 import AdminActivity from "./pages/admin/AdminActivity";
 import AdminUsage from "./pages/admin/AdminUsage";
 import AdminReferrals from "./pages/admin/AdminReferrals";
+import AdminReviews from "./pages/admin/AdminReviews";
 import AdminVisualTest from "./pages/admin/AdminVisualTest";
 import { t } from "./i18n";
 
@@ -111,6 +112,7 @@ function App() {
               <Route path="activity" element={<AdminActivity />} />
               <Route path="usage" element={<AdminUsage />} />
               <Route path="referrals" element={<AdminReferrals />} />
+              <Route path="reviews" element={<AdminReviews />} />
               <Route path="config" element={<AdminConfig />} />
               <Route path="app" element={<AdminApp />} />
               <Route path="visual" element={<AdminVisualTest />} />

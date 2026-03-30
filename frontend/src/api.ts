@@ -773,6 +773,86 @@ export async function deleteAdminUser(userId: string): Promise<{ ok: boolean }> 
   return { ok: !!data.ok };
 }
 
+/** Admin review moderation (landing reviews); requires DATABASE_URL on server. */
+export type AdminReviewRow = {
+  id: string;
+  author_name: string;
+  author_email: string;
+  author_role?: string | null;
+  country?: string | null;
+  rating: number;
+  would_recommend: boolean;
+  title: string;
+  body: string;
+  feature_tag?: string | null;
+  source?: string;
+  verified: boolean;
+  pinned: boolean;
+  consent_to_publish: boolean;
+  status: string;
+  published_at?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  admin_notes?: string | null;
+  helpful_count?: number;
+  language?: string | null;
+  submitter_ip?: string | null;
+};
+
+export type AdminReviewsListResponse = { items: AdminReviewRow[]; total: number };
+
+export async function getAdminReviews(params: {
+  limit: number;
+  offset: number;
+  status?: string;
+  rating?: number;
+}): Promise<AdminReviewsListResponse> {
+  const sp = new URLSearchParams({
+    limit: String(params.limit),
+    offset: String(params.offset),
+  });
+  if (params.status) sp.set("status", params.status);
+  if (params.rating != null) sp.set("rating", String(params.rating));
+  const r = await fetch(`${API}/reviews?${sp}`, { headers: authHeaders() });
+  const data = await parseJsonOrThrow<AdminReviewsListResponse & { detail?: string }>(r);
+  if (!r.ok) throw new Error(data.detail || r.statusText);
+  return data;
+}
+
+export async function patchAdminReview(
+  reviewId: string,
+  body: Partial<{
+    status: string;
+    verified: boolean;
+    pinned: boolean;
+    title: string;
+    body: string;
+    admin_notes: string | null;
+  }>
+): Promise<AdminReviewRow> {
+  const r = await fetch(`${API}/reviews/${encodeURIComponent(reviewId)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(body),
+  });
+  const data = await parseJsonOrThrow<AdminReviewRow & { detail?: string }>(r);
+  if (!r.ok) throw new Error(data.detail || r.statusText);
+  return data as AdminReviewRow;
+}
+
+export async function downloadAdminReviewsCsv(filters: { status?: string; rating?: number }): Promise<Blob> {
+  const sp = new URLSearchParams();
+  if (filters.status) sp.set("status", filters.status);
+  if (filters.rating != null) sp.set("rating", String(filters.rating));
+  const q = sp.toString();
+  const r = await fetch(`${API}/reviews/export.csv${q ? `?${q}` : ""}`, { headers: authHeaders() });
+  if (!r.ok) {
+    const text = await r.text();
+    throw new Error(text || r.statusText);
+  }
+  return r.blob();
+}
+
 // --- Partner ---
 export type PartnerCommissionItem = {
   invited_email: string | null;
