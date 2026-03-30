@@ -5,13 +5,6 @@ import {
   SparklesIcon,
   ArrowDownTrayIcon,
   ChevronDownIcon,
-  PlusIcon,
-  PuzzlePieceIcon,
-  ChatBubbleLeftEllipsisIcon,
-  MicrophoneIcon,
-  ArrowUpIcon,
-  DocumentTextIcon,
-  CodeBracketIcon,
 } from "@heroicons/react/24/outline";
 import { t } from "../../i18n";
 import * as api from "../../api";
@@ -616,7 +609,7 @@ export default function AdminVisualTest() {
   );
 
   return (
-    <div className="space-y-6 pb-44 sm:pb-48">
+    <div className="space-y-6 pb-8">
       <style>{`
         @keyframes criticalBorderShimmer {
           0% {
@@ -662,6 +655,35 @@ export default function AdminVisualTest() {
             <h2 className="text-sm font-semibold text-[#6B7280] uppercase tracking-wider mb-3">Stage: Assessment (Diagnosis)</h2>
           )}
           {assessmentBlock}
+          {/* Same placement as Optimize.tsx after diagnosis (stage === "assessment") */}
+          <div className="mt-8 sm:mt-10 mb-6 flex flex-col items-center text-center px-2">
+            <div className="inline-flex items-center justify-center gap-2 sm:gap-3 mb-4 w-full max-w-[320px] sm:max-w-none">
+              <svg className="w-5 h-5 sm:w-7 sm:h-7 shrink-0" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+                <path d="M12 1L14.8 8.2L22 11L14.8 13.8L12 21L9.2 13.8L2 11L9.2 8.2L12 1Z" fill="url(#sparkle-grad-visual-sandbox)" />
+                <defs>
+                  <linearGradient id="sparkle-grad-visual-sandbox" x1="2" y1="2" x2="22" y2="22" gradientUnits="userSpaceOnUse">
+                    <stop stopColor="#4578FC" />
+                    <stop offset="0.5" stopColor="#5e8afc" />
+                    <stop offset="1" stopColor="#2E9FFF" />
+                  </linearGradient>
+                </defs>
+              </svg>
+              <span className="text-[17px] sm:text-[22px] font-medium text-[#181819] leading-tight text-left sm:text-center">
+                {t("optimize.nextStepImproveTitle")}
+              </span>
+            </div>
+            <button
+              type="button"
+              className="inline-flex items-center justify-center gap-2 rounded-full px-8 py-3.5 text-[15px] font-semibold text-white shadow-[0_4px_14px_-4px_rgba(69,120,252,0.55)] hover:shadow-[0_6px_20px_-4px_rgba(69,120,252,0.45)] hover:opacity-[0.97] active:scale-[0.99] transition-all focus:outline-none focus:ring-2 focus:ring-[#4578FC]/35 focus:ring-offset-2"
+              style={{
+                background: "linear-gradient(165deg, #5e8afc 0%, #4578FC 42%, #3d6ae6 100%)",
+              }}
+            >
+              <SparklesIcon className="w-5 h-5 shrink-0" aria-hidden />
+              {t("optimize.applyAutoImprove")}
+            </button>
+            <p className="mt-3 text-[11px] text-[#6B7280] max-w-md leading-relaxed">{t("optimize.strictNote")}</p>
+          </div>
         </section>
       )}
 
@@ -673,105 +695,6 @@ export default function AdminVisualTest() {
           {resultBlock}
         </section>
       )}
-
-      {/* Call to action text (Document Flow) */}
-      <div className="mt-16 sm:mt-24 mb-6 flex flex-col items-center text-center px-4 w-full max-w-3xl mx-auto">
-        <div className="inline-flex items-center justify-center gap-2 sm:gap-3 mb-1 w-full max-w-[320px] sm:max-w-none">
-          <svg className="w-5 h-5 sm:w-7 sm:h-7 shrink-0" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M12 1L14.8 8.2L22 11L14.8 13.8L12 21L9.2 13.8L2 11L9.2 8.2L12 1Z" fill="url(#sparkle-grad)" />
-            <defs>
-              <linearGradient id="sparkle-grad" x1="2" y1="2" x2="22" y2="22" gradientUnits="userSpaceOnUse">
-                <stop stopColor="#4578FC" />
-                <stop offset="0.5" stopColor="#A05CFF" />
-                <stop offset="1" stopColor="#34D399" />
-              </linearGradient>
-            </defs>
-          </svg>
-          <span className="text-[17px] sm:text-[24px] font-normal text-[#181819] leading-tight">Next step: improve your resume.</span>
-        </div>
-        <h2 className="text-[26px] sm:text-[44px] font-normal text-[#181819] tracking-tight leading-tight mb-8">
-          What would you like to change?
-        </h2>
-        
-        {/* Quick action chips (static position above chat) */}
-        <div className="flex flex-wrap items-center justify-center gap-2 max-w-2xl mx-auto">
-          {[
-            { label: "Light polish", icon: SparklesIcon, accent: true },
-            { label: "Deep rewrite", icon: DocumentTextIcon },
-            { label: "Add more metrics", icon: CodeBracketIcon },
-            { label: "Focus on leadership", icon: ArrowUpIcon },
-          ].map((chip) => {
-            if (chip.accent) {
-              return (
-                <div key={chip.label} className="relative shrink-0 flex rounded-full p-[1px] overflow-hidden group shadow-[0_2px_8px_-4px_rgba(20,25,40,0.08)] bg-[#4578FC]/20 cursor-pointer hover:scale-[1.02] active:scale-[0.98] transition-transform">
-                  <div className="absolute inset-[-1000%] animate-[spin_2s_linear_infinite] bg-[conic-gradient(from_90deg_at_50%_50%,rgba(69,120,252,0)_0%,#4578FC_50%,rgba(69,120,252,0)_100%)] opacity-80 group-hover:opacity-100 transition-opacity" />
-                  <button
-                    type="button"
-                    className="relative flex items-center gap-2 rounded-full bg-[#F0F5FF] px-3.5 py-2 text-[14px] font-medium text-[#4578FC] hover:bg-[#E6EFFF] transition-colors"
-                  >
-                    <chip.icon className="h-4 w-4 text-[#4578FC]" />
-                    {chip.label}
-                  </button>
-                </div>
-              );
-            }
-            return (
-              <button
-                key={chip.label}
-                type="button"
-                className="shrink-0 flex items-center gap-2 rounded-full border px-3.5 py-2 text-[14px] font-medium shadow-[0_2px_8px_-4px_rgba(20,25,40,0.08)] transition-all bg-white text-[#4B5563] border-[#E8ECF4] hover:bg-[#F5F6FA] hover:text-[#181819] hover:border-[#DCE3F0] hover:scale-[1.02] active:scale-[0.98]"
-              >
-                <chip.icon className="h-4 w-4 text-[#8A94A6]" />
-                {chip.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Floating AI Chat Panel */}
-      <div className="fixed bottom-6 left-0 right-0 md:left-64 z-30 flex justify-center px-4 pointer-events-none">
-        <div className="pointer-events-auto w-full max-w-3xl flex flex-col gap-3">
-          
-          {/* Input Area */}
-          <div className="relative flex w-full flex-col rounded-[28px] border border-[#E8ECF4] bg-white shadow-[0_8px_30px_-12px_rgba(20,25,40,0.12)] transition-shadow focus-within:shadow-[0_8px_40px_-12px_rgba(20,25,40,0.2)] focus-within:border-[#DCE3F0]">
-            <textarea
-              rows={1}
-              placeholder="Assign a task or ask anything"
-              className="w-full resize-none bg-transparent px-5 pt-4 pb-14 text-[15px] text-[#181819] placeholder:text-[#8A94A6] focus:outline-none"
-              style={{ minHeight: "110px" }}
-            />
-            
-            {/* Left Icons */}
-            <div className="absolute bottom-3 left-4 flex items-center gap-2">
-              <button type="button" className="flex h-8 w-8 items-center justify-center rounded-full border border-[#E8ECF4] text-[#6B7280] hover:bg-[#F5F6FA] hover:text-[#181819] transition-colors" aria-label="Add attachment">
-                <PlusIcon className="h-4 w-4" />
-              </button>
-              <button type="button" className="flex h-8 w-8 items-center justify-center rounded-full border border-[#E8ECF4] text-[#6B7280] hover:bg-[#F5F6FA] hover:text-[#181819] transition-colors" aria-label="Use plugin">
-                <PuzzlePieceIcon className="h-4 w-4" />
-              </button>
-            </div>
-
-            {/* Right Icons */}
-            <div className="absolute bottom-3 right-4 flex items-center gap-1.5">
-              <button type="button" className="hidden sm:flex h-8 w-8 items-center justify-center rounded-full text-[#6B7280] hover:bg-[#F5F6FA] hover:text-[#181819] transition-colors" aria-label="Chat options">
-                <ChatBubbleLeftEllipsisIcon className="h-[18px] w-[18px]" />
-              </button>
-              <button type="button" className="hidden sm:flex h-8 w-8 items-center justify-center rounded-full text-[#6B7280] hover:bg-[#F5F6FA] hover:text-[#181819] transition-colors" aria-label="Voice input">
-                <MicrophoneIcon className="h-[18px] w-[18px]" />
-              </button>
-              <button
-                type="button"
-                className="flex h-8 w-8 items-center justify-center rounded-full bg-[#F5F6FA] text-[#181819] hover:bg-[#E8ECF4] transition-colors ml-1"
-                aria-label="Send message"
-              >
-                <ArrowUpIcon className="h-4 w-4" strokeWidth={2.5} />
-              </button>
-            </div>
-          </div>
-
-        </div>
-      </div>
     </div>
   );
 }
