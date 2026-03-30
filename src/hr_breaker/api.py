@@ -13,8 +13,9 @@ import logging
 import secrets
 import tempfile
 import time
-from datetime import datetime
+from datetime import date, datetime, timezone
 from pathlib import Path
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Request, Query, Form
 from fastapi.middleware.cors import CORSMiddleware
@@ -53,6 +54,7 @@ from hr_breaker.services.db import (
     usage_audit_list_admin,
     backfill_user_id,
     user_list_all,
+    user_list_paginated,
     db_list_all,
     db_recent_resumes_with_user,
     user_increment_free_analyses,
@@ -65,6 +67,15 @@ from hr_breaker.services.db import (
     referral_mark_processed_event,
     referral_partner_commissions,
     referral_partner_summary,
+)
+from hr_breaker.services.reviews_repo import (
+    reviews_apply_patch,
+    reviews_count_email_recent,
+    reviews_count_ip_recent,
+    reviews_export_csv,
+    reviews_list_admin,
+    reviews_list_public,
+    reviews_stats,
 )
 from hr_breaker.services.referral_service import (
     COOKIE_DAYS,
@@ -121,6 +132,40 @@ def _sanitize_url(url: str) -> str:
     if u and not (u.startswith("http://") or u.startswith("https://")):
         u = "https://" + u
     return u
+
+
+def _client_ip(request: Request) -> str | None:
+    xff = (request.headers.get("x-forwarded-for") or "").strip()
+    if xff:
+        return xff.split(",")[0].strip() or None
+    if request.client:
+        return request.client.host
+    return None
+
+
+def _parse_review_date_query(value: str | None, *, end_of_day: bool = False) -> datetime | None:
+    """Interpret YYYY-MM-DD as UTC day boundary for admin filters."""
+    if not value or not str(value).strip():
+        return None
+    s = str(value).strip()
+    if len(s) == 10 and s[4] == "-" and s[7] == "-":
+        d = date.fromisoformat(s)
+        if end_of_day:
+            return datetime(d.year, d.month, d.day, 23, 59, 59, 999999, tzinfo=timezone.utc)
+        return datetime(d.year, d.month, d.day, tzinfo=timezone.utc)
+    dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
+def _admin_emails_set() -> set[str]:
+    s = get_settings()
+    emails = {(s.admin_email or "").strip().lower()}
+    extra = (s.admin_emails or "").strip()
+    if extra:
+        emails |= {x.strip().lower() for x in extra.split(",") if x.strip()}
+    return {e for e in emails if e}
 
 
 def _is_job_list_url(url: str) -> bool:
@@ -271,6 +316,60 @@ class HistoryResponse(BaseModel):
     items: list[HistoryItem]
 
 
+ReviewStatusLiteral = Literal["pending", "approved", "rejected", "hidden"]
+
+
+class ReviewCreateIn(BaseModel):
+    author_name: str = Field(..., min_length=1, max_length=200)
+    author_email: str = Field(..., min_length=3, max_length=320)
+    rating: int = Field(..., ge=1, le=5)
+    would_recommend: Literal["yes", "no"]
+    title: str = Field(..., min_length=1, max_length=300)
+    body: str = Field(..., min_length=1, max_length=20000)
+    author_role: str | None = Field(None, max_length=200)
+    country: str | None = Field(None, max_length=120)
+    feature_tag: str | None = Field(None, max_length=80)
+    consent_to_publish: bool
+    consent_to_process: bool
+    fax_extension: str | None = Field(None, max_length=200)
+
+
+class ReviewPublicItem(BaseModel):
+    id: str
+    author_name: str
+    rating: int
+    title: str
+    body: str
+    published_at: str | None = None
+    verified: bool
+    source: str
+    feature_tag: str | None = None
+
+
+class ReviewPublicListOut(BaseModel):
+    items: list[ReviewPublicItem]
+
+
+class ReviewStatsOut(BaseModel):
+    average_rating: float
+    review_count: int
+    recommend_percent: float | None = None
+
+
+class ReviewPatchIn(BaseModel):
+    status: ReviewStatusLiteral | None = None
+    verified: bool | None = None
+    pinned: bool | None = None
+    title: str | None = Field(None, min_length=1, max_length=300)
+    body: str | None = Field(None, min_length=1, max_length=20000)
+    admin_notes: str | None = Field(None, max_length=8000)
+
+
+class ReviewsAdminListOut(BaseModel):
+    items: list[dict[str, Any]]
+    total: int
+
+
 # --- Auth ---
 _http_bearer = HTTPBearer(auto_error=False)
 
@@ -358,12 +457,10 @@ async def get_optional_user(
 
 
 def _is_admin_user(user: dict | None) -> bool:
-    """True if user is the configured admin (always gets full plan)."""
+    """True if user email is in ADMIN_EMAIL / ADMIN_EMAILS (always gets full plan)."""
     if not user or not user.get("email"):
         return False
-    settings = get_settings()
-    admin_email = (settings.admin_email or "").strip().lower()
-    return (user.get("email") or "").strip().lower() == admin_email
+    return (user.get("email") or "").strip().lower() in _admin_emails_set()
 
 
 def _partner_enabled() -> bool:
@@ -433,6 +530,7 @@ class AdminUserOut(BaseModel):
 
 class AdminUsersResponse(BaseModel):
     items: list[AdminUserOut]
+    total: int
 
 
 class AdminConfigResponse(BaseModel):
@@ -456,10 +554,12 @@ class AdminActivityItem(BaseModel):
     job_title: str
     created_at: str
     user_email: str | None = None
+    pdf_on_disk: bool = True
 
 
 class AdminActivityResponse(BaseModel):
     items: list[AdminActivityItem]
+    total: int
 
 
 class AdminUsageAuditItem(BaseModel):
@@ -2046,13 +2146,14 @@ async def api_admin_stats(
 @router.get("/admin/users", response_model=AdminUsersResponse)
 async def api_admin_users(
     _admin: dict = Depends(get_admin_user),
-    limit: int = Query(500, ge=1, le=2000),
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
 ) -> AdminUsersResponse:
-    """List all users (admin only)."""
+    """List users (admin only), paginated."""
     pool = await get_pool()
     if not pool:
         raise HTTPException(503, "Database not configured")
-    users = await user_list_all(pool, limit=limit)
+    users, total = await user_list_paginated(pool, limit=limit, offset=offset)
     items = [
         AdminUserOut(
             id=str(u["id"]),
@@ -2065,7 +2166,7 @@ async def api_admin_users(
         )
         for u in users
     ]
-    return AdminUsersResponse(items=items)
+    return AdminUsersResponse(items=items, total=total)
 
 
 @router.get("/admin/config", response_model=AdminConfigResponse)
@@ -2093,15 +2194,19 @@ async def api_admin_config(
 @router.get("/admin/activity", response_model=AdminActivityResponse)
 async def api_admin_activity(
     _admin: dict = Depends(get_admin_user),
-    limit: int = Query(50, ge=1, le=200),
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
 ) -> AdminActivityResponse:
     """Recent resume generations (admin only). With DB: includes user email. Without DB: list from index, no email."""
     settings = get_settings()
     pool = await get_pool()
     items: list[AdminActivityItem] = []
+    total = 0
     if pool:
         try:
-            rows = await db_recent_resumes_with_user(pool, settings.output_dir, limit=limit)
+            rows, total = await db_recent_resumes_with_user(
+                pool, settings.output_dir, limit=limit, offset=offset
+            )
             for r in rows:
                 items.append(AdminActivityItem(
                     filename=r["filename"],
@@ -2109,20 +2214,29 @@ async def api_admin_activity(
                     job_title=r["job_title"],
                     created_at=r["created_at"].isoformat() if r.get("created_at") else "",
                     user_email=r.get("user_email"),
+                    pdf_on_disk=bool(r.get("pdf_on_disk", True)),
                 ))
         except Exception as e:
             logger.exception("Admin activity failed: %s", e)
     else:
         records = await pdf_storage.list_all_async(user_id=None)
-        for r in records[:limit]:
+        records = sorted(
+            records,
+            key=lambda x: x.timestamp or datetime.min.replace(tzinfo=timezone.utc),
+            reverse=True,
+        )
+        total = len(records)
+        for r in records[offset : offset + limit]:
+            path = settings.output_dir / r.path.name
             items.append(AdminActivityItem(
                 filename=r.path.name,
                 company=r.company,
                 job_title=r.job_title or "",
                 created_at=r.timestamp.isoformat() if r.timestamp else "",
                 user_email=None,
+                pdf_on_disk=path.is_file(),
             ))
-    return AdminActivityResponse(items=items)
+    return AdminActivityResponse(items=items, total=total)
 
 
 @router.get("/admin/usage-audit", response_model=AdminUsageAuditResponse)
@@ -2286,6 +2400,151 @@ async def api_admin_referral_block(
     admin_user: dict = Depends(get_admin_user),
 ) -> dict[str, bool]:
     return await _admin_update_commission_status(admin_user, req, status="blocked")
+
+
+# --- Landing reviews (pitchcv.app → my.pitchcv.app/api/reviews*) ---
+@router.post("/reviews", response_model=None, status_code=201)
+async def api_reviews_create(request: Request, body: ReviewCreateIn) -> Response | dict[str, str]:
+    if body.fax_extension is not None and str(body.fax_extension).strip():
+        return Response(status_code=204)
+    if not body.consent_to_process:
+        raise HTTPException(400, "consent_to_process must be true")
+    if not body.consent_to_publish:
+        raise HTTPException(400, "consent_to_publish must be true")
+    pool = await get_pool()
+    if not pool:
+        raise HTTPException(503, "Database not configured")
+    settings = get_settings()
+    ip = _client_ip(request)
+    lim_ip = max(1, settings.reviews_rate_limit_ip_per_hour)
+    lim_em = max(1, settings.reviews_rate_limit_email_per_day)
+    if await reviews_count_ip_recent(pool, ip, 1) >= lim_ip:
+        raise HTTPException(
+            429,
+            {"error": "rate_limit", "detail": "Too many submissions from this network. Try again later."},
+        )
+    if await reviews_count_email_recent(pool, body.author_email, 1) >= lim_em:
+        raise HTTPException(
+            429,
+            {"error": "rate_limit", "detail": "Too many submissions for this email. Try again tomorrow."},
+        )
+    wid = body.would_recommend == "yes"
+    rid = await reviews_insert(
+        pool,
+        author_name=body.author_name,
+        author_email=body.author_email,
+        author_role=body.author_role,
+        country=body.country,
+        rating=body.rating,
+        would_recommend=wid,
+        title=body.title,
+        body=body.body,
+        feature_tag=body.feature_tag,
+        consent_to_publish=body.consent_to_publish,
+        source="native",
+        submitter_ip=ip,
+    )
+    return {"id": rid, "status": "pending"}
+
+
+@router.get("/reviews/public", response_model=ReviewPublicListOut)
+async def api_reviews_public(
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    sort: str = Query("recent"),
+) -> ReviewPublicListOut:
+    pool = await get_pool()
+    if not pool:
+        raise HTTPException(503, "Database not configured")
+    rows = await reviews_list_public(pool, limit=limit, offset=offset, sort=sort)
+    items = [ReviewPublicItem(**r) for r in rows]
+    return ReviewPublicListOut(items=items)
+
+
+@router.get("/reviews/stats", response_model=ReviewStatsOut)
+async def api_reviews_stats() -> ReviewStatsOut:
+    pool = await get_pool()
+    if not pool:
+        raise HTTPException(503, "Database not configured")
+    s = await reviews_stats(pool)
+    return ReviewStatsOut(**s)
+
+
+@router.get("/reviews/export.csv")
+async def api_reviews_export_csv(
+    _admin: dict = Depends(get_admin_user),
+    status: str | None = Query(None),
+    rating: int | None = Query(None, ge=1, le=5),
+    date_from: str | None = Query(None),
+    date_to: str | None = Query(None),
+) -> Response:
+    pool = await get_pool()
+    if not pool:
+        raise HTTPException(503, "Database not configured")
+    df = _parse_review_date_query(date_from, end_of_day=False)
+    dt = _parse_review_date_query(date_to, end_of_day=True)
+    text = await reviews_export_csv(
+        pool,
+        status=status,
+        rating=rating,
+        date_from=df,
+        date_to=dt,
+    )
+    return Response(
+        content=text.encode("utf-8"),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="reviews_export.csv"'},
+    )
+
+
+@router.get("/reviews", response_model=ReviewsAdminListOut)
+async def api_reviews_admin_list(
+    _admin: dict = Depends(get_admin_user),
+    status: str | None = Query(None),
+    rating: int | None = Query(None, ge=1, le=5),
+    date_from: str | None = Query(None),
+    date_to: str | None = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> ReviewsAdminListOut:
+    pool = await get_pool()
+    if not pool:
+        raise HTTPException(503, "Database not configured")
+    df = _parse_review_date_query(date_from, end_of_day=False)
+    dt = _parse_review_date_query(date_to, end_of_day=True)
+    rows, total = await reviews_list_admin(
+        pool,
+        status=status,
+        rating=rating,
+        date_from=df,
+        date_to=dt,
+        limit=limit,
+        offset=offset,
+    )
+    return ReviewsAdminListOut(items=rows, total=total)
+
+
+@router.patch("/reviews/{review_id}", response_model=None)
+async def api_reviews_patch(
+    review_id: str,
+    body: ReviewPatchIn,
+    admin_user: dict = Depends(get_admin_user),
+) -> dict[str, Any]:
+    pool = await get_pool()
+    if not pool:
+        raise HTTPException(503, "Database not configured")
+    patch = body.model_dump(exclude_unset=True)
+    if not patch:
+        raise HTTPException(400, "No fields to update")
+    row = await reviews_apply_patch(
+        pool,
+        review_id,
+        moderator_user_id=str(admin_user["id"]),
+        patch=patch,
+    )
+    if row is None:
+        raise HTTPException(404, "Review not found")
+    return row
 
 
 @router.get("/history", response_model=HistoryResponse)

@@ -590,7 +590,7 @@ export type AdminUserOut = {
   partner_program_access?: boolean;
 };
 
-export type AdminUsersResponse = { items: AdminUserOut[] };
+export type AdminUsersResponse = { items: AdminUserOut[]; total: number };
 
 export type AdminConfigResponse = {
   database_configured: boolean;
@@ -611,9 +611,10 @@ export type AdminActivityItem = {
   job_title: string;
   created_at: string;
   user_email: string | null;
+  pdf_on_disk?: boolean;
 };
 
-export type AdminActivityResponse = { items: AdminActivityItem[] };
+export type AdminActivityResponse = { items: AdminActivityItem[]; total: number };
 
 export async function getAdminStats(): Promise<AdminStatsResponse> {
   const r = await fetch(`${API}/admin/stats`, { headers: authHeaders() });
@@ -622,9 +623,9 @@ export async function getAdminStats(): Promise<AdminStatsResponse> {
   return data;
 }
 
-export async function getAdminUsers(limit?: number): Promise<AdminUsersResponse> {
-  const sp = limit != null ? `?limit=${limit}` : "";
-  const r = await fetch(`${API}/admin/users${sp}`, { headers: authHeaders() });
+export async function getAdminUsers(limit: number, offset: number): Promise<AdminUsersResponse> {
+  const sp = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+  const r = await fetch(`${API}/admin/users?${sp}`, { headers: authHeaders() });
   const data = await parseJsonOrThrow<AdminUsersResponse & { detail?: string }>(r);
   if (!r.ok) throw new Error(data.detail || r.statusText);
   return data;
@@ -637,9 +638,9 @@ export async function getAdminConfig(): Promise<AdminConfigResponse> {
   return data;
 }
 
-export async function getAdminActivity(limit?: number): Promise<AdminActivityResponse> {
-  const sp = limit != null ? `?limit=${limit}` : "";
-  const r = await fetch(`${API}/admin/activity${sp}`, { headers: authHeaders() });
+export async function getAdminActivity(limit: number, offset: number): Promise<AdminActivityResponse> {
+  const sp = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+  const r = await fetch(`${API}/admin/activity?${sp}`, { headers: authHeaders() });
   const data = await parseJsonOrThrow<AdminActivityResponse & { detail?: string }>(r);
   if (!r.ok) throw new Error(data.detail || r.statusText);
   return data;

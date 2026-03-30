@@ -33,36 +33,37 @@ export default function AdminUsage() {
   }
 
   return (
-    <div className="max-w-6xl space-y-4">
-      <header>
+    <div className="flex flex-col h-full min-h-0 max-w-6xl w-full mx-auto">
+      <header className="shrink-0 mb-3">
         <h2 className="text-xl font-bold text-[var(--text)] tracking-tight">{t("admin.usage.title")}</h2>
         <p className="mt-0.5 text-sm text-[var(--text-muted)]">{t("admin.usage.subtitle")}</p>
       </header>
 
       {loading ? (
-        <div className="flex items-center justify-center py-12" aria-busy="true">
+        <div className="flex flex-1 items-center justify-center py-12" aria-busy="true">
           <span className="h-8 w-8 animate-spin rounded-full border-2 border-[#4578FC] border-t-transparent" />
         </div>
       ) : items.length === 0 ? (
-        <p className="rounded-xl border border-[#EBEDF5] bg-[var(--card)] p-6 text-center text-sm text-[var(--text-muted)]">
+        <p className="rounded-xl border border-[#EBEDF5] bg-[var(--card)] p-6 text-center text-sm text-[var(--text-muted)] shrink-0">
           {t("admin.usage.empty")}
         </p>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-[#EBEDF5] bg-[var(--card)] shadow-sm">
-          <table className="min-w-full divide-y divide-[#EBEDF5] text-sm">
-            <thead>
-              <tr>
-                <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-[var(--text-muted)]">{t("admin.usage.date")}</th>
-                <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-[var(--text-muted)]">{t("admin.usage.user")}</th>
-                <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-[var(--text-muted)]">{t("admin.usage.action")}</th>
-                <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-[var(--text-muted)]">{t("admin.usage.model")}</th>
-                <th className="px-3 py-2 text-right text-xs font-semibold uppercase text-[var(--text-muted)] tabular-nums">{t("admin.usage.tokensIn")}</th>
-                <th className="px-3 py-2 text-right text-xs font-semibold uppercase text-[var(--text-muted)] tabular-nums">{t("admin.usage.tokensOut")}</th>
-                <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-[var(--text-muted)]">{t("admin.usage.status")}</th>
-                <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-[var(--text-muted)] min-w-[180px]">{t("admin.usage.error")}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#EBEDF5]">
+        <div className="flex flex-col flex-1 min-h-0 rounded-xl border border-[#EBEDF5] bg-[var(--card)] shadow-sm overflow-hidden">
+          <div className="flex-1 min-h-0 overflow-auto overscroll-contain">
+            <table className="min-w-full divide-y divide-[#EBEDF5] text-sm">
+              <thead className="sticky top-0 z-20 bg-[var(--card)] shadow-[0_1px_0_#EBEDF5]">
+                <tr>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-[var(--text-muted)] whitespace-nowrap">{t("admin.usage.date")}</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-[var(--text-muted)] whitespace-nowrap">{t("admin.usage.user")}</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-[var(--text-muted)] whitespace-nowrap">{t("admin.usage.action")}</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-[var(--text-muted)] whitespace-nowrap">{t("admin.usage.model")}</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold uppercase text-[var(--text-muted)] tabular-nums whitespace-nowrap">{t("admin.usage.tokensIn")}</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold uppercase text-[var(--text-muted)] tabular-nums whitespace-nowrap">{t("admin.usage.tokensOut")}</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-[var(--text-muted)] whitespace-nowrap">{t("admin.usage.status")}</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-[var(--text-muted)] min-w-[180px]">{t("admin.usage.error")}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#EBEDF5]">
               {items.map((row) => (
                 <tr key={row.id} className="hover:bg-[#F5F6FA]/50 align-top">
                   <td className="px-3 py-2 text-[var(--text-tertiary)] tabular-nums whitespace-nowrap text-xs">
@@ -87,8 +88,9 @@ export default function AdminUsage() {
                   </td>
                 </tr>
               ))}
-            </tbody>
-          </table>
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>

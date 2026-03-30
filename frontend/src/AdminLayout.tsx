@@ -112,7 +112,7 @@ export default function AdminLayout() {
   return (
     <div className="h-screen bg-[var(--bg-page)] flex overflow-hidden" role="application" aria-label={t("admin.panelLabel")}>
       <aside
-        className="hidden md:flex w-64 shrink-0 flex-col py-6 px-4 overflow-hidden text-white shadow-xl z-20"
+        className="hidden md:flex w-64 shrink-0 flex-col py-6 px-4 min-h-0 overflow-y-auto text-white shadow-xl z-20"
         style={{ background: "linear-gradient(160deg, #2f40df 0%, #1a28a8 100%)" }}
         role="navigation"
         aria-label={t("admin.navLabel")}
@@ -168,8 +168,10 @@ export default function AdminLayout() {
           )}
         </header>
 
-        <main className="flex-1 min-h-0 overflow-auto pt-3 md:pt-4 pb-6 md:pb-8 px-3 md:px-6" role="main">
-          <Outlet />
+        <main className="flex-1 min-h-0 flex flex-col overflow-hidden pt-3 md:pt-4 pb-6 md:pb-8 px-3 md:px-6" role="main">
+          <div className="flex-1 min-h-0 flex flex-col min-w-0">
+            <Outlet />
+          </div>
         </main>
       </div>
     </div>

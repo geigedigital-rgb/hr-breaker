@@ -15,6 +15,7 @@ from uuid import uuid4
 
 from hr_breaker.config import get_settings
 from hr_breaker.models import GeneratedPDF
+from hr_breaker.services.reviews_repo import ensure_reviews_schema
 
 logger = logging.getLogger(__name__)
 
@@ -236,6 +237,7 @@ async def init_table(pool) -> None:
         await conn.execute(
             f"CREATE INDEX IF NOT EXISTS idx_usage_audit_user ON {USAGE_AUDIT_TABLE}(user_id)"
         )
+        await ensure_reviews_schema(conn)
 
 
 async def db_insert(pool, output_dir: Path, pdf: GeneratedPDF, user_id: str) -> None:
@@ -572,6 +574,22 @@ async def user_list_all(pool, limit: int = 500) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+async def user_list_paginated(pool, *, limit: int, offset: int) -> tuple[list[dict], int]:
+    """Ordered by created_at DESC. Returns (rows, total_count)."""
+    async with pool.acquire() as conn:
+        count_row = await conn.fetchrow(f"SELECT COUNT(*)::int AS c FROM {USERS_TABLE}")
+        total = int(count_row["c"]) if count_row else 0
+        rows = await conn.fetch(
+            f"""
+            SELECT id, email, name, created_at, subscription_status, subscription_plan, partner_program_access
+            FROM {USERS_TABLE} ORDER BY created_at DESC LIMIT $1 OFFSET $2
+            """,
+            limit,
+            offset,
+        )
+    return [dict(r) for r in rows], total
+
+
 async def user_set_partner_program_access(pool, user_id: str, enabled: bool) -> bool:
     """Set partner_program_access. Returns True if a row was updated."""
     async with pool.acquire() as conn:
@@ -639,32 +657,37 @@ async def usage_audit_list_admin(pool, limit: int = 500) -> list[dict]:
     return out
 
 
-async def db_recent_resumes_with_user(pool, output_dir: Path, limit: int = 100) -> list[dict]:
-    """Recent resume records with user email (join users). For admin activity feed. Only records with existing PDF."""
+async def db_recent_resumes_with_user(
+    pool, output_dir: Path, *, limit: int = 100, offset: int = 0
+) -> tuple[list[dict], int]:
+    """Recent resume rows with user email. Paginated on DB; includes pdf_on_disk for each row."""
     async with pool.acquire() as conn:
+        count_row = await conn.fetchrow(f"SELECT COUNT(*)::int AS c FROM {TABLE}")
+        total = int(count_row["c"]) if count_row else 0
         rows = await conn.fetch(
             f"""
             SELECT r.filename, r.company, r.job_title, r.created_at, r.user_id, u.email as user_email
             FROM {TABLE} r
             LEFT JOIN {USERS_TABLE} u ON r.user_id = u.id
             ORDER BY r.created_at DESC
-            LIMIT $1
+            LIMIT $1 OFFSET $2
             """,
             limit,
+            offset,
         )
-    result = []
+    result: list[dict] = []
     for r in rows:
         rec = dict(r)
         path = output_dir / rec["filename"]
-        if path.is_file():
-            result.append({
-                "filename": rec["filename"],
-                "company": rec["company"] or "",
-                "job_title": rec["job_title"] or "",
-                "created_at": rec["created_at"],
-                "user_email": rec.get("user_email") or None,
-            })
-    return result
+        result.append({
+            "filename": rec["filename"],
+            "company": rec["company"] or "",
+            "job_title": rec["job_title"] or "",
+            "created_at": rec["created_at"],
+            "user_email": rec.get("user_email") or None,
+            "pdf_on_disk": path.is_file(),
+        })
+    return result, total
 
 
 # --- Referrals ---

@@ -112,9 +112,14 @@ class Settings(BaseModel):
     landing_max_job_url_len: int = 2048  # Max job_url length
     landing_pending_ttl_seconds: int = 900  # Pending upload token TTL (15 min) for save→login→claim flow
 
-    # Admin: single admin user email (full access to admin panel)
+    # Admin: primary email + optional comma-separated list (same access as admin_email)
     admin_email: str = "marichakgroup@gmail.com"
+    admin_emails: str = ""
     partner_program_enabled: bool = True
+
+    # Landing reviews (POST /api/reviews) rate limits when DATABASE_URL is set
+    reviews_rate_limit_ip_per_hour: int = 10
+    reviews_rate_limit_email_per_day: int = 3
 
 
 def get_settings() -> Settings:
@@ -184,7 +189,10 @@ def get_settings() -> Settings:
         landing_max_job_url_len=int(os.getenv("LANDING_MAX_JOB_URL_LEN", "2048")),
         landing_pending_ttl_seconds=int(os.getenv("LANDING_PENDING_TTL_SECONDS", "900")),
         admin_email=os.getenv("ADMIN_EMAIL", "marichakgroup@gmail.com").strip().lower() or "marichakgroup@gmail.com",
+        admin_emails=os.getenv("ADMIN_EMAILS", ""),
         partner_program_enabled=os.getenv("PARTNER_PROGRAM_ENABLED", "true").lower() in ("true", "1", "yes"),
+        reviews_rate_limit_ip_per_hour=int(os.getenv("REVIEWS_RATE_LIMIT_IP_PER_HOUR", "10")),
+        reviews_rate_limit_email_per_day=int(os.getenv("REVIEWS_RATE_LIMIT_EMAIL_PER_DAY", "3")),
     )
 
 
