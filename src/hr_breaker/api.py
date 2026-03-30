@@ -79,6 +79,7 @@ from hr_breaker.services.reviews_repo import (
     reviews_count_email_recent,
     reviews_count_ip_recent,
     reviews_export_csv,
+    reviews_insert,
     reviews_list_admin,
     reviews_list_public,
     reviews_stats,
