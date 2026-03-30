@@ -101,10 +101,32 @@ def _put_progress(queue: asyncio.Queue | None, percent: int, message: str) -> No
 
 logger = logging.getLogger(__name__)
 
-# CORS: app frontend + landing (pitchcv.app)
+
+def _normalized_landing_cors_origins(raw: str) -> list[str]:
+    """Parse LANDING_ALLOWED_ORIGINS and ensure both apex and www for pitchcv.app when either is present."""
+    parts = [o.strip() for o in (raw or "").split(",") if o.strip()]
+    seen: set[str] = set()
+    out: list[str] = []
+    for o in parts:
+        if o not in seen:
+            seen.add(o)
+            out.append(o)
+    apex = "https://pitchcv.app"
+    www = "https://www.pitchcv.app"
+    if apex in seen and www not in seen:
+        out.append(www)
+        seen.add(www)
+    if www in seen and apex not in seen:
+        out.append(apex)
+        seen.add(apex)
+    return out
+
+
+# CORS: app frontend + landing (pitchcv.app + www — distinct origins in browsers)
+_settings_cors = get_settings()
 _cors_origins = ["http://localhost:5173", "http://127.0.0.1:5173"]
-if (get_settings().landing_allowed_origins or "").strip():
-    _cors_origins = _cors_origins + [o.strip() for o in get_settings().landing_allowed_origins.split(",") if o.strip()]
+if (_settings_cors.landing_allowed_origins or "").strip():
+    _cors_origins = _cors_origins + _normalized_landing_cors_origins(_settings_cors.landing_allowed_origins)
 
 app = FastAPI(title="HR-Breaker API", version="0.1.0")
 app.add_middleware(
