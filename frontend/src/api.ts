@@ -588,6 +588,54 @@ export type AdminUserOut = {
   subscription_status?: string | null;
   subscription_plan?: string | null;
   partner_program_access?: boolean;
+  admin_blocked?: boolean;
+};
+
+export type AdminJourneyEntry = {
+  kind: string;
+  at: string;
+  title: string;
+  detail?: string | null;
+  action?: string | null;
+  success?: boolean | null;
+};
+
+export type AdminFunnelStage = { id: string; label: string; done: boolean };
+
+export type AdminUserReferral = {
+  code: string;
+  referrer_email: string | null;
+  source_url: string | null;
+  first_seen_at: string;
+  status: string;
+};
+
+export type AdminUserDetail = {
+  id: string;
+  email: string;
+  name: string | null;
+  created_at: string;
+  admin_blocked: boolean;
+  has_google: boolean;
+  has_password: boolean;
+  partner_program_access: boolean;
+  subscription: {
+    plan: string;
+    status: string;
+    current_period_end: string | null;
+    free_analyses_count: number;
+  };
+  readiness: {
+    score: number;
+    stage: string;
+    progress_to_next: number;
+    streak_days: number;
+  } | null;
+  referral: AdminUserReferral | null;
+  stages: AdminFunnelStage[];
+  current_stage_summary: string;
+  resume_count: number;
+  journey: AdminJourneyEntry[];
 };
 
 export type AdminUsersResponse = { items: AdminUserOut[]; total: number };
@@ -681,6 +729,48 @@ export async function patchAdminUserPartnerAccess(
   const data = await parseJsonOrThrow<{ ok?: boolean; detail?: string }>(r);
   if (!r.ok) throw new Error(data.detail || r.statusText);
   return { ok: true };
+}
+
+export async function getAdminUserDetail(userId: string): Promise<AdminUserDetail> {
+  const r = await fetch(`${API}/admin/users/${encodeURIComponent(userId)}/detail`, { headers: authHeaders() });
+  const data = await parseJsonOrThrow<AdminUserDetail & { detail?: string }>(r);
+  if (!r.ok) throw new Error(data.detail || r.statusText);
+  return data;
+}
+
+export async function patchAdminUserBlocked(userId: string, admin_blocked: boolean): Promise<{ ok: boolean }> {
+  const r = await fetch(`${API}/admin/users/${encodeURIComponent(userId)}/blocked`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ admin_blocked }),
+  });
+  const data = await parseJsonOrThrow<{ ok?: boolean; detail?: string }>(r);
+  if (!r.ok) throw new Error(data.detail || r.statusText);
+  return { ok: !!data.ok };
+}
+
+export async function patchAdminUserSubscription(
+  userId: string,
+  body: { subscription_status?: string; subscription_plan?: string; current_period_end?: string | null }
+): Promise<{ ok: boolean }> {
+  const r = await fetch(`${API}/admin/users/${encodeURIComponent(userId)}/subscription`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(body),
+  });
+  const data = await parseJsonOrThrow<{ ok?: boolean; detail?: string }>(r);
+  if (!r.ok) throw new Error(data.detail || r.statusText);
+  return { ok: !!data.ok };
+}
+
+export async function deleteAdminUser(userId: string): Promise<{ ok: boolean }> {
+  const r = await fetch(`${API}/admin/users/${encodeURIComponent(userId)}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
+  const data = await parseJsonOrThrow<{ ok?: boolean; detail?: string }>(r);
+  if (!r.ok) throw new Error(data.detail || r.statusText);
+  return { ok: !!data.ok };
 }
 
 // --- Partner ---

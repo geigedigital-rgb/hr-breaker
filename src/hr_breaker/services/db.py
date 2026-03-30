@@ -216,6 +216,9 @@ async def init_table(pool) -> None:
             f"ALTER TABLE {USERS_TABLE} ADD COLUMN IF NOT EXISTS partner_program_access BOOLEAN NOT NULL DEFAULT FALSE"
         )
         await conn.execute(
+            f"ALTER TABLE {USERS_TABLE} ADD COLUMN IF NOT EXISTS admin_blocked BOOLEAN NOT NULL DEFAULT FALSE"
+        )
+        await conn.execute(
             f"""
             CREATE TABLE IF NOT EXISTS {USAGE_AUDIT_TABLE} (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -373,7 +376,11 @@ async def user_create(pool, email: str, password_hash: str | None = None, name: 
     return {"id": str(uid), "email": email, "name": name or email.split("@")[0], "created_at": datetime.now().isoformat()}
 
 
-USER_SUBSCRIPTION_COLS = "stripe_customer_id, stripe_subscription_id, subscription_status, subscription_plan, current_period_end, free_analyses_count, partner_program_access"
+USER_SUBSCRIPTION_COLS = (
+    "stripe_customer_id, stripe_subscription_id, subscription_status, subscription_plan, "
+    "current_period_end, free_analyses_count, partner_program_access, "
+    "market_readiness_score, last_visit_date, streak_days, admin_blocked"
+)
 
 async def user_get_by_email(pool, email: str) -> dict | None:
     """Get user by email."""
@@ -510,6 +517,16 @@ async def user_update_subscription(
         )
 
 
+async def user_set_current_period_end(pool, user_id: str, end: datetime | None) -> None:
+    """Set subscription period end; pass None to clear."""
+    async with pool.acquire() as conn:
+        await conn.execute(
+            f"UPDATE {USERS_TABLE} SET current_period_end = $2 WHERE id = $1::uuid",
+            user_id,
+            end,
+        )
+
+
 async def user_increment_free_analyses(pool, user_id: str) -> None:
     """Increment the free analyses count for the user."""
     async with pool.acquire() as conn:
@@ -581,13 +598,70 @@ async def user_list_paginated(pool, *, limit: int, offset: int) -> tuple[list[di
         total = int(count_row["c"]) if count_row else 0
         rows = await conn.fetch(
             f"""
-            SELECT id, email, name, created_at, subscription_status, subscription_plan, partner_program_access
+            SELECT id, email, name, created_at, subscription_status, subscription_plan, partner_program_access, admin_blocked
             FROM {USERS_TABLE} ORDER BY created_at DESC LIMIT $1 OFFSET $2
             """,
             limit,
             offset,
         )
     return [dict(r) for r in rows], total
+
+
+async def usage_audit_list_for_user(pool, user_id: str, limit: int = 400) -> list[dict]:
+    """Usage / LLM audit events for one user (newest first)."""
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            f"""
+            SELECT id, action, model, success, error_message, input_tokens, output_tokens, metadata, created_at
+            FROM {USAGE_AUDIT_TABLE}
+            WHERE user_id = $1::uuid
+            ORDER BY created_at DESC
+            LIMIT $2
+            """,
+            user_id,
+            limit,
+        )
+    out: list[dict] = []
+    for r in rows:
+        d = dict(r)
+        if d.get("metadata") is not None and hasattr(d["metadata"], "keys"):
+            d["metadata"] = dict(d["metadata"])
+        out.append(d)
+    return out
+
+
+async def user_resumes_db_rows(pool, user_id: str, limit: int = 200) -> list[dict]:
+    """All generated_resumes rows for user (newest first), regardless of PDF on disk."""
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            f"""
+            SELECT filename, company, job_title, created_at, pre_ats_score, post_ats_score, job_url
+            FROM {TABLE}
+            WHERE user_id = $1::uuid
+            ORDER BY created_at DESC
+            LIMIT $2
+            """,
+            user_id,
+            limit,
+        )
+    return [dict(r) for r in rows]
+
+
+async def user_set_admin_blocked(pool, user_id: str, blocked: bool) -> bool:
+    async with pool.acquire() as conn:
+        n = await conn.execute(
+            f"UPDATE {USERS_TABLE} SET admin_blocked = $2 WHERE id = $1::uuid",
+            user_id,
+            bool(blocked),
+        )
+    return "UPDATE 1" in str(n)
+
+
+async def user_delete_by_id(pool, user_id: str) -> bool:
+    """Delete user row (CASCADE removes linked resumes, referrals, etc.)."""
+    async with pool.acquire() as conn:
+        n = await conn.execute(f"DELETE FROM {USERS_TABLE} WHERE id = $1::uuid", user_id)
+    return "DELETE 1" in str(n)
 
 
 async def user_set_partner_program_access(pool, user_id: str, enabled: bool) -> bool:
@@ -744,6 +818,23 @@ async def referral_get_attribution_by_invited(pool, invited_user_id: str) -> dic
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
             f"SELECT * FROM {REFERRAL_ATTRIBUTIONS_TABLE} WHERE invited_user_id = $1::uuid LIMIT 1",
+            invited_user_id,
+        )
+    return dict(row) if row else None
+
+
+async def referral_attribution_detail_for_invited(pool, invited_user_id: str) -> dict[str, Any] | None:
+    """Attribution row with referrer email for admin user journey."""
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            f"""
+            SELECT a.code, a.source_url, a.first_seen_at, a.expires_at, a.status, a.reason,
+                   ref.email AS referrer_email
+            FROM {REFERRAL_ATTRIBUTIONS_TABLE} a
+            LEFT JOIN {USERS_TABLE} ref ON ref.id = a.referrer_user_id
+            WHERE a.invited_user_id = $1::uuid
+            LIMIT 1
+            """,
             invited_user_id,
         )
     return dict(row) if row else None

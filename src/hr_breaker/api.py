@@ -48,6 +48,7 @@ from hr_breaker.services.db import (
     user_update_google_id,
     user_set_stripe_customer_id,
     user_update_subscription,
+    user_set_current_period_end,
     user_get_id_by_stripe_customer_id,
     ensure_seed_user,
     user_set_partner_program_access,
@@ -55,6 +56,11 @@ from hr_breaker.services.db import (
     backfill_user_id,
     user_list_all,
     user_list_paginated,
+    usage_audit_list_for_user,
+    user_resumes_db_rows,
+    user_set_admin_blocked,
+    user_delete_by_id,
+    referral_attribution_detail_for_invited,
     db_list_all,
     db_recent_resumes_with_user,
     user_increment_free_analyses,
@@ -431,6 +437,8 @@ async def get_current_user(
     user = await user_get_by_id(pool, payload["sub"])
     if not user:
         raise HTTPException(401, "User not found")
+    if user.get("admin_blocked"):
+        raise HTTPException(403, "Account disabled")
     return user
 
 
@@ -453,6 +461,8 @@ async def get_optional_user(
     if not payload or "sub" not in payload:
         return None
     user = await user_get_by_id(pool, payload["sub"])
+    if user and user.get("admin_blocked"):
+        raise HTTPException(403, "Account disabled")
     return user
 
 
@@ -479,6 +489,130 @@ async def get_admin_user(user: dict | None = Depends(get_current_user)) -> dict:
     if not _is_admin_user(user):
         raise HTTPException(403, "Admin access required")
     return user
+
+
+_FUNNEL_ANALYSIS_ACTIONS = frozenset({
+    "analyze_ats_score",
+    "analyze_breakdown",
+    "job_parse",
+    "extract_name",
+})
+
+
+def _reject_if_protected_admin_target(user: dict) -> None:
+    """Block destructive edits on accounts that match ADMIN_EMAIL(S)."""
+    if _is_admin_user(user):
+        raise HTTPException(400, "Action not allowed on admin accounts")
+
+
+async def _admin_build_user_detail(pool, user_id: str) -> AdminUserDetailResponse | None:
+    user = await user_get_by_id(pool, user_id)
+    if not user:
+        return None
+    uid = str(user["id"])
+    audits = await usage_audit_list_for_user(pool, uid, limit=500)
+    resumes = await user_resumes_db_rows(pool, uid, limit=300)
+    att = await referral_attribution_detail_for_invited(pool, uid)
+    sub = await user_get_subscription(pool, uid)
+    readiness_raw = await user_get_readiness(pool, uid)
+    readiness = ReadinessOut(**readiness_raw) if readiness_raw else None
+
+    has_analyzed = any(
+        a.get("action") in _FUNNEL_ANALYSIS_ACTIONS and a.get("success") for a in audits
+    )
+    has_pdf = len(resumes) > 0
+    plan = (sub.get("plan") or "free").lower()
+    status_eff = (sub.get("status") or "free").lower()
+    has_paid = plan in ("trial", "monthly") and status_eff in ("trial", "active")
+
+    stages = [
+        AdminFunnelStageOut(id="registered", label="Registered", done=True),
+        AdminFunnelStageOut(id="analyzed", label="Ran resume vs job analysis", done=has_analyzed),
+        AdminFunnelStageOut(id="tailored", label="Generated tailored resume (PDF)", done=has_pdf),
+        AdminFunnelStageOut(id="subscribed", label="Active trial or paid plan", done=has_paid),
+    ]
+    stopped = next((s for s in stages if not s.done), None)
+    current_summary = stopped.label if stopped else "Completed all tracked funnel steps"
+
+    journey: list[AdminJourneyEntryOut] = []
+    created = user.get("created_at")
+    if created:
+        journey.append(AdminJourneyEntryOut(
+            kind="account",
+            at=created.isoformat() if hasattr(created, "isoformat") else str(created),
+            title="Account created",
+            detail=str(user.get("email") or ""),
+        ))
+    if att and att.get("first_seen_at"):
+        fs = att["first_seen_at"]
+        ref_parts = [f"code: {att.get('code') or '—'}"]
+        if att.get("referrer_email"):
+            ref_parts.append(f"referrer: {att['referrer_email']}")
+        if att.get("source_url"):
+            ref_parts.append(f"landing: {att['source_url']}")
+        journey.append(AdminJourneyEntryOut(
+            kind="referral",
+            at=fs.isoformat() if hasattr(fs, "isoformat") else str(fs),
+            title="Referral / acquisition",
+            detail="; ".join(ref_parts),
+        ))
+    for r in resumes:
+        cr = r.get("created_at")
+        journey.append(AdminJourneyEntryOut(
+            kind="resume",
+            at=cr.isoformat() if cr and hasattr(cr, "isoformat") else "",
+            title=f'PDF resume: {(r.get("company") or "—")} / {(r.get("job_title") or "—")}',
+            detail=r.get("filename"),
+        ))
+    for a in audits:
+        ts = a.get("created_at")
+        err = (a.get("error_message") or "").strip()
+        journey.append(AdminJourneyEntryOut(
+            kind="audit",
+            at=ts.isoformat() if ts and hasattr(ts, "isoformat") else "",
+            title=str(a.get("action") or "event"),
+            detail=err[:400] if err else None,
+            action=str(a.get("action") or ""),
+            success=bool(a.get("success")) if a.get("success") is not None else None,
+        ))
+
+    journey.sort(key=lambda x: x.at or "", reverse=True)
+
+    referral_out = None
+    if att:
+        fst = att.get("first_seen_at")
+        referral_out = AdminUserReferralOut(
+            code=str(att.get("code") or ""),
+            referrer_email=att.get("referrer_email"),
+            source_url=att.get("source_url"),
+            first_seen_at=fst.isoformat() if fst and hasattr(fst, "isoformat") else "",
+            status=str(att.get("status") or ""),
+        )
+
+    created_at_str = created.isoformat() if created and hasattr(created, "isoformat") else ""
+
+    return AdminUserDetailResponse(
+        id=uid,
+        email=str(user.get("email") or ""),
+        name=user.get("name"),
+        created_at=created_at_str,
+        admin_blocked=bool(user.get("admin_blocked")),
+        has_google=bool(user.get("google_id")),
+        has_password=bool(user.get("password_hash")),
+        partner_program_access=bool(user.get("partner_program_access")),
+        subscription=SubscriptionOut(
+            plan=sub.get("plan", "free"),
+            status=sub.get("status", "free"),
+            current_period_end=sub.get("current_period_end"),
+            free_analyses_count=int(user.get("free_analyses_count") or 0),
+        ),
+        readiness=readiness,
+        referral=referral_out,
+        stages=stages,
+        current_stage_summary=current_summary,
+        resume_count=len(resumes),
+        journey=journey,
+    )
 
 
 def _user_out(u: dict, subscription: dict | None = None) -> AuthUserOut:
@@ -526,11 +660,63 @@ class AdminUserOut(BaseModel):
     subscription_status: str | None = None
     subscription_plan: str | None = None
     partner_program_access: bool = False
+    admin_blocked: bool = False
 
 
 class AdminUsersResponse(BaseModel):
     items: list[AdminUserOut]
     total: int
+
+
+class AdminJourneyEntryOut(BaseModel):
+    kind: str
+    at: str
+    title: str
+    detail: str | None = None
+    action: str | None = None
+    success: bool | None = None
+
+
+class AdminFunnelStageOut(BaseModel):
+    id: str
+    label: str
+    done: bool
+
+
+class AdminUserReferralOut(BaseModel):
+    code: str
+    referrer_email: str | None = None
+    source_url: str | None = None
+    first_seen_at: str
+    status: str
+
+
+class AdminUserDetailResponse(BaseModel):
+    id: str
+    email: str
+    name: str | None
+    created_at: str
+    admin_blocked: bool
+    has_google: bool
+    has_password: bool
+    partner_program_access: bool
+    subscription: SubscriptionOut
+    readiness: ReadinessOut | None = None
+    referral: AdminUserReferralOut | None = None
+    stages: list[AdminFunnelStageOut]
+    current_stage_summary: str
+    resume_count: int
+    journey: list[AdminJourneyEntryOut]
+
+
+class AdminUserBlockedBody(BaseModel):
+    admin_blocked: bool
+
+
+class AdminUserSubscriptionPatchBody(BaseModel):
+    subscription_status: str | None = None
+    subscription_plan: str | None = None
+    current_period_end: datetime | None = None
 
 
 class AdminConfigResponse(BaseModel):
@@ -717,6 +903,8 @@ async def api_login(req: LoginRequest) -> LoginResponse:
         raise HTTPException(401, "Invalid email or password")
     if not verify_password(req.password, user["password_hash"]):
         raise HTTPException(401, "Invalid email or password")
+    if user.get("admin_blocked"):
+        raise HTTPException(403, "Account disabled")
     if _partner_enabled() and req.referral_code:
         try:
             await try_apply_referral_after_auth(
@@ -847,6 +1035,11 @@ async def api_google_exchange(req: GoogleCallbackRequest) -> LoginResponse:
             )
         except Exception as e:
             logger.warning("Referral apply failed on google callback for user=%s: %s", user.get("id"), e)
+    user = await user_get_by_id(pool, str(user["id"]))
+    if not user:
+        raise HTTPException(400, "Google login failed")
+    if user.get("admin_blocked"):
+        raise HTTPException(403, "Account disabled")
     token = create_access_token(str(user["id"]), user["email"])
     subscription = await user_get_subscription(pool, str(user["id"]))
     return LoginResponse(access_token=token, user=_user_out(user, subscription=subscription))
@@ -2163,10 +2356,92 @@ async def api_admin_users(
             subscription_status=(u.get("subscription_status") or "free").lower() if u.get("subscription_status") is not None else "free",
             subscription_plan=(u.get("subscription_plan") or "free").lower() if u.get("subscription_plan") is not None else "free",
             partner_program_access=bool(u.get("partner_program_access")),
+            admin_blocked=bool(u.get("admin_blocked")),
         )
         for u in users
     ]
     return AdminUsersResponse(items=items, total=total)
+
+
+@router.get("/admin/users/{user_id}/detail", response_model=AdminUserDetailResponse)
+async def api_admin_user_detail(
+    user_id: str,
+    _admin: dict = Depends(get_admin_user),
+) -> AdminUserDetailResponse:
+    pool = await get_pool()
+    if not pool:
+        raise HTTPException(503, "Database not configured")
+    detail = await _admin_build_user_detail(pool, user_id)
+    if not detail:
+        raise HTTPException(404, "User not found")
+    return detail
+
+
+@router.patch("/admin/users/{user_id}/blocked")
+async def api_admin_user_blocked(
+    user_id: str,
+    body: AdminUserBlockedBody,
+    _admin: dict = Depends(get_admin_user),
+) -> dict[str, bool]:
+    pool = await get_pool()
+    if not pool:
+        raise HTTPException(503, "Database not configured")
+    target = await user_get_by_id(pool, user_id)
+    if not target:
+        raise HTTPException(404, "User not found")
+    _reject_if_protected_admin_target(target)
+    ok = await user_set_admin_blocked(pool, user_id, body.admin_blocked)
+    if not ok:
+        raise HTTPException(500, "Failed to update user")
+    return {"ok": True}
+
+
+@router.patch("/admin/users/{user_id}/subscription")
+async def api_admin_user_subscription(
+    user_id: str,
+    body: AdminUserSubscriptionPatchBody,
+    _admin: dict = Depends(get_admin_user),
+) -> dict[str, bool]:
+    pool = await get_pool()
+    if not pool:
+        raise HTTPException(503, "Database not configured")
+    target = await user_get_by_id(pool, user_id)
+    if not target:
+        raise HTTPException(404, "User not found")
+    _reject_if_protected_admin_target(target)
+    patch = body.model_dump(exclude_unset=True)
+    if not patch:
+        raise HTTPException(400, "No subscription fields to update")
+    period_sent = "current_period_end" in patch
+    period_val = patch.pop("current_period_end", None)
+    kwargs: dict = {}
+    if "subscription_status" in patch:
+        kwargs["subscription_status"] = patch["subscription_status"]
+    if "subscription_plan" in patch:
+        kwargs["subscription_plan"] = patch["subscription_plan"]
+    if kwargs:
+        await user_update_subscription(pool, user_id, **kwargs)
+    if period_sent:
+        await user_set_current_period_end(pool, user_id, period_val)
+    return {"ok": True}
+
+
+@router.delete("/admin/users/{user_id}")
+async def api_admin_user_delete(
+    user_id: str,
+    _admin: dict = Depends(get_admin_user),
+) -> dict[str, bool]:
+    pool = await get_pool()
+    if not pool:
+        raise HTTPException(503, "Database not configured")
+    target = await user_get_by_id(pool, user_id)
+    if not target:
+        raise HTTPException(404, "User not found")
+    _reject_if_protected_admin_target(target)
+    ok = await user_delete_by_id(pool, user_id)
+    if not ok:
+        raise HTTPException(500, "Failed to delete user")
+    return {"ok": True}
 
 
 @router.get("/admin/config", response_model=AdminConfigResponse)

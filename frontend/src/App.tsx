@@ -17,6 +17,7 @@ import AuthCallback from "./pages/AuthCallback";
 import SignupSuccess from "./pages/SignupSuccess";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminUsers from "./pages/admin/AdminUsers";
+import AdminUserDetail from "./pages/admin/AdminUserDetail";
 import AdminApp from "./pages/admin/AdminApp";
 import AdminConfig from "./pages/admin/AdminConfig";
 import AdminActivity from "./pages/admin/AdminActivity";
@@ -106,6 +107,7 @@ function App() {
             <Route path="/admin" element={<RequireAuth><RequireAdmin><AdminLayout /></RequireAdmin></RequireAuth>}>
               <Route index element={<AdminDashboard />} />
               <Route path="users" element={<AdminUsers />} />
+              <Route path="users/:userId" element={<AdminUserDetail />} />
               <Route path="activity" element={<AdminActivity />} />
               <Route path="usage" element={<AdminUsage />} />
               <Route path="referrals" element={<AdminReferrals />} />

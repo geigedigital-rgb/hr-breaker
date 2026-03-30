@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { getAdminUsers, patchAdminUserPartnerAccess, type AdminUserOut } from "../../api";
 import AdminPaginationBar from "../../components/admin/AdminPaginationBar";
 import { t } from "../../i18n";
@@ -118,7 +119,22 @@ export default function AdminUsers() {
               <tbody className="divide-y divide-[#EBEDF5]">
                 {users.map((u) => (
                   <tr key={u.id} className="hover:bg-[#F5F6FA]/50">
-                    <td className="px-4 py-3 font-medium text-[var(--text)] align-top">{u.email}</td>
+                    <td className="px-4 py-3 align-top">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                        <Link
+                          to={`/admin/users/${u.id}`}
+                          className="font-medium text-[#4578FC] hover:underline focus:outline-none focus:ring-2 focus:ring-[#4578FC] rounded"
+                          title={t("admin.users.openProfile")}
+                        >
+                          {u.email}
+                        </Link>
+                        {u.admin_blocked ? (
+                          <span className="text-[10px] font-semibold uppercase text-red-600 bg-red-50 px-1.5 py-0.5 rounded">
+                            {t("admin.userDetail.blockedBadge")}
+                          </span>
+                        ) : null}
+                      </div>
+                    </td>
                     <td className="px-4 py-3 text-[var(--text-muted)] align-top">{u.name ?? "—"}</td>
                     <td className="px-4 py-3 text-[var(--text)] align-top">{u.subscription_plan ?? "free"}</td>
                     <td className="px-4 py-3 align-top">
