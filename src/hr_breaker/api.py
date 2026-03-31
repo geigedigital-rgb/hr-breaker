@@ -535,8 +535,8 @@ async def _admin_build_user_detail(pool, user_id: str) -> AdminUserDetailRespons
     if not user:
         return None
     uid = str(user["id"])
-    audits = await usage_audit_list_for_user(pool, uid, limit=500)
-    resumes = await user_resumes_db_rows(pool, uid, limit=300)
+    audits = await usage_audit_list_for_user(pool, uid, limit=200)
+    resumes = await user_resumes_db_rows(pool, uid, limit=150)
     att = await referral_attribution_detail_for_invited(pool, uid)
     sub = await user_get_subscription(pool, uid)
     readiness_raw = await user_get_readiness(pool, uid)
@@ -583,22 +583,56 @@ async def _admin_build_user_detail(pool, user_id: str) -> AdminUserDetailRespons
         ))
     for r in resumes:
         cr = r.get("created_at")
+        fname = r.get("filename") or ""
+        pre_s = r.get("pre_ats_score")
+        post_s = r.get("post_ats_score")
+        extra: list[str] = []
+        if pre_s is not None or post_s is not None:
+            extra.append(f"ATS {pre_s if pre_s is not None else '—'}→{post_s if post_s is not None else '—'}")
+        ju = (r.get("job_url") or "").strip()
+        if ju:
+            extra.append(ju if len(ju) <= 96 else f"{ju[:93]}…")
+        detail_resume = fname
+        if extra:
+            detail_resume = f"{fname} · " + " · ".join(extra) if fname else " · ".join(extra)
         journey.append(AdminJourneyEntryOut(
             kind="resume",
             at=cr.isoformat() if cr and hasattr(cr, "isoformat") else "",
             title=f'PDF resume: {(r.get("company") or "—")} / {(r.get("job_title") or "—")}',
-            detail=r.get("filename"),
+            detail=detail_resume or fname or None,
         ))
     for a in audits:
         ts = a.get("created_at")
         err = (a.get("error_message") or "").strip()
+        meta = a.get("metadata") or {}
+        meta_line: str | None = None
+        if isinstance(meta, dict) and meta and not err:
+            bits: list[str] = []
+            if "has_pdf" in meta:
+                bits.append("pdf" if meta.get("has_pdf") else "no_pdf")
+            if "validation_passed" in meta:
+                bits.append("ok" if meta.get("validation_passed") else "val_fail")
+            if bits:
+                meta_line = ", ".join(bits)
+        detail_audit: str | None
+        if err:
+            detail_audit = err[:400]
+        elif meta_line:
+            detail_audit = meta_line
+        else:
+            detail_audit = None
+        tin = a.get("input_tokens")
+        tout = a.get("output_tokens")
         journey.append(AdminJourneyEntryOut(
             kind="audit",
             at=ts.isoformat() if ts and hasattr(ts, "isoformat") else "",
             title=str(a.get("action") or "event"),
-            detail=err[:400] if err else None,
+            detail=detail_audit,
             action=str(a.get("action") or ""),
             success=bool(a.get("success")) if a.get("success") is not None else None,
+            model=(str(m).strip() if (m := a.get("model")) else None) or None,
+            input_tokens=int(tin) if tin is not None else None,
+            output_tokens=int(tout) if tout is not None else None,
         ))
 
     journey.sort(key=lambda x: x.at or "", reverse=True)
@@ -708,6 +742,9 @@ class AdminJourneyEntryOut(BaseModel):
     detail: str | None = None
     action: str | None = None
     success: bool | None = None
+    model: str | None = None
+    input_tokens: int | None = None
+    output_tokens: int | None = None
 
 
 class AdminFunnelStageOut(BaseModel):

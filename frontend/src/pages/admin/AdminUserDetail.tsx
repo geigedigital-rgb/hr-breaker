@@ -86,7 +86,7 @@ export default function AdminUserDetail() {
   if (!detail) return null;
 
   return (
-    <div className="flex flex-col h-full min-h-0 max-w-4xl w-full mx-auto gap-4">
+    <div className="flex flex-col min-h-0 w-full max-w-4xl mx-auto gap-4 pb-8">
       <div className="shrink-0 flex flex-wrap items-center gap-3">
         <Link to="/admin/users" className="text-sm text-[#4578FC] hover:underline font-medium">
           ← {t("admin.userDetail.backToList")}
@@ -195,7 +195,11 @@ export default function AdminUserDetail() {
             </span>
           ) : null}
           <span className="text-[var(--text-tertiary)] ml-2">
-            ({t("admin.userDetail.freeOps")}: {detail.subscription.free_analyses_count})
+            ({t("admin.userDetail.freeOps")}: {detail.subscription.free_analyses_count}
+            {detail.subscription.free_optimize_count != null
+              ? ` · ${t("admin.userDetail.freeOptimizeOps")}: ${detail.subscription.free_optimize_count}`
+              : ""}
+            )
           </span>
         </p>
         <div className="flex flex-wrap gap-2">
@@ -296,27 +300,46 @@ export default function AdminUserDetail() {
         </div>
       </section>
 
-      <section className="flex flex-col flex-1 min-h-0 rounded-xl border border-[#EBEDF5] bg-[var(--card)] shadow-sm overflow-hidden">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] px-4 pt-4 shrink-0">
+      <section className="rounded-xl border border-[#EBEDF5] bg-[var(--card)] shadow-sm">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] px-4 pt-4">
           {t("admin.userDetail.journeyLog")}
         </h3>
-        <div className="flex-1 min-h-0 overflow-auto overscroll-contain p-4 pt-2">
+        <p className="px-4 pb-1 text-[11px] text-[var(--text-tertiary)] leading-snug">
+          {t("admin.userDetail.journeyLogHint")}
+        </p>
+        <div className="p-4 pt-2">
           <ul className="space-y-3 text-sm border-l-2 border-[#EBEDF5] ml-2 pl-4">
-            {detail.journey.map((j, i) => (
-              <li key={`${j.kind}-${j.at}-${i}`} className="relative">
-                <span className="absolute -left-[1.15rem] top-1.5 h-2 w-2 rounded-full bg-[#4578FC]" aria-hidden />
-                <p className="text-xs text-[var(--text-tertiary)] tabular-nums">
-                  {j.at ? new Date(j.at).toLocaleString() : "—"}
-                </p>
-                <p className="font-medium text-[var(--text)]">
-                  {j.title}
-                  {j.kind === "audit" && j.success === false ? (
-                    <span className="ml-2 text-xs text-red-600">{t("admin.userDetail.failed")}</span>
+            {detail.journey.map((j, i) => {
+              const auditMetaParts: string[] = [];
+              if (j.kind === "audit") {
+                const m = j.model?.trim();
+                if (m) auditMetaParts.push(m);
+                const tin = j.input_tokens ?? 0;
+                const tout = j.output_tokens ?? 0;
+                if (tin > 0 || tout > 0) auditMetaParts.push(`${tin}→${tout} tok`);
+              }
+              const auditMetaLine = auditMetaParts.length > 0 ? auditMetaParts.join(" · ") : null;
+              return (
+                <li key={`${j.kind}-${j.at}-${i}`} className="relative">
+                  <span className="absolute -left-[1.15rem] top-1.5 h-2 w-2 rounded-full bg-[#4578FC]" aria-hidden />
+                  <p className="text-xs text-[var(--text-tertiary)] tabular-nums">
+                    {j.at ? new Date(j.at).toLocaleString() : "—"}
+                  </p>
+                  <p className="font-medium text-[var(--text)]">
+                    {j.title}
+                    {j.kind === "audit" && j.success === false ? (
+                      <span className="ml-2 text-xs text-red-600">{t("admin.userDetail.failed")}</span>
+                    ) : null}
+                  </p>
+                  {auditMetaLine ? (
+                    <p className="text-[11px] text-[var(--text-tertiary)] font-mono mt-0.5 tabular-nums break-all">{auditMetaLine}</p>
                   ) : null}
-                </p>
-                {j.detail ? <p className="text-[var(--text-muted)] text-xs mt-0.5 break-words">{j.detail}</p> : null}
-              </li>
-            ))}
+                  {j.detail ? (
+                    <p className="text-[var(--text-muted)] text-xs mt-0.5 break-words whitespace-pre-wrap">{j.detail}</p>
+                  ) : null}
+                </li>
+              );
+            })}
           </ul>
         </div>
       </section>

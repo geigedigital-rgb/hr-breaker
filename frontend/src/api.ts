@@ -600,6 +600,9 @@ export type AdminJourneyEntry = {
   detail?: string | null;
   action?: string | null;
   success?: boolean | null;
+  model?: string | null;
+  input_tokens?: number | null;
+  output_tokens?: number | null;
 };
 
 export type AdminFunnelStage = { id: string; label: string; done: boolean };
@@ -626,6 +629,7 @@ export type AdminUserDetail = {
     status: string;
     current_period_end: string | null;
     free_analyses_count: number;
+    free_optimize_count?: number;
   };
   readiness: {
     score: number;

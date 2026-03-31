@@ -484,6 +484,7 @@ const en = {
       refStatus: "Attribution status",
       subscription: "Subscription",
       freeOps: "Free analyses",
+      freeOptimizeOps: "Free optimizes used",
       presetFree: "Set to Free",
       presetTrial7: "Trial (+7 days)",
       presetMonthly30: "Monthly (+30 days)",
@@ -493,6 +494,8 @@ const en = {
       deleteConfirm:
         "Delete {email}? This removes the account and related DB rows (history, referrals). Cannot be undone.",
       journeyLog: "Timeline (merged log)",
+      journeyLogHint:
+        "Saved PDFs, analysis/optimize events, and short flags from each run. Newest first — last ~200 audit rows and ~150 PDFs per load, one request.",
       failed: "failed",
     },
     reviews: {
