@@ -5,8 +5,9 @@ import {
   SparklesIcon,
   ArrowDownTrayIcon,
   ChevronDownIcon,
+  CheckCircleIcon,
 } from "@heroicons/react/24/outline";
-import { t } from "../../i18n";
+import { t, tFormat } from "../../i18n";
 import * as api from "../../api";
 
 const MOCK = {
@@ -195,13 +196,13 @@ function ScoreRing({
   );
 }
 
-function getRiskLevelLabel(riskPct: number): string {
-  const r = Math.max(0, Math.min(100, Math.round(riskPct)));
-  if (r >= 80) return "Critical";
-  if (r >= 60) return "High";
-  if (r >= 40) return "Elevated";
-  if (r >= 20) return "Moderate";
-  return "Low";
+function getQualityLevelLabelSandbox(qualityPct: number): string {
+  const q = Math.max(0, Math.min(100, Math.round(qualityPct)));
+  if (q >= 80) return t("optimize.resumeQualityLevelExcellent");
+  if (q >= 60) return t("optimize.resumeQualityLevelStrong");
+  if (q >= 45) return t("optimize.resumeQualityLevelGood");
+  if (q >= 25) return t("optimize.resumeQualityLevelFair");
+  return t("optimize.resumeQualityLevelLow");
 }
 
 function MiniMetricRow({ label, percent }: { label: string; percent: number }) {
@@ -248,8 +249,9 @@ export default function AdminVisualTest() {
   }, []);
 
   const overallPct = Math.round((MOCK.atsPct + MOCK.kwPct) / 2);
-  const assessmentRiskPct = 100 - overallPct;
-  const resultRiskPct = 17;
+  /** Matches prod Optimize: main ring = resume quality (not rejection risk). */
+  const assessmentQualityPct = overallPct;
+  const resultQualityPct = Math.min(100, overallPct + 14);
 
   const problemLabels = useMemo(
     () =>
@@ -270,17 +272,14 @@ export default function AdminVisualTest() {
   });
 
   const assessmentBlock = (
-    <div className="flex flex-col gap-4 w-full max-w-3xl mx-auto">
-      {/* Scan Results + Overall Match Score Combined */}
+    <div className="flex flex-col gap-4 w-full min-w-0 max-w-3xl mx-auto overflow-x-hidden">
+      {/* Scan Results + Overall Match Score Combined (aligned with Optimize.tsx assessment) */}
       <section className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-4 sm:p-5">
         <p className="text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider mb-3">{t("optimize.overallMatchScore")}</p>
         <div className="rounded-xl bg-white border border-[#ECEFF5] p-3.5 sm:p-4.5">
           <div className="flex flex-col gap-4 sm:gap-5">
-            <div className="flex flex-col lg:flex-row items-center lg:items-center gap-5 lg:gap-6">
-              
-              {/* Materials: Resume + Job */}
-              <div className="flex items-center gap-3 shrink-0">
-                {/* Resume Preview Mock */}
+            <div className="flex flex-col lg:flex-row items-center lg:items-center gap-5 lg:gap-6 min-w-0 max-w-full">
+              <div className="flex items-center gap-3 shrink-0 max-w-full min-w-0 justify-center flex-wrap sm:flex-nowrap">
                 <div className="w-[72px] sm:w-[84px] shrink-0 rounded bg-white shadow-[0_2px_8px_-4px_rgba(20,25,40,0.12)] border border-[#E8ECF4] flex flex-col relative aspect-[210/297] overflow-hidden group">
                   {mockThumbUrl ? (
                     <img src={mockThumbUrl} alt="Resume preview" className="absolute inset-0 w-full h-full object-cover object-top opacity-90" />
@@ -294,69 +293,52 @@ export default function AdminVisualTest() {
                       <div className="w-full h-1 bg-[#DCE3F0] rounded-full" />
                     </div>
                   )}
-                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/5 backdrop-blur-[1px]">
-                    <span className="text-[9px] font-semibold text-[#181819] uppercase tracking-wider bg-white/95 px-1.5 py-0.5 rounded shadow-sm">Resume</span>
+                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/5 backdrop-blur-[1px] pointer-events-none">
+                    <span className="text-[9px] font-semibold text-[#181819] uppercase tracking-wider bg-white/95 px-1.5 py-0.5 rounded shadow-sm">{t("home.resume")}</span>
                   </div>
                 </div>
-
                 <span className="text-[#8A94A6] text-xl font-light">+</span>
-
-                {/* Job Info Mock */}
                 <div className="w-[72px] sm:w-[84px] shrink-0 rounded bg-white shadow-[0_2px_8px_-4px_rgba(20,25,40,0.12)] border border-[#E8ECF4] flex flex-col relative aspect-[210/297] p-2 text-center justify-center">
                   <p className="text-[10px] sm:text-[11px] font-semibold text-[#181819] leading-tight line-clamp-4">Senior Product Manager</p>
                   <p className="text-[8px] sm:text-[9px] text-[#6B7280] mt-1.5 line-clamp-2">TechCorp</p>
                 </div>
               </div>
-
-              {/* Divider */}
-              <div className="hidden lg:block w-px h-[100px] bg-[#E8ECF4]" />
+              <div className="hidden lg:block w-px h-[100px] bg-[#E8ECF4] shrink-0" />
               <div className="lg:hidden w-full h-px bg-[#E8ECF4]" />
-
-              {/* Rejection Risk */}
-              <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-4 flex-1 w-full justify-center sm:justify-start">
-                {/* Mobile Ring */}
+              <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-4 flex-1 w-full min-w-0 justify-center sm:justify-start">
                 <div className="sm:hidden shrink-0 relative w-[104px] h-[104px]">
-                  <ScoreRing percent={assessmentRiskPct} size={104} thickness={12} mode="risk" />
-                  <span className="absolute inset-0 flex items-center justify-center text-[19px] font-bold text-[#181819] tabular-nums">
-                    {assessmentRiskPct}%
-                  </span>
+                  <ScoreRing percent={assessmentQualityPct} size={104} thickness={12} mode="score" />
+                  <span className="absolute inset-0 flex items-center justify-center text-[19px] font-bold text-[#181819] tabular-nums">{assessmentQualityPct}%</span>
                 </div>
-                {/* Tablet Ring */}
                 <div className="hidden sm:block lg:hidden shrink-0 relative w-[110px] h-[110px]">
-                  <ScoreRing percent={assessmentRiskPct} size={110} thickness={13} mode="risk" />
-                  <span className="absolute inset-0 flex items-center justify-center text-[21px] font-bold text-[#181819] tabular-nums">
-                    {assessmentRiskPct}%
-                  </span>
+                  <ScoreRing percent={assessmentQualityPct} size={110} thickness={13} mode="score" />
+                  <span className="absolute inset-0 flex items-center justify-center text-[21px] font-bold text-[#181819] tabular-nums">{assessmentQualityPct}%</span>
                 </div>
-                {/* Desktop Ring */}
                 <div className="hidden lg:block shrink-0 relative w-[118px] h-[118px]">
-                  <ScoreRing percent={assessmentRiskPct} size={118} thickness={14} mode="risk" />
-                  <span className="absolute inset-0 flex items-center justify-center text-[22px] font-bold text-[#181819] tabular-nums">
-                    {assessmentRiskPct}%
-                  </span>
+                  <ScoreRing percent={assessmentQualityPct} size={118} thickness={14} mode="score" />
+                  <span className="absolute inset-0 flex items-center justify-center text-[22px] font-bold text-[#181819] tabular-nums">{assessmentQualityPct}%</span>
                 </div>
-                
                 <div className="text-center sm:text-left flex-1 min-w-0">
-                  <p className="text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider">
-                    Rejection risk ({getRiskLevelLabel(assessmentRiskPct)})
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-[#6B7280]">
+                    {t("optimize.resumeQuality")} ({getQualityLevelLabelSandbox(assessmentQualityPct)})
                   </p>
                   <p className="mt-1.5 sm:mt-1 text-[11px] sm:text-[12px] text-[#6B7280] leading-relaxed max-w-[280px] mx-auto sm:mx-0">
-                    Without applying recommendations, rejection risk remains high. This resume still misses key job signals.
+                    {t("optimize.resumeQualityHintLow")}
                   </p>
                 </div>
               </div>
             </div>
             <div className="border-t border-[#F3F4F6] pt-4 grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
-              <MiniMetricRow label="Skills" percent={MOCK.skillsPct} />
-              <MiniMetricRow label="Experience" percent={MOCK.experiencePct} />
-              <MiniMetricRow label="Portfolio" percent={MOCK.portfolioPct} />
+              <MiniMetricRow label={t("optimize.skills")} percent={MOCK.skillsPct} />
+              <MiniMetricRow label={t("optimize.experience")} percent={MOCK.experiencePct} />
+              <MiniMetricRow label={t("optimize.portfolio")} percent={MOCK.portfolioPct} />
             </div>
           </div>
         </div>
 
-        <div className="mt-6">
+        <div className="mt-6 overflow-x-hidden">
           <div
-            className="rounded-[22px] border border-transparent critical-border-shimmer p-[1px]"
+            className="rounded-[22px] border border-transparent critical-border-shimmer p-[1px] overflow-hidden"
             style={{
               background:
                 "linear-gradient(#FAFAFC, #FAFAFC) padding-box, linear-gradient(120deg, #F36B7F 0%, #E94A63 45%, #C92A4B 100%) border-box, linear-gradient(120deg, rgba(255,255,255,0) 40%, rgba(255,255,255,0.85) 50%, rgba(255,255,255,0) 60%) border-box",
@@ -370,9 +352,7 @@ export default function AdminVisualTest() {
                 <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-[1.5px] border-[#C92A4B] text-[#C92A4B] text-[13px] font-bold">
                   !
                 </span>
-                <p className="text-[15px] sm:text-base font-semibold text-[#181819] leading-tight">
-                  Why you are not getting callbacks
-                </p>
+                <p className="text-[15px] sm:text-base font-semibold text-[#181819] leading-tight">{t("optimize.whyNoCallbacksTitle")}</p>
               </div>
               <p className="mt-1.5 text-[13px] text-[#4B5563] leading-relaxed">{scanSummaryText}</p>
 
@@ -388,18 +368,18 @@ export default function AdminVisualTest() {
                               <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#FDECEF] px-1.5 text-[11px] font-bold text-[#C92A4B]">
                                 !
                               </span>
-                              <p className="text-[11px] text-[#C92A4B] font-medium">Critical reason</p>
+                              <p className="text-[11px] text-[#C92A4B] font-medium">{t("optimize.criticalReason")}</p>
                             </div>
                           </div>
-                          <ChevronDownIcon className={`w-4 h-4 text-[#6B7280] transition-transform ${open ? "rotate-180" : ""}`} />
+                          <ChevronDownIcon className={`w-4 h-4 text-[#6B7280] transition-transform shrink-0 ${open ? "rotate-180" : ""}`} />
                         </DisclosureButton>
                         <DisclosurePanel className="px-3.5 pb-3.5 pt-0">
                           <div className="pt-2 border-t border-[#EDF1F7] mt-1">
                             <p className="text-[12px] text-[#374151] leading-relaxed">
-                              <span className="font-semibold text-[#181819]">If ignored:</span> {impactFromIssue(issue)}
+                              <span className="font-semibold text-[#181819]">{t("optimize.ifIgnored")}</span> {impactFromIssue(issue)}
                             </p>
                             <p className="text-[12px] text-[#374151] leading-relaxed mt-1.5">
-                              <span className="font-semibold text-[#181819]">What to change:</span> {fixFromIssue(issue)}
+                              <span className="font-semibold text-[#181819]">{t("optimize.whatToChange")}</span> {fixFromIssue(issue)}
                             </p>
                           </div>
                         </DisclosurePanel>
@@ -457,20 +437,17 @@ export default function AdminVisualTest() {
   );
 
   const resultBlock = (
-    <div className="flex flex-col gap-4 w-full max-w-3xl mx-auto items-start">
-      {/* Result Overall Match Score */}
+    <div className="flex flex-col gap-4 w-full min-w-0 max-w-3xl mx-auto items-stretch overflow-x-hidden">
+      {/* Post–auto-improve match card (prod: green state + resume quality ring) */}
       <section className="w-full rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-4 sm:p-5">
         <p className="text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider mb-3">{t("optimize.overallMatchScore")}</p>
-        <div className="rounded-xl bg-[#F0FDF4] border border-[#BBF7D0] p-3.5 sm:p-4.5">
+        <div className="rounded-xl border border-[#BBF7D0] bg-[#F0FDF4] p-3.5 sm:p-4.5">
           <div className="flex flex-col gap-4 sm:gap-5">
-            <div className="flex flex-col lg:flex-row items-center lg:items-center gap-5 lg:gap-6">
-              
-              {/* Materials: Resume + Job */}
-              <div className="flex items-center gap-3 shrink-0">
-                {/* Resume Preview Mock */}
+            <div className="flex flex-col lg:flex-row items-center lg:items-center gap-5 lg:gap-6 min-w-0 max-w-full">
+              <div className="flex items-center gap-3 shrink-0 max-w-full min-w-0 justify-center flex-wrap sm:flex-nowrap">
                 <div className="w-[72px] sm:w-[84px] shrink-0 rounded bg-white shadow-[0_2px_8px_-4px_rgba(20,25,40,0.12)] border border-[#E8ECF4] flex flex-col relative aspect-[210/297] overflow-hidden group">
                   {mockThumbUrl ? (
-                    <img src={mockThumbUrl} alt="Resume preview" className="absolute inset-0 w-full h-full object-cover object-top opacity-90" />
+                    <img src={mockThumbUrl} alt="" className="absolute inset-0 w-full h-full object-cover object-top opacity-90" />
                   ) : (
                     <div className="absolute inset-0 bg-[#F0FDF4] flex flex-col p-2 gap-1.5 opacity-70">
                       <div className="w-1/2 h-1.5 bg-[#BBF7D0] rounded-full mx-auto mb-1" />
@@ -481,135 +458,142 @@ export default function AdminVisualTest() {
                       <div className="w-full h-1 bg-[#BBF7D0] rounded-full" />
                     </div>
                   )}
-                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/5 backdrop-blur-[1px]">
-                    <span className="text-[9px] font-semibold text-[#166534] uppercase tracking-wider bg-white/95 px-1.5 py-0.5 rounded shadow-sm">Resume</span>
+                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/5 backdrop-blur-[1px] pointer-events-none">
+                    <span className="text-[9px] font-semibold text-[#166534] uppercase tracking-wider bg-white/95 px-1.5 py-0.5 rounded shadow-sm">{t("home.resume")}</span>
                   </div>
                 </div>
-
                 <span className="text-[#8A94A6] text-xl font-light">+</span>
-
-                {/* Job Info Mock */}
                 <div className="w-[72px] sm:w-[84px] shrink-0 rounded bg-white shadow-[0_2px_8px_-4px_rgba(20,25,40,0.12)] border border-[#E8ECF4] flex flex-col relative aspect-[210/297] p-2 text-center justify-center">
                   <p className="text-[10px] sm:text-[11px] font-semibold text-[#181819] leading-tight line-clamp-4">Senior Product Manager</p>
                   <p className="text-[8px] sm:text-[9px] text-[#6B7280] mt-1.5 line-clamp-2">TechCorp</p>
                 </div>
               </div>
-
-              {/* Divider */}
-              <div className="hidden lg:block w-px h-[100px] bg-[#BBF7D0]" />
+              <div className="hidden lg:block w-px h-[100px] bg-[#BBF7D0] shrink-0" />
               <div className="lg:hidden w-full h-px bg-[#BBF7D0]" />
-
-              {/* Rejection Risk */}
-              <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-4 flex-1 w-full justify-center sm:justify-start">
-                {/* Mobile Ring */}
+              <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-4 flex-1 w-full min-w-0 justify-center sm:justify-start">
                 <div className="sm:hidden shrink-0 relative w-[104px] h-[104px]">
-                  <ScoreRing percent={resultRiskPct} size={104} thickness={12} mode="risk" />
-                  <span className="absolute inset-0 flex items-center justify-center text-[19px] font-bold text-[#166534] tabular-nums">{resultRiskPct}%</span>
+                  <ScoreRing percent={resultQualityPct} size={104} thickness={12} mode="score" />
+                  <span className="absolute inset-0 flex items-center justify-center text-[19px] font-bold text-[#166534] tabular-nums">{resultQualityPct}%</span>
                 </div>
-                {/* Tablet Ring */}
                 <div className="hidden sm:block lg:hidden shrink-0 relative w-[110px] h-[110px]">
-                  <ScoreRing percent={resultRiskPct} size={110} thickness={13} mode="risk" />
-                  <span className="absolute inset-0 flex items-center justify-center text-[21px] font-bold text-[#166534] tabular-nums">{resultRiskPct}%</span>
+                  <ScoreRing percent={resultQualityPct} size={110} thickness={13} mode="score" />
+                  <span className="absolute inset-0 flex items-center justify-center text-[21px] font-bold text-[#166534] tabular-nums">{resultQualityPct}%</span>
                 </div>
-                {/* Desktop Ring */}
                 <div className="hidden lg:block shrink-0 relative w-[118px] h-[118px]">
-                  <ScoreRing percent={resultRiskPct} size={118} thickness={14} mode="risk" />
-                  <span className="absolute inset-0 flex items-center justify-center text-[22px] font-bold text-[#166534] tabular-nums">{resultRiskPct}%</span>
+                  <ScoreRing percent={resultQualityPct} size={118} thickness={14} mode="score" />
+                  <span className="absolute inset-0 flex items-center justify-center text-[22px] font-bold text-[#166534] tabular-nums">{resultQualityPct}%</span>
                 </div>
-
                 <div className="text-center sm:text-left flex-1 min-w-0">
                   <p className="text-[11px] font-semibold text-[#166534] uppercase tracking-wider">
-                    Rejection risk ({getRiskLevelLabel(resultRiskPct)})
+                    {t("optimize.resumeQuality")} ({getQualityLevelLabelSandbox(resultQualityPct)})
                   </p>
-                  <p className="mt-1.5 sm:mt-1 text-[11px] sm:text-[12px] text-[#4B5563] leading-relaxed max-w-[280px] mx-auto sm:mx-0">
-                    This resume now better matches the vacancy. Rejection risk is reduced after applying recommendations.
+                  <p className="mt-1.5 sm:mt-1 text-[11px] sm:text-[12px] text-[#6B7280] leading-relaxed max-w-[280px] mx-auto sm:mx-0">
+                    {t("optimize.resumeQualityHintHigh")}
                   </p>
                 </div>
               </div>
             </div>
             <div className="border-t border-[#BBF7D0] pt-4 grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
-              <MiniMetricRow label="Skills" percent={88} />
-              <MiniMetricRow label="Experience" percent={79} />
-              <MiniMetricRow label="Portfolio" percent={65} />
+              <MiniMetricRow label={t("optimize.skills")} percent={88} />
+              <MiniMetricRow label={t("optimize.experience")} percent={79} />
+              <MiniMetricRow label={t("optimize.portfolio")} percent={65} />
             </div>
           </div>
         </div>
       </section>
 
-      {/* Key Changes and Downloads */}
-      <section className="w-full rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-4 sm:p-5 space-y-4">
-        <header className="flex flex-wrap items-center gap-2">
-          <h2 className="text-[11px] font-semibold uppercase tracking-wider text-[#6B7280]">{t("optimize.result")}</h2>
-          <p className="text-base font-medium text-[#181819]" role="status">
-            {t("optimize.done")}
-          </p>
-        </header>
-        
-        <section className="flex flex-wrap items-center gap-2">
+      <section className="w-full rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-4 sm:p-5">
+        <h3 className="text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider mb-2">{t("optimize.keyChanges")}</h3>
+        <div className="space-y-3">
+          {MOCK.resultKeyChanges.map((group, idx) => (
+            <div key={idx} className="space-y-1.5">
+              <p className="text-[13px] font-semibold text-[#181819]">{group.category}</p>
+              {group.description && <p className="text-[13px] text-[#4B5563] leading-relaxed">{group.description}</p>}
+              {group.items.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {group.items.map((item, i) => (
+                    <span key={i} className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-medium text-[#181819] bg-[#F5F6FA] border border-[#E8ECF4]">
+                      {item}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="w-full rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-4 sm:p-5">
+        <Disclosure>
+          <DisclosureButton className="text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider hover:text-[#181819]">
+            {t("optimize.filterDetails")}
+          </DisclosureButton>
+          <DisclosurePanel className="mt-2 space-y-1.5">
+            <p className="text-[11px] text-[#6B7280] leading-relaxed mb-2">{t("optimize.filterDetailsDesc")}</p>
+            <ul className="space-y-2" role="list">
+              {MOCK.resultFilters.map((r) => (
+                <li key={r.filter_name} className="flex flex-wrap items-center gap-2 text-[13px] min-w-0">
+                  <span className={r.passed ? "text-[#166534] font-medium" : "text-[#B91C1C] font-medium"}>
+                    {r.passed ? "✓" : "✗"} {r.filter_name}
+                  </span>
+                  <span className="text-[#6B7280] tabular-nums">
+                    {r.score.toFixed(2)} / {r.threshold.toFixed(2)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </DisclosurePanel>
+        </Disclosure>
+      </section>
+
+      {/* Prod-aligned post-result: celebrate + download + another vacancy + optional ATS pass */}
+      <div className="mt-4 mb-6 flex flex-col items-stretch w-full max-w-lg mx-auto px-2 gap-5">
+        <section className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-4 sm:p-5 text-left">
+          <div className="flex items-start gap-3">
+            <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#ECFDF3] text-[#166534]" aria-hidden>
+              <CheckCircleIcon className="w-5 h-5" />
+            </span>
+            <div className="min-w-0">
+              <h2 className="text-base sm:text-lg font-semibold text-[#181819] leading-snug">{t("optimize.resultCelebrateTitle")}</h2>
+              <p className="mt-2 text-[14px] text-[#374151] leading-relaxed">
+                {tFormat(t("optimize.resultCelebrateBody"), { file: "Anna_Muller_resume.pdf", jobTitle: MOCK.displaySpecialty })}
+              </p>
+              <p className="mt-2 text-[13px] text-[#6B7280] leading-relaxed">{t("optimize.resultCelebrateHint")}</p>
+            </div>
+          </div>
+        </section>
+        <div className="flex flex-col items-center text-center gap-1">
+          <p className="text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider">{t("optimize.nextStepDownloadTitle")}</p>
+          <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center justify-center gap-3 w-full">
+            <button
+              type="button"
+              className="inline-flex items-center justify-center gap-2 rounded-full px-8 py-3.5 text-[15px] font-semibold text-white shadow-[0_4px_14px_-4px_rgba(69,120,252,0.55)] w-full sm:flex-1 sm:min-w-0"
+              style={{ background: "linear-gradient(165deg, #5e8afc 0%, #4578FC 42%, #3d6ae6 100%)" }}
+            >
+              <ArrowDownTrayIcon className="w-5 h-5 shrink-0" aria-hidden />
+              {t("optimize.startTrialToDownloadPdf")}
+            </button>
+            <button
+              type="button"
+              className="inline-flex items-center justify-center gap-2 rounded-full px-6 py-3.5 text-[14px] font-semibold text-[#4578FC] border-2 border-[#4578FC] bg-white hover:bg-[#4578FC]/[0.06] w-full sm:flex-1 sm:min-w-0"
+            >
+              {t("optimize.tailorAnotherVacancy")}
+            </button>
+          </div>
           <button
             type="button"
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-[#4578FC] border-2 border-[#4578FC] bg-transparent hover:bg-[#4578FC]/[0.06]"
-          >
-            <ArrowDownTrayIcon className="w-4 h-4 shrink-0" />
-            {t("optimize.downloadPdf")}
-          </button>
-          <button
-            type="button"
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white bg-[#4578FC] border-2 border-[#3d6ae6] shadow-[0_2px_10px_-4px_rgba(69,120,252,0.55)]"
+            className="mt-2 inline-flex items-center justify-center gap-2 rounded-full px-6 py-3 text-[13px] font-semibold text-[#4B5563] border border-[#E8ECF4] bg-[#FAFAFC] w-full sm:w-auto"
           >
             {t("optimize.optimizeAgainForAts")}
           </button>
-        </section>
-
-        <section className="pt-3 border-t border-[#EBEDF5]">
-          <h3 className="text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider mb-2">{t("optimize.keyChanges")}</h3>
-          <div className="space-y-3">
-            {MOCK.resultKeyChanges.map((group, idx) => (
-              <div key={idx} className="space-y-1.5">
-                <p className="text-[13px] font-semibold text-[#181819]">{group.category}</p>
-                {group.description && <p className="text-[13px] text-[#4B5563] leading-relaxed">{group.description}</p>}
-                {group.items.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5">
-                    {group.items.map((item, i) => (
-                      <span key={i} className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-medium text-[#181819] bg-[#F5F6FA] border border-[#E8ECF4]">
-                        {item}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section className="pt-3 border-t border-[#EBEDF5]">
-          <Disclosure>
-            <DisclosureButton className="text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider hover:text-[#181819]">
-              {t("optimize.filterDetails")}
-            </DisclosureButton>
-            <DisclosurePanel className="mt-2 space-y-1.5">
-              <p className="text-[11px] text-[#6B7280] leading-relaxed mb-2">{t("optimize.filterDetailsDesc")}</p>
-              <ul className="space-y-2" role="list">
-                {MOCK.resultFilters.map((r) => (
-                  <li key={r.filter_name} className="flex flex-wrap items-center gap-2 text-[13px]">
-                    <span className={r.passed ? "text-[#166534] font-medium" : "text-[#B91C1C] font-medium"}>
-                      {r.passed ? "✓" : "✗"} {r.filter_name}
-                    </span>
-                    <span className="text-[#6B7280] tabular-nums">
-                      {r.score.toFixed(2)} / {r.threshold.toFixed(2)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </DisclosurePanel>
-          </Disclosure>
-        </section>
-      </section>
+          <p className="mt-3 text-[11px] text-[#6B7280] max-w-md mx-auto leading-relaxed">{t("optimize.downloadPdfPaidHint")}</p>
+        </div>
+      </div>
     </div>
   );
 
   return (
-    <div className="space-y-6 pb-8">
+    <div className="space-y-6 pb-8 w-full min-w-0">
       <style>{`
         @keyframes criticalBorderShimmer {
           0% {

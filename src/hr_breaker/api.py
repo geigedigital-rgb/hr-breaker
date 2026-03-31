@@ -64,6 +64,7 @@ from hr_breaker.services.db import (
     db_list_all,
     db_recent_resumes_with_user,
     user_increment_free_analyses,
+    user_increment_free_optimize,
     READINESS_DELTA_ANALYSIS,
     READINESS_DELTA_OPTIMIZE,
     referral_admin_chains,
@@ -423,6 +424,7 @@ class SubscriptionOut(BaseModel):
     status: str  # free | trial | active | canceled
     current_period_end: str | None = None
     free_analyses_count: int = 0
+    free_optimize_count: int = 0
 
 
 class AuthUserOut(BaseModel):
@@ -627,7 +629,8 @@ async def _admin_build_user_detail(pool, user_id: str) -> AdminUserDetailRespons
             plan=sub.get("plan", "free"),
             status=sub.get("status", "free"),
             current_period_end=sub.get("current_period_end"),
-            free_analyses_count=int(user.get("free_analyses_count") or 0),
+            free_analyses_count=int(sub.get("free_analyses_count") or 0),
+            free_optimize_count=int(sub.get("free_optimize_count") or 0),
         ),
         readiness=readiness,
         referral=referral_out,
@@ -648,12 +651,19 @@ def _user_out(u: dict, subscription: dict | None = None) -> AuthUserOut:
     if subscription is not None:
         # Admin always gets full plan for UI and limits
         if _is_admin_user(u):
-            subscription = {"plan": "monthly", "status": "active", "current_period_end": None, "free_analyses_count": 0}
+            subscription = {
+                "plan": "monthly",
+                "status": "active",
+                "current_period_end": None,
+                "free_analyses_count": 0,
+                "free_optimize_count": 0,
+            }
         out.subscription = SubscriptionOut(
             plan=subscription.get("plan", "free"),
             status=subscription.get("status", "free"),
             current_period_end=subscription.get("current_period_end"),
             free_analyses_count=subscription.get("free_analyses_count", 0),
+            free_optimize_count=int(subscription.get("free_optimize_count") or 0),
         )
     return out
 
@@ -2033,9 +2043,13 @@ async def _run_optimize(
                 status = u_data.get("subscription_status") or "free"
                 has_paid = plan in ("trial", "monthly") and status in ("active", "trial")
                 if not has_paid:
-                    err_msg = "AI auto-optimization is not available on the free plan. Please upgrade to a paid plan."
-                    _put_progress(progress_queue, 100, err_msg)
-                    raise HTTPException(402, err_msg)
+                    free_opt = int(u_data.get("free_optimize_count") or 0)
+                    if free_opt >= 1:
+                        err_msg = (
+                            "Free auto-improvement already used. Start a trial to run again and download PDFs."
+                        )
+                        _put_progress(progress_queue, 100, err_msg)
+                        raise HTTPException(402, err_msg)
 
     settings = get_settings()
     if not settings.google_api_key:
@@ -2159,6 +2173,8 @@ async def _run_optimize(
             for c in optimized.changes
         ]
 
+    opt_uid = str(user["id"]) if user and user.get("id") else None
+
     pdf_filename = None
     pdf_b64 = None
     optimized_resume_text: str | None = None
@@ -2219,13 +2235,31 @@ async def _run_optimize(
             job_url=req.job_url,
             source_was_pdf=req.source_was_pdf,
         ), user_id=user_id)
-        if user_id:
-            pool = await get_pool()
-            if pool:
-                await user_increment_readiness(pool, user_id, delta=READINESS_DELTA_OPTIMIZE)
         pdf_filename = pdf_path.name
         pdf_b64 = base64.b64encode(optimized.pdf_bytes).decode()
+    elif optimized and optimized.pdf_bytes and not can_export_pdf:
+        txt = (optimized.pdf_text or "").strip()
+        if txt:
+            optimized_resume_text = txt
     _put_progress(progress_queue, 100, "Done")
+
+    if opt_uid:
+        pool_rd = await get_pool()
+        if pool_rd and validation.passed and optimized and optimized.pdf_bytes:
+            await user_increment_readiness(pool_rd, opt_uid, delta=READINESS_DELTA_OPTIMIZE)
+        if (
+            pool_rd
+            and opt_uid != "local"
+            and not _is_admin_user(user)
+            and optimized
+        ):
+            u_done = await user_get_by_id(pool_rd, opt_uid)
+            if u_done:
+                pln = u_done.get("subscription_plan") or "free"
+                stt = u_done.get("subscription_status") or "free"
+                paid_done = pln in ("trial", "monthly") and stt in ("active", "trial")
+                if not paid_done:
+                    await user_increment_free_optimize(pool_rd, opt_uid)
 
     pool_done = await get_pool()
     if audit_uid and pool_done:

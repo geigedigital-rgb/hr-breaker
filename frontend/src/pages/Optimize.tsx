@@ -1,10 +1,10 @@
 import { useState, useEffect, useLayoutEffect, useRef, useId } from "react";
 import { useLocation, useNavigate, useSearchParams, Link } from "react-router-dom";
 import { Disclosure, DisclosureButton, DisclosurePanel } from "@headlessui/react";
-import { SparklesIcon, ArrowUpTrayIcon, ArrowDownTrayIcon, ArrowPathIcon, BriefcaseIcon, ClipboardDocumentIcon, ExclamationTriangleIcon, CheckCircleIcon, LockClosedIcon, CheckIcon, ChevronDownIcon } from "@heroicons/react/24/outline";
+import { SparklesIcon, ArrowUpTrayIcon, ArrowDownTrayIcon, ArrowPathIcon, ArrowLeftIcon, BriefcaseIcon, ClipboardDocumentIcon, ExclamationTriangleIcon, CheckCircleIcon, LockClosedIcon, CheckIcon, ChevronDownIcon } from "@heroicons/react/24/outline";
 import * as api from "../api";
 import { useAuth } from "../contexts/AuthContext";
-import { t } from "../i18n";
+import { t, tFormat } from "../i18n";
 
 const RESUME_FILE_ACCEPT = ".txt,.md,.html,.htm,.tex,.pdf,.doc,.docx";
 const RESUME_TEXT_EXTS = ["txt", "md", "html", "htm", "tex", "pdf", "doc", "docx"];
@@ -247,105 +247,6 @@ function JobPreviewContent({
         ))
       ) : (
         <p className="text-[13px] text-[var(--text-muted)] leading-relaxed whitespace-pre-wrap">{rawText.slice(0, 800)}{rawText.length > 800 ? "…" : ""}</p>
-      )}
-    </div>
-  );
-}
-
-/** Заголовки секций резюме (DE, EN, RU) — для построчного разбора */
-const RESUME_SECTION_HEADERS_SET = new Set([
-  "SPRACHEN", "KENNTNISSE", "ERFAHRUNG", "BILDUNG", "PERSONLICHE DATEN", "PERSONLIHE DATEN",
-  "EDUCATION", "EXPERIENCE", "SKILLS", "SUMMARY", "QUALIFICATIONS", "CONTACT", "CONTACTS",
-  "ОПЫТ", "ОБРАЗОВАНИЕ", "НАВЫКИ", "КОНТАКТЫ", "Опыт работы", "Образование", "Навыки", "Контакт", "Личные качества",
-  "BERUFSERFAHRUNG", "BILDUNGSWEG", "ERFOLGREICHE PROJEKTE", "AUSBILDUNG", "WEITERBILDUNG",
-  "ARBEITSWEISE", "KOMMUNIKATION", "VERANTWORTUNG", "PERSONLICHE DATEN",
-  "Languages", "Experience", "Education", "Skills", "Summary", "Contact",
-]);
-
-function isResumeSectionHeader(line: string): boolean {
-  const t = line.trim();
-  if (!t) return false;
-  const upper = t.toUpperCase().replace(/\s+/g, " ");
-  if (RESUME_SECTION_HEADERS_SET.has(upper)) return true;
-  if (t.length <= 50 && t === t.toUpperCase() && /^[A-ZÄÖÜ0-9\s&\-\.]+$/i.test(t)) return true;
-  return false;
-}
-
-/** Расшифровка резюме: имя, должность, навыки + секции по заголовкам (построчный разбор) */
-function ResumePreviewContent({
-  rawContent,
-  name,
-  specialty,
-  skills,
-  isExtracting,
-}: {
-  rawContent: string;
-  name: string;
-  specialty: string;
-  skills: string;
-  isExtracting?: boolean;
-}) {
-  if (isExtracting && !name) {
-    return (
-      <p className="mt-3 text-[13px] text-[var(--text-muted)]">
-        {t("optimize.structuringResume")}
-      </p>
-    );
-  }
-  const text = rawContent.trim();
-  if (!text) {
-    return <p className="mt-3 text-[13px] text-[var(--text-muted)]">{t("optimize.noData")}</p>;
-  }
-
-  const lines = text.split(/\n/).map((l) => l.trimEnd());
-  const sections: { title: string; body: string }[] = [];
-  let current: { title: string; body: string } = { title: "", body: "" };
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (isResumeSectionHeader(line)) {
-      if (current.title && current.body.trim()) sections.push({ ...current, body: current.body.trim() });
-      else if (current.title) sections.push({ title: current.title, body: current.body.trim() });
-      current = { title: line.trim(), body: "" };
-      continue;
-    }
-    current.body = current.body ? `${current.body}\n${line}` : line;
-  }
-  if (current.title && current.body.trim()) sections.push({ title: current.title, body: current.body.trim() });
-
-  const hasSections = sections.length > 0;
-
-  return (
-    <div className="mt-3 space-y-4 text-sm max-h-72 overflow-y-auto">
-      <section>
-        <p className="font-bold text-[#181819] text-base leading-tight">{name || "—"}</p>
-        <p className="mt-0.5 font-medium text-[#181819] text-[13px]">{specialty || "—"}</p>
-        {skills && (
-          <p className="mt-1.5 text-[13px] text-[var(--text-muted)] leading-snug">
-            {skills}
-          </p>
-        )}
-      </section>
-      {hasSections ? (
-        sections.filter((s) => s.body || s.title).map((s, i) => (
-          <section key={i}>
-            {s.title && <p className="font-semibold text-[#181819] text-[13px] mb-1.5">{s.title}</p>}
-            {s.body && (
-              <div className="text-[13px] text-[var(--text-muted)] leading-snug space-y-1.5">
-                {s.body.split(/\n\n+/).filter(Boolean).map((p, j) => (
-                  <p key={j}>{p}</p>
-                ))}
-              </div>
-            )}
-          </section>
-        ))
-      ) : (
-        <div className="text-[13px] text-[var(--text-muted)] leading-snug space-y-1.5">
-          {text.split(/\n\n+/).filter(Boolean).slice(0, 12).map((p, i) => (
-            <p key={i}>{p}</p>
-          ))}
-          {text.split(/\n\n+/).filter(Boolean).length > 12 && <p>…</p>}
-        </div>
       )}
     </div>
   );
@@ -1093,6 +994,8 @@ export default function Optimize() {
   const [loadProgress, setLoadProgress] = useState(0);
   const [loadMessage, setLoadMessage] = useState("");
   const [isImprovingMore, setIsImprovingMore] = useState(false);
+  /** After result: full-screen step before clearing session for another vacancy (not a modal). */
+  const [postResultFlow, setPostResultFlow] = useState<"main" | "newJobWarning">("main");
   const [optimizePaywallOpen, setOptimizePaywallOpen] = useState(false);
   const [optimizePaywallCheckoutLoading, setOptimizePaywallCheckoutLoading] = useState(false);
   const [optimizePaywallCheckoutError, setOptimizePaywallCheckoutError] = useState<string | null>(null);
@@ -1101,7 +1004,6 @@ export default function Optimize() {
   const autoImproveStartedRef = useRef(false);
   const [loadingHintIndex, setLoadingHintIndex] = useState(0);
   const [resumeSummaryFromApi, setResumeSummaryFromApi] = useState<api.ExtractResumeSummaryResponse | null>(null);
-  const [isExtractingSummary, setIsExtractingSummary] = useState(false);
   const [_isFetchingJobUrl, _setIsFetchingJobUrl] = useState(false);
   const [resumeInputMode, setResumeInputMode] = useState<"file" | "text">("file");
   const [resumeSourceWasPdf, setResumeSourceWasPdf] = useState(false);
@@ -1125,8 +1027,9 @@ export default function Optimize() {
   const subStatus = user?.subscription?.status || "free";
   const hasPaidPlan = (plan === "trial" || plan === "monthly") && (subStatus === "active" || subStatus === "trial");
   const freeAnalysesCount = user?.subscription?.free_analyses_count || 0;
+  const freeOptimizeCount = user?.subscription?.free_optimize_count ?? 0;
   const canAnalyzeSubscription = hasPaidPlan || freeAnalysesCount < 1;
-  const canOptimizeSubscription = user?.id === "local" || hasPaidPlan;
+  const canOptimizeSubscription = user?.id === "local" || hasPaidPlan || freeOptimizeCount < 1;
   /** When true, user closed the free-limit overlay to edit resume/job; compact CTA remains in step 2. */
   const [freeLimitUpsellDismissed, setFreeLimitUpsellDismissed] = useState(false);
   const [freeLimitCheckoutLoading, setFreeLimitCheckoutLoading] = useState(false);
@@ -1303,15 +1206,10 @@ export default function Optimize() {
   useEffect(() => {
     const text = resumeContent.trim();
     if (text.length < 80) return;
-    const t = setTimeout(() => {
-      setIsExtractingSummary(true);
-      api
-        .extractResumeSummary(text)
-        .then(setResumeSummaryFromApi)
-        .catch(() => setResumeSummaryFromApi(null))
-        .finally(() => setIsExtractingSummary(false));
+    const timer = setTimeout(() => {
+      api.extractResumeSummary(text).then(setResumeSummaryFromApi).catch(() => setResumeSummaryFromApi(null));
     }, 700);
-    return () => clearTimeout(t);
+    return () => clearTimeout(timer);
   }, [resumeContent]);
 
   // Парсинг вакансии не вызываем до старта анализа — он выполняется внутри /analyze и результат приходит в data.job (экономия токенов).
@@ -1643,7 +1541,11 @@ export default function Optimize() {
       await refreshUser();
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Optimization failed";
-      if (!isOfferPasteAsTextError(msg)) setError(msg);
+      if (msg.includes("Free auto-improvement already used")) {
+        setError(t("optimize.freeOptimizeLimitError"));
+      } else if (!isOfferPasteAsTextError(msg)) {
+        setError(msg);
+      }
       setLoadProgress(100);
       setLoadMessage("");
       setStage("assessment");
@@ -1683,8 +1585,31 @@ export default function Optimize() {
     });
   }, [pendingAutoImproveAfterCheckout, hasPaidPlan, user?.id]);
 
+  useEffect(() => {
+    if (stage !== "result") setPostResultFlow("main");
+  }, [stage]);
+
+  function applyNewJobSameResume() {
+    if (!result) return;
+    const nextContent = result.optimized_resume_text?.trim() || resumeContent.trim();
+    setResumeContent(nextContent);
+    setJobInput("");
+    setJobMode("text");
+    setParsedJob(null);
+    setPreScores(null);
+    setResult(null);
+    setPostResultFlow("main");
+    setStage("idle");
+    setError(null);
+    setOfferPasteAsText(false);
+  }
+
   async function handleImproveMore() {
     if (!result || !hasResume || !hasJob) return;
+    if (user?.id !== "local" && !hasPaidPlan) {
+      setOptimizePaywallOpen(true);
+      return;
+    }
     setError(null);
     setIsImprovingMore(true);
     setStage("loading");
@@ -1834,8 +1759,92 @@ export default function Optimize() {
   const scanSummaryTextOptimize =
     scanResultParagraphs.length > 0 ? scanResultParagraphs.join(" ") : t("optimize.lowScoreNeedsImprovement");
 
+  const resultJobTitleLabel =
+    parsedJob?.title?.trim() ||
+    (jobInput.trim()
+      ? (() => {
+          const line = jobInput.trim().split(/\r?\n/).find((l) => l.trim())?.trim() || jobInput.trim();
+          return line.length > 80 ? `${line.slice(0, 77)}…` : line;
+        })()
+      : t("optimize.vacancyUntitled"));
+
+  const resultResumeFileLabel = uploadedFileName?.trim() || t("home.resume");
+
+  if (postResultFlow === "newJobWarning" && stage === "result" && result && !result.error) {
+    return (
+      <div className="flex flex-col gap-6 w-full min-w-0 min-h-0 overflow-x-hidden pb-10">
+        <button
+          type="button"
+          onClick={() => setPostResultFlow("main")}
+          className="inline-flex items-center gap-2 text-sm font-semibold text-[#4578FC] hover:text-[#3d6ae6] focus:outline-none focus:ring-2 focus:ring-[#4578FC]/30 rounded-lg -ml-1 px-1 py-1 self-start"
+        >
+          <ArrowLeftIcon className="w-4 h-4 shrink-0" aria-hidden />
+          {t("optimize.newJobWarningBack")}
+        </button>
+
+        <div className="w-full max-w-lg mx-auto space-y-6">
+          <section className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-5 sm:p-6 shadow-sm">
+            <p className="text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider mb-2">{t("optimize.result")}</p>
+            <h1 className="text-lg sm:text-xl font-semibold text-[#181819] leading-snug tracking-tight">
+              {t("optimize.newJobWarningTitle")}
+            </h1>
+            <p className="mt-3 text-[14px] text-[#4B5563] leading-relaxed">
+              {tFormat(t("optimize.newJobWarningBody"), { jobTitle: resultJobTitleLabel })}
+            </p>
+            <p className="mt-3 text-[13px] text-[#6B7280] leading-relaxed border-l-2 border-[#4578FC]/40 pl-3">
+              {t("optimize.newJobWarningNote")}
+            </p>
+          </section>
+
+          <div className="flex flex-col gap-3">
+            <p className="text-center text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider">
+              {t("optimize.nextStepDownloadTitle")}
+            </p>
+            <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center justify-center gap-3">
+              {result.pdf_filename && result.pdf_base64 ? (
+                <a
+                  href={`data:application/pdf;base64,${result.pdf_base64}`}
+                  download={result.pdf_filename}
+                  className="inline-flex items-center justify-center gap-2 rounded-full px-8 py-3.5 text-[15px] font-semibold text-white shadow-[0_4px_14px_-4px_rgba(69,120,252,0.55)] hover:opacity-[0.97] transition-opacity w-full sm:flex-1 sm:min-w-0"
+                  style={{
+                    background: "linear-gradient(165deg, #5e8afc 0%, #4578FC 42%, #3d6ae6 100%)",
+                  }}
+                >
+                  <ArrowDownTrayIcon className="w-5 h-5 shrink-0" aria-hidden />
+                  {t("optimize.downloadPdf")}
+                </a>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => void handleOptimizePaywallStartTrial()}
+                  className="inline-flex items-center justify-center gap-2 rounded-full px-8 py-3.5 text-[15px] font-semibold text-white shadow-[0_4px_14px_-4px_rgba(69,120,252,0.55)] w-full sm:flex-1 sm:min-w-0 disabled:opacity-50"
+                  style={{
+                    background: "linear-gradient(165deg, #5e8afc 0%, #4578FC 42%, #3d6ae6 100%)",
+                  }}
+                  disabled={optimizePaywallCheckoutLoading}
+                >
+                  <ArrowDownTrayIcon className="w-5 h-5 shrink-0" aria-hidden />
+                  {t("optimize.startTrialToDownloadPdf")}
+                </button>
+              )}
+            </div>
+            <p className="text-center text-[11px] text-[#6B7280] leading-relaxed">{t("optimize.downloadPdfPaidHint")}</p>
+
+            <button
+              type="button"
+              onClick={applyNewJobSameResume}
+              className="mt-2 w-full rounded-full px-6 py-3.5 text-[14px] font-semibold text-[#181819] border border-[#E8ECF4] bg-white hover:bg-[#F8FAFD] transition-colors focus:outline-none focus:ring-2 focus:ring-[#4578FC]/25 focus:ring-offset-2"
+            >
+              {t("optimize.newJobWarningContinue")}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-col gap-4 sm:gap-5 h-full min-h-0 overflow-auto">
+    <div className="flex flex-col gap-4 sm:gap-5 w-full min-w-0 min-h-0 overflow-x-hidden">
         {error && !isOfferPasteAsTextError(error) && (
           <div className="flex gap-2 text-sm text-[var(--text-muted)]/90 rounded-xl border border-[#EBEDF5] bg-[#FAFAFC] px-4 py-3 shrink-0" role="alert">
             <ExclamationTriangleIcon className="w-5 h-5 shrink-0 text-amber-500 mt-0.5" aria-hidden />
@@ -1844,7 +1853,7 @@ export default function Optimize() {
         )}
 
       {showSummaryBlocks && summaryData ? (
-        <div className="relative flex flex-col gap-4 w-full max-w-3xl mx-auto px-1 sm:px-0">
+        <div className="relative flex flex-col gap-4 w-full min-w-0 max-w-3xl mx-auto px-1 sm:px-0 overflow-x-hidden">
           <style>{`
             @keyframes criticalBorderShimmer {
               0% { background-position: 0 0, 0 0, 200% 0; }
@@ -1868,8 +1877,8 @@ export default function Optimize() {
                   }`}
                 >
                   <div className="flex flex-col gap-4 sm:gap-5">
-                    <div className="flex flex-col lg:flex-row items-center lg:items-center gap-5 lg:gap-6">
-                      <div className="flex items-center gap-3 shrink-0">
+                    <div className="flex flex-col lg:flex-row items-center lg:items-center gap-5 lg:gap-6 min-w-0 max-w-full">
+                      <div className="flex items-center gap-3 shrink-0 max-w-full min-w-0 justify-center flex-wrap sm:flex-nowrap">
                         <div className="w-[72px] sm:w-[84px] shrink-0 rounded bg-white shadow-[0_2px_8px_-4px_rgba(20,25,40,0.12)] border border-[#E8ECF4] flex flex-col relative aspect-[210/297] overflow-hidden group">
                           {(() => {
                             const isPdfFromHistory = uploadedFileName?.toLowerCase().endsWith(".pdf");
@@ -1973,9 +1982,9 @@ export default function Optimize() {
           })()}
 
           {stage === "assessment" && topIssuesOptimize.length > 0 && (
-            <div className="mt-2">
+            <div className="mt-2 overflow-x-hidden">
               <div
-                className="rounded-[22px] border border-transparent p-[1px]"
+                className="rounded-[22px] border border-transparent p-[1px] overflow-hidden"
                 style={{
                   background:
                     "linear-gradient(#FAFAFC, #FAFAFC) padding-box, linear-gradient(120deg, #F36B7F 0%, #E94A63 45%, #C92A4B 100%) border-box, linear-gradient(120deg, rgba(255,255,255,0) 40%, rgba(255,255,255,0.85) 50%, rgba(255,255,255,0) 60%) border-box",
@@ -2075,17 +2084,6 @@ export default function Optimize() {
             </section>
           )}
 
-          <section className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-4 sm:p-5 flex flex-col gap-0 min-w-0" aria-label={t("optimize.resumeBreakdown")}>
-            <p className="text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider shrink-0 mb-2">{t("optimize.resumeBreakdown")}</p>
-            <ResumePreviewContent
-              rawContent={resumeContent}
-              name={summaryData.displayName}
-              specialty={summaryData.displaySpecialty}
-              skills={summaryData.displaySkills}
-              isExtracting={isExtractingSummary && !resumeSummaryFromApi}
-            />
-          </section>
-
           {stage === "assessment" && (
             <div className="mt-8 sm:mt-10 mb-6 flex flex-col items-center text-center px-2">
               <div className="inline-flex items-center justify-center gap-2 sm:gap-3 mb-4 w-full max-w-[320px] sm:max-w-none">
@@ -2120,94 +2118,137 @@ export default function Optimize() {
           )}
 
           {stage === "result" && result && (
-              <div className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-4 sm:p-6 space-y-4">
-                <header className="flex flex-wrap items-center gap-2">
-                  <h2 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">{t("optimize.result")}</h2>
-                  {result.error ? <p className="text-base font-medium text-[var(--text-tertiary)]">{t("optimize.errorLabel")}</p> : <p className="text-base font-medium text-[#181819]" role="status">{t("optimize.done")}</p>}
-                </header>
-                {result.error ? (
+            <>
+              {result.error ? (
+                <div className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-4 sm:p-6 space-y-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">{t("optimize.errorLabel")}</p>
                   <p className="text-sm text-[var(--text-tertiary)] whitespace-pre-wrap">{result.error}</p>
-                ) : (
-                  <>
-                    <p className="text-[13px] text-[var(--text-muted)] mb-2">
-                      {t("optimize.mode")}: <span className="font-medium text-[#181819]">{t("optimize.aggressiveMode")}</span>
-                    </p>
-                {result.pdf_filename && result.pdf_base64 && (
-                  <section aria-label={t("optimize.downloadResume")} className="flex flex-wrap items-center gap-2">
-                    <a
-                      href={`data:application/pdf;base64,${result.pdf_base64}`}
-                      download={result.pdf_filename}
-                      className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-[#4578FC] border-2 border-[#4578FC] bg-transparent hover:bg-[#4578FC]/[0.06] active:bg-[#4578FC]/10 transition-colors focus:outline-none focus:ring-2 focus:ring-[#4578FC]/30 focus:ring-offset-2"
-                    >
-                      <ArrowDownTrayIcon className="w-4 h-4 shrink-0" />
-                      {t("optimize.downloadPdf")}
-                    </a>
-                    {showOptimizeAgainForAts && (
-                      <button
-                        type="button"
-                        onClick={() => void handleImproveMore()}
-                        disabled={isImprovingMore}
-                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white bg-[#4578FC] border-2 border-[#3d6ae6] shadow-[0_2px_10px_-4px_rgba(69,120,252,0.55)] hover:bg-[#3d6ae6] hover:border-[#355fcd] disabled:opacity-50 disabled:shadow-none transition-colors focus:outline-none focus:ring-2 focus:ring-[#4578FC]/40 focus:ring-offset-2"
-                      >
-                        {isImprovingMore ? t("optimize.improving") : t("optimize.optimizeAgainForAts")}
-                      </button>
-                    )}
-                  </section>
-                )}
-                {result.success && !result.pdf_base64 && (
-                  <p className="text-sm text-[var(--text-muted)]">
-                    {t("optimize.subscribeToDownloadBefore")}
-                    <Link to="/upgrade" className="text-[#4578FC] font-medium hover:underline">{t("optimize.subscribeLink")}</Link>
-                    {t("optimize.subscribeToDownloadAfter")}
-                  </p>
-                )}
-                    {result.key_changes && result.key_changes.length > 0 && (
-                      <section className="pt-3 border-t border-[#EBEDF5]" aria-labelledby="key-changes-heading">
-                        <h3 id="key-changes-heading" className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">{t("optimize.keyChanges")}</h3>
-                        <div className="space-y-3">
-                          {result.key_changes.map((group, idx) => (
-                            <div key={idx} className="space-y-1.5">
-                              <p className="text-[13px] font-semibold text-[#181819]">{group.category}</p>
-                              {group.description && <p className="text-[13px] text-[var(--text-muted)] leading-relaxed">{group.description}</p>}
-                              {group.items.length > 0 && (
-                                <div className="flex flex-wrap gap-1.5">
-                                  {group.items.map((item, i) => (
-                                    <span key={i} className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-medium text-[#181819] bg-[#F5F6FA]">{item}</span>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          ))}
+                </div>
+              ) : (
+                <>
+                  {result.key_changes && result.key_changes.length > 0 && (
+                    <section className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-4 sm:p-5" aria-labelledby="key-changes-heading">
+                      <h3 id="key-changes-heading" className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">{t("optimize.keyChanges")}</h3>
+                      <div className="space-y-3">
+                        {result.key_changes.map((group, idx) => (
+                          <div key={idx} className="space-y-1.5">
+                            <p className="text-[13px] font-semibold text-[#181819]">{group.category}</p>
+                            {group.description && <p className="text-[13px] text-[var(--text-muted)] leading-relaxed">{group.description}</p>}
+                            {group.items.length > 0 && (
+                              <div className="flex flex-wrap gap-1.5">
+                                {group.items.map((item, i) => (
+                                  <span key={i} className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-medium text-[#181819] bg-[#F5F6FA]">{item}</span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </section>
+                  )}
+                  {(result.validation?.results?.length ?? 0) > 0 && (
+                    <section className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-4 sm:p-5" aria-labelledby="filter-details-heading">
+                      <Disclosure>
+                        <DisclosureButton id="filter-details-heading" className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider hover:text-[#181819]">{t("optimize.filterDetails")}</DisclosureButton>
+                        <DisclosurePanel className="mt-2 space-y-1.5">
+                          <p className="text-[11px] text-[var(--text-tertiary)] leading-relaxed mb-2">
+                            {t("optimize.filterDetailsDesc")}
+                          </p>
+                          <ul className="space-y-2" role="list">
+                            {(result.validation?.results ?? []).map((r) => (
+                              <li key={r.filter_name} className="flex flex-wrap items-center gap-2 text-[13px] min-w-0">
+                                <span className={r.passed ? "text-green-600 font-medium" : "text-red-600 font-medium"}>{r.passed ? "✓" : "✗"} {r.filter_name}</span>
+                                <span className="text-[var(--text-tertiary)] tabular-nums">{r.score.toFixed(2)} / {r.threshold.toFixed(2)}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </DisclosurePanel>
+                      </Disclosure>
+                    </section>
+                  )}
+
+                  <div className="mt-8 sm:mt-10 mb-6 flex flex-col items-stretch w-full max-w-lg mx-auto px-2 gap-5">
+                    <section className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-4 sm:p-5 text-left">
+                      <div className="flex items-start gap-3">
+                        <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#ECFDF3] text-[#166534]" aria-hidden>
+                          <CheckCircleIcon className="w-5 h-5" />
+                        </span>
+                        <div className="min-w-0">
+                          <h2 className="text-base sm:text-lg font-semibold text-[#181819] leading-snug">{t("optimize.resultCelebrateTitle")}</h2>
+                          <p className="mt-2 text-[14px] text-[#374151] leading-relaxed">
+                            {tFormat(t("optimize.resultCelebrateBody"), {
+                              file: resultResumeFileLabel,
+                              jobTitle: resultJobTitleLabel,
+                            })}
+                          </p>
+                          <p className="mt-2 text-[13px] text-[#6B7280] leading-relaxed">{t("optimize.resultCelebrateHint")}</p>
                         </div>
-                      </section>
-                    )}
-                    {(result.validation?.results?.length ?? 0) > 0 && (
-                      <section className="pt-3 border-t border-[#EBEDF5]" aria-labelledby="filter-details-heading">
-                        <Disclosure>
-                          <DisclosureButton id="filter-details-heading" className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider hover:text-[#181819]">{t("optimize.filterDetails")}</DisclosureButton>
-                          <DisclosurePanel className="mt-2 space-y-1.5">
-                            <p className="text-[11px] text-[var(--text-tertiary)] leading-relaxed mb-2">
-                              {t("optimize.filterDetailsDesc")}
-                            </p>
-                            <ul className="space-y-2" role="list">
-                              {(result.validation?.results ?? []).map((r) => (
-                                <li key={r.filter_name} className="flex flex-wrap items-center gap-2 text-[13px]">
-                                  <span className={r.passed ? "text-green-600 font-medium" : "text-red-600 font-medium"}>{r.passed ? "✓" : "✗"} {r.filter_name}</span>
-                                  <span className="text-[var(--text-tertiary)] tabular-nums">{r.score.toFixed(2)} / {r.threshold.toFixed(2)}</span>
-                                </li>
-                              ))}
-                            </ul>
-                          </DisclosurePanel>
-                        </Disclosure>
-                      </section>
-                    )}
-                  </>
-                )}
-              </div>
-            )}
+                      </div>
+                    </section>
+
+                    <div className="flex flex-col items-center text-center gap-1">
+                      <p className="text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider">{t("optimize.nextStepDownloadTitle")}</p>
+                      <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center justify-center gap-3 w-full">
+                        {result.pdf_filename && result.pdf_base64 ? (
+                          <a
+                            href={`data:application/pdf;base64,${result.pdf_base64}`}
+                            download={result.pdf_filename}
+                            className="inline-flex items-center justify-center gap-2 rounded-full px-8 py-3.5 text-[15px] font-semibold text-white shadow-[0_4px_14px_-4px_rgba(69,120,252,0.55)] hover:shadow-[0_6px_20px_-4px_rgba(69,120,252,0.45)] hover:opacity-[0.97] active:scale-[0.99] transition-all focus:outline-none focus:ring-2 focus:ring-[#4578FC]/35 focus:ring-offset-2 w-full sm:flex-1 sm:min-w-0"
+                            style={{
+                              background: "linear-gradient(165deg, #5e8afc 0%, #4578FC 42%, #3d6ae6 100%)",
+                            }}
+                          >
+                            <ArrowDownTrayIcon className="w-5 h-5 shrink-0" aria-hidden />
+                            {t("optimize.downloadPdf")}
+                          </a>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => void handleOptimizePaywallStartTrial()}
+                            className="inline-flex items-center justify-center gap-2 rounded-full px-8 py-3.5 text-[15px] font-semibold text-white shadow-[0_4px_14px_-4px_rgba(69,120,252,0.55)] hover:shadow-[0_6px_20px_-4px_rgba(69,120,252,0.45)] hover:opacity-[0.97] active:scale-[0.99] transition-all focus:outline-none focus:ring-2 focus:ring-[#4578FC]/35 focus:ring-offset-2 w-full sm:flex-1 sm:min-w-0 disabled:opacity-50"
+                            style={{
+                              background: "linear-gradient(165deg, #5e8afc 0%, #4578FC 42%, #3d6ae6 100%)",
+                            }}
+                            disabled={optimizePaywallCheckoutLoading}
+                          >
+                            <ArrowDownTrayIcon className="w-5 h-5 shrink-0" aria-hidden />
+                            {t("optimize.startTrialToDownloadPdf")}
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setPostResultFlow("newJobWarning")}
+                          className="inline-flex items-center justify-center gap-2 rounded-full px-6 py-3.5 text-[14px] font-semibold text-[#4578FC] border-2 border-[#4578FC] bg-white hover:bg-[#4578FC]/[0.06] transition-colors focus:outline-none focus:ring-2 focus:ring-[#4578FC]/30 focus:ring-offset-2 w-full sm:flex-1 sm:min-w-0"
+                        >
+                          {t("optimize.tailorAnotherVacancy")}
+                        </button>
+                      </div>
+                      {showOptimizeAgainForAts && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (user?.id !== "local" && !hasPaidPlan) {
+                              setOptimizePaywallOpen(true);
+                              return;
+                            }
+                            void handleImproveMore();
+                          }}
+                          disabled={isImprovingMore}
+                          className="mt-2 inline-flex items-center justify-center gap-2 rounded-full px-6 py-3 text-[13px] font-semibold text-[#4B5563] border border-[#E8ECF4] bg-[#FAFAFC] hover:bg-[#F0F2F8] disabled:opacity-50 transition-colors w-full sm:w-auto"
+                        >
+                          {isImprovingMore ? t("optimize.improving") : t("optimize.optimizeAgainForAts")}
+                        </button>
+                      )}
+                      <p className="mt-3 text-[11px] text-[#6B7280] max-w-md mx-auto leading-relaxed">{t("optimize.downloadPdfPaidHint")}</p>
+                    </div>
+                  </div>
+                </>
+              )}
+            </>
+          )}
         </div>
       ) : stage === "landing" ? (
-        <div className="flex-1 flex flex-col items-center justify-start sm:justify-center pt-2 sm:pt-8 pb-8 sm:pb-16 px-3 sm:px-6 w-full max-w-5xl mx-auto min-h-0 overflow-auto">
+        <div className="flex flex-col items-center justify-start sm:justify-center pt-2 sm:pt-8 pb-8 sm:pb-16 px-3 sm:px-6 w-full max-w-5xl mx-auto min-h-0 overflow-x-hidden">
           {/* Main Visual Block */}
           <div className="w-full max-w-[900px] mb-6 sm:mb-12">
             <div className="relative rounded-2xl p-5 sm:p-8 lg:p-12 overflow-hidden flex flex-col justify-center min-h-[320px] sm:min-h-[380px] lg:min-h-[420px]"
@@ -2614,7 +2655,7 @@ export default function Optimize() {
         )}
         </div>
       ) : (
-      <div className="flex-1 min-w-0 flex flex-col gap-5 overflow-auto">
+      <div className="flex flex-col w-full min-w-0 gap-5 overflow-x-hidden">
         {(stage === "scanning" || stage === "loading" || stage === "assessment" || stage === "result") &&
           (hasResume && hasJob || awaitingLandingClaim) && (
           <>

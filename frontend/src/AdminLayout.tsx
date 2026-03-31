@@ -170,10 +170,11 @@ export default function AdminLayout() {
           )}
         </header>
 
-        <main className="flex-1 min-h-0 flex flex-col overflow-hidden pt-3 md:pt-4 pb-6 md:pb-8 px-3 md:px-6" role="main">
-          <div className="flex-1 min-h-0 flex flex-col min-w-0">
-            <Outlet />
-          </div>
+        <main
+          className="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden pt-3 md:pt-4 pb-6 md:pb-8 px-3 md:px-6 overscroll-y-contain"
+          role="main"
+        >
+          <Outlet />
         </main>
       </div>
     </div>

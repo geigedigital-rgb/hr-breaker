@@ -403,6 +403,8 @@ export type Subscription = {
   status: string; // free | trial | active | canceled
   current_period_end: string | null;
   free_analyses_count: number;
+  /** Completed optimizes on free plan (backend caps free auto-improve) */
+  free_optimize_count?: number;
 };
 export type AuthUser = {
   id: string;

@@ -170,6 +170,7 @@ const en = {
     changeResume: "Change resume",
     changeJob: "Change",
     addJobTitle: "Add job",
+    vacancyUntitled: "this vacancy",
     addJobSub: "Paste link or job description",
     loadingJob: "Loading job…",
     willStartScan: "Starts resume and job analysis",
@@ -245,6 +246,24 @@ const en = {
     resumeQualityHintLow:
       "Key job signals are still missing. Applying auto improvement raises resume quality and match.",
     nextStepImproveTitle: "Next step: improve your resume.",
+    nextStepDownloadTitle: "Next step: download your resume.",
+    resultCelebrateTitle: "Excellent work!",
+    resultCelebrateBody:
+      "Your resume ({file}) is tailored for this role: {jobTitle}. You can download the PDF below.",
+    resultCelebrateHint:
+      "Keep creating a separate, targeted resume for each vacancy — recruiters and hiring managers value that clarity.",
+    tailorAnotherVacancy: "Tailor for another job",
+    newJobWarningBack: "Back to results",
+    newJobWarningTitle: "Start a new tailoring?",
+    newJobWarningBody:
+      "You will leave this result screen. Download your PDF for {jobTitle} now if you have not saved it yet.",
+    newJobWarningNote:
+      "Your uploaded resume stays selected; only the job field is cleared so you can paste a new vacancy.",
+    newJobWarningContinue: "Continue — new vacancy",
+    startTrialToDownloadPdf: "Start trial to download PDF",
+    downloadPdfPaidHint: "PDF download and another ATS run are available on trial or subscription.",
+    freeOptimizeLimitError:
+      "Free auto-improvement already used. Start a trial to run again and download your PDF.",
     applyAutoImprove: "Apply auto improvement",
     whyNoCallbacksTitle: "Why you are not getting callbacks",
     criticalReason: "Critical reason",

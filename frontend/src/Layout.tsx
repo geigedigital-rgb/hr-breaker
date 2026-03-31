@@ -318,7 +318,7 @@ export default function Layout() {
           </div>
         </header>
 
-        <main className="flex-1 min-h-0 overflow-auto pt-2 pb-5 md:pb-6 px-3 md:px-6">
+        <main className="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden overscroll-y-contain pt-2 pb-5 md:pb-6 px-3 md:px-6">
           <Outlet />
         </main>
       </div>
