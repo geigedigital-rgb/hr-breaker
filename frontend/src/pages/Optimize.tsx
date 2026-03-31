@@ -2116,7 +2116,13 @@ export default function Optimize() {
                             {group.items.length > 0 && (
                               <div className="flex flex-wrap gap-1.5">
                                 {group.items.map((item, i) => (
-                                  <span key={i} className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-medium text-[#181819] bg-[#F5F6FA]">{item}</span>
+                                  <span
+                                    key={i}
+                                    className="inline-flex items-center gap-1.5 pl-2 pr-2.5 py-1 rounded-full text-[11px] font-medium text-[#181819] bg-[#ECFDF5] border border-[#A7F3D0]"
+                                  >
+                                    <CheckIcon className="w-3.5 h-3.5 shrink-0 text-emerald-600" strokeWidth={2.5} aria-hidden />
+                                    {item}
+                                  </span>
                                 ))}
                               </div>
                             )}
