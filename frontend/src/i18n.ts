@@ -247,21 +247,19 @@ const en = {
       "Key job signals are still missing. Applying auto improvement raises resume quality and match.",
     nextStepImproveTitle: "Next step: improve your resume.",
     nextStepDownloadTitle: "Next step: download your resume.",
-    resultCelebrateTitle: "Excellent work!",
-    resultCelebrateBody:
-      "Your resume ({file}) is tailored for this role: {jobTitle}. You can download the PDF below.",
-    resultCelebrateHint:
-      "Keep creating a separate, targeted resume for each vacancy — recruiters and hiring managers value that clarity.",
-    tailorAnotherVacancy: "Tailor for another job",
+    /** Post-optimize export band (compact, full-width card) */
+    resultExportKicker: "Output",
+    resultReadyForRole: "Tailored for {jobTitle}",
+    resultReadySourceFile: "{file}",
+    tailorAnotherVacancy: "Another role",
     newJobWarningBack: "Back to results",
-    newJobWarningTitle: "Start a new tailoring?",
-    newJobWarningBody:
-      "You will leave this result screen. Download your PDF for {jobTitle} now if you have not saved it yet.",
-    newJobWarningNote:
-      "Your uploaded resume stays selected; only the job field is cleared so you can paste a new vacancy.",
-    newJobWarningContinue: "Continue — new vacancy",
+    newJobWarningTitle: "Leave this result?",
+    newJobWarningBody: "Save your PDF for {jobTitle} before continuing, or you can download it below.",
+    newJobWarningNote: "Same resume file stays selected — only the job field resets.",
+    newJobWarningContinue: "Continue",
+    /** Paywall modal / edge cases; main CTA uses downloadPdf */
     startTrialToDownloadPdf: "Start trial to download PDF",
-    downloadPdfPaidHint: "PDF download and another ATS run are available on trial or subscription.",
+    downloadPdfPaidHint: "PDF export is included with trial or subscription.",
     freeOptimizeLimitError:
       "Free auto-improvement already used. Start a trial to run again and download your PDF.",
     applyAutoImprove: "Apply auto improvement",

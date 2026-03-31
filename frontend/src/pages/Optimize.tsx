@@ -1771,74 +1771,53 @@ export default function Optimize() {
   const resultResumeFileLabel = uploadedFileName?.trim() || t("home.resume");
 
   if (postResultFlow === "newJobWarning" && stage === "result" && result && !result.error) {
+    const ctaPrimaryCls =
+      "inline-flex min-h-[3rem] w-full flex-1 items-center justify-center gap-2 rounded-xl px-5 text-[15px] font-semibold text-white shadow-[0_4px_20px_-8px_rgba(69,120,252,0.45)] transition-[transform,opacity] hover:opacity-[0.96] active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4578FC]/40 focus-visible:ring-offset-2 disabled:opacity-50 whitespace-nowrap";
+    const ctaSecondaryCls =
+      "inline-flex min-h-[3rem] w-full flex-1 items-center justify-center gap-2 rounded-xl border-2 border-[#4578FC] bg-white px-5 text-[15px] font-semibold text-[#4578FC] transition-colors hover:bg-[#4578FC]/[0.05] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4578FC]/30 focus-visible:ring-offset-2 whitespace-nowrap";
+
     return (
-      <div className="flex flex-col gap-6 w-full min-w-0 min-h-0 overflow-x-hidden pb-10">
+      <div className="flex flex-col gap-6 w-full min-w-0 max-w-3xl mx-auto min-h-0 overflow-x-hidden pb-10">
         <button
           type="button"
           onClick={() => setPostResultFlow("main")}
-          className="inline-flex items-center gap-2 text-sm font-semibold text-[#4578FC] hover:text-[#3d6ae6] focus:outline-none focus:ring-2 focus:ring-[#4578FC]/30 rounded-lg -ml-1 px-1 py-1 self-start"
+          className="inline-flex items-center gap-2 text-sm font-medium text-[#4578FC] hover:text-[#3d6ae6] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4578FC]/25 rounded-lg -ml-1 px-1 py-1 self-start"
         >
           <ArrowLeftIcon className="w-4 h-4 shrink-0" aria-hidden />
           {t("optimize.newJobWarningBack")}
         </button>
 
-        <div className="w-full max-w-lg mx-auto space-y-6">
-          <section className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-5 sm:p-6 shadow-sm">
-            <p className="text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider mb-2">{t("optimize.result")}</p>
-            <h1 className="text-lg sm:text-xl font-semibold text-[#181819] leading-snug tracking-tight">
-              {t("optimize.newJobWarningTitle")}
-            </h1>
-            <p className="mt-3 text-[14px] text-[#4B5563] leading-relaxed">
-              {tFormat(t("optimize.newJobWarningBody"), { jobTitle: resultJobTitleLabel })}
-            </p>
-            <p className="mt-3 text-[13px] text-[#6B7280] leading-relaxed border-l-2 border-[#4578FC]/40 pl-3">
-              {t("optimize.newJobWarningNote")}
-            </p>
-          </section>
-
-          <div className="flex flex-col gap-3">
-            <p className="text-center text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider">
-              {t("optimize.nextStepDownloadTitle")}
-            </p>
-            <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center justify-center gap-3">
-              {result.pdf_filename && result.pdf_base64 ? (
-                <a
-                  href={`data:application/pdf;base64,${result.pdf_base64}`}
-                  download={result.pdf_filename}
-                  className="inline-flex items-center justify-center gap-2 rounded-full px-8 py-3.5 text-[15px] font-semibold text-white shadow-[0_4px_14px_-4px_rgba(69,120,252,0.55)] hover:opacity-[0.97] transition-opacity w-full sm:flex-1 sm:min-w-0"
-                  style={{
-                    background: "linear-gradient(165deg, #5e8afc 0%, #4578FC 42%, #3d6ae6 100%)",
-                  }}
-                >
-                  <ArrowDownTrayIcon className="w-5 h-5 shrink-0" aria-hidden />
-                  {t("optimize.downloadPdf")}
-                </a>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => void handleOptimizePaywallStartTrial()}
-                  className="inline-flex items-center justify-center gap-2 rounded-full px-8 py-3.5 text-[15px] font-semibold text-white shadow-[0_4px_14px_-4px_rgba(69,120,252,0.55)] w-full sm:flex-1 sm:min-w-0 disabled:opacity-50"
-                  style={{
-                    background: "linear-gradient(165deg, #5e8afc 0%, #4578FC 42%, #3d6ae6 100%)",
-                  }}
-                  disabled={optimizePaywallCheckoutLoading}
-                >
-                  <ArrowDownTrayIcon className="w-5 h-5 shrink-0" aria-hidden />
-                  {t("optimize.startTrialToDownloadPdf")}
-                </button>
-              )}
+        <section className="w-full rounded-2xl border border-[#E8ECF4] bg-[#FAFAFC] p-5 sm:p-8">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between lg:gap-10">
+            <div className="min-w-0 flex-1 space-y-2">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#4578FC]">{t("optimize.resultExportKicker")}</p>
+              <h1 className="text-xl sm:text-2xl font-semibold text-[#181819] tracking-tight leading-snug">{t("optimize.newJobWarningTitle")}</h1>
+              <p className="text-[14px] sm:text-[15px] text-[#4B5563] leading-relaxed max-w-2xl">
+                {tFormat(t("optimize.newJobWarningBody"), { jobTitle: resultJobTitleLabel })}
+              </p>
+              <p className="text-[13px] text-[#6B7280] leading-relaxed max-w-xl">{t("optimize.newJobWarningNote")}</p>
             </div>
-            <p className="text-center text-[11px] text-[#6B7280] leading-relaxed">{t("optimize.downloadPdfPaidHint")}</p>
-
-            <button
-              type="button"
-              onClick={applyNewJobSameResume}
-              className="mt-2 w-full rounded-full px-6 py-3.5 text-[14px] font-semibold text-[#181819] border border-[#E8ECF4] bg-white hover:bg-[#F8FAFD] transition-colors focus:outline-none focus:ring-2 focus:ring-[#4578FC]/25 focus:ring-offset-2"
-            >
-              {t("optimize.newJobWarningContinue")}
-            </button>
+            <div className="flex w-full flex-col gap-3 lg:max-w-md lg:shrink-0">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch">
+                {result.pdf_filename && result.pdf_base64 ? (
+                  <a href={`data:application/pdf;base64,${result.pdf_base64}`} download={result.pdf_filename} className={ctaPrimaryCls} style={{ background: "linear-gradient(160deg, #5e8afc 0%, #4578FC 45%, #3d6ae6 100%)" }}>
+                    <ArrowDownTrayIcon className="w-5 h-5 shrink-0" aria-hidden />
+                    {t("optimize.downloadPdf")}
+                  </a>
+                ) : (
+                  <button type="button" onClick={() => void handleOptimizePaywallStartTrial()} className={ctaPrimaryCls} style={{ background: "linear-gradient(160deg, #5e8afc 0%, #4578FC 45%, #3d6ae6 100%)" }} disabled={optimizePaywallCheckoutLoading}>
+                    <ArrowDownTrayIcon className="w-5 h-5 shrink-0" aria-hidden />
+                    {t("optimize.downloadPdf")}
+                  </button>
+                )}
+                <button type="button" onClick={applyNewJobSameResume} className={ctaSecondaryCls}>
+                  {t("optimize.newJobWarningContinue")}
+                </button>
+              </div>
+              <p className="text-center text-[11px] text-[#9CA3AF] leading-snug sm:text-left">{t("optimize.downloadPdfPaidHint")}</p>
+            </div>
           </div>
-        </div>
+        </section>
       </div>
     );
   }
@@ -2167,81 +2146,69 @@ export default function Optimize() {
                     </section>
                   )}
 
-                  <div className="mt-8 sm:mt-10 mb-6 flex flex-col items-stretch w-full max-w-lg mx-auto px-2 gap-5">
-                    <section className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-4 sm:p-5 text-left">
-                      <div className="flex items-start gap-3">
-                        <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#ECFDF3] text-[#166534]" aria-hidden>
-                          <CheckCircleIcon className="w-5 h-5" />
-                        </span>
-                        <div className="min-w-0">
-                          <h2 className="text-base sm:text-lg font-semibold text-[#181819] leading-snug">{t("optimize.resultCelebrateTitle")}</h2>
-                          <p className="mt-2 text-[14px] text-[#374151] leading-relaxed">
-                            {tFormat(t("optimize.resultCelebrateBody"), {
-                              file: resultResumeFileLabel,
-                              jobTitle: resultJobTitleLabel,
-                            })}
-                          </p>
-                          <p className="mt-2 text-[13px] text-[#6B7280] leading-relaxed">{t("optimize.resultCelebrateHint")}</p>
-                        </div>
+                  <section className="mt-8 sm:mt-10 mb-6 w-full max-w-3xl mx-auto rounded-2xl border border-[#E8ECF4] bg-[#FAFAFC] p-5 sm:p-8">
+                    <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between lg:gap-10">
+                      <div className="min-w-0 flex-1 space-y-1.5">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#4578FC]">{t("optimize.resultExportKicker")}</p>
+                        <p className="text-xl sm:text-2xl font-semibold text-[#181819] tracking-tight leading-snug">
+                          {tFormat(t("optimize.resultReadyForRole"), { jobTitle: resultJobTitleLabel })}
+                        </p>
+                        <p className="text-[13px] sm:text-[14px] text-[#6B7280] truncate" title={resultResumeFileLabel}>
+                          {tFormat(t("optimize.resultReadySourceFile"), { file: resultResumeFileLabel })}
+                        </p>
                       </div>
-                    </section>
-
-                    <div className="flex flex-col items-center text-center gap-1">
-                      <p className="text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider">{t("optimize.nextStepDownloadTitle")}</p>
-                      <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center justify-center gap-3 w-full">
-                        {result.pdf_filename && result.pdf_base64 ? (
-                          <a
-                            href={`data:application/pdf;base64,${result.pdf_base64}`}
-                            download={result.pdf_filename}
-                            className="inline-flex items-center justify-center gap-2 rounded-full px-8 py-3.5 text-[15px] font-semibold text-white shadow-[0_4px_14px_-4px_rgba(69,120,252,0.55)] hover:shadow-[0_6px_20px_-4px_rgba(69,120,252,0.45)] hover:opacity-[0.97] active:scale-[0.99] transition-all focus:outline-none focus:ring-2 focus:ring-[#4578FC]/35 focus:ring-offset-2 w-full sm:flex-1 sm:min-w-0"
-                            style={{
-                              background: "linear-gradient(165deg, #5e8afc 0%, #4578FC 42%, #3d6ae6 100%)",
-                            }}
-                          >
-                            <ArrowDownTrayIcon className="w-5 h-5 shrink-0" aria-hidden />
-                            {t("optimize.downloadPdf")}
-                          </a>
-                        ) : (
+                      <div className="flex w-full flex-col gap-3 lg:max-w-lg lg:shrink-0">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch">
+                          {result.pdf_filename && result.pdf_base64 ? (
+                            <a
+                              href={`data:application/pdf;base64,${result.pdf_base64}`}
+                              download={result.pdf_filename}
+                              className="inline-flex min-h-[3rem] w-full flex-1 items-center justify-center gap-2 rounded-xl px-5 text-[15px] font-semibold text-white shadow-[0_4px_20px_-8px_rgba(69,120,252,0.45)] transition-[transform,opacity] hover:opacity-[0.96] active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4578FC]/40 focus-visible:ring-offset-2 whitespace-nowrap"
+                              style={{ background: "linear-gradient(160deg, #5e8afc 0%, #4578FC 45%, #3d6ae6 100%)" }}
+                            >
+                              <ArrowDownTrayIcon className="w-5 h-5 shrink-0" aria-hidden />
+                              {t("optimize.downloadPdf")}
+                            </a>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => void handleOptimizePaywallStartTrial()}
+                              className="inline-flex min-h-[3rem] w-full flex-1 items-center justify-center gap-2 rounded-xl px-5 text-[15px] font-semibold text-white shadow-[0_4px_20px_-8px_rgba(69,120,252,0.45)] transition-[transform,opacity] hover:opacity-[0.96] active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4578FC]/40 focus-visible:ring-offset-2 disabled:opacity-50 whitespace-nowrap"
+                              style={{ background: "linear-gradient(160deg, #5e8afc 0%, #4578FC 45%, #3d6ae6 100%)" }}
+                              disabled={optimizePaywallCheckoutLoading}
+                            >
+                              <ArrowDownTrayIcon className="w-5 h-5 shrink-0" aria-hidden />
+                              {t("optimize.downloadPdf")}
+                            </button>
+                          )}
                           <button
                             type="button"
-                            onClick={() => void handleOptimizePaywallStartTrial()}
-                            className="inline-flex items-center justify-center gap-2 rounded-full px-8 py-3.5 text-[15px] font-semibold text-white shadow-[0_4px_14px_-4px_rgba(69,120,252,0.55)] hover:shadow-[0_6px_20px_-4px_rgba(69,120,252,0.45)] hover:opacity-[0.97] active:scale-[0.99] transition-all focus:outline-none focus:ring-2 focus:ring-[#4578FC]/35 focus:ring-offset-2 w-full sm:flex-1 sm:min-w-0 disabled:opacity-50"
-                            style={{
-                              background: "linear-gradient(165deg, #5e8afc 0%, #4578FC 42%, #3d6ae6 100%)",
-                            }}
-                            disabled={optimizePaywallCheckoutLoading}
+                            onClick={() => setPostResultFlow("newJobWarning")}
+                            className="inline-flex min-h-[3rem] w-full flex-1 items-center justify-center rounded-xl border-2 border-[#4578FC] bg-white px-5 text-[15px] font-semibold text-[#4578FC] transition-colors hover:bg-[#4578FC]/[0.05] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4578FC]/30 focus-visible:ring-offset-2 whitespace-nowrap"
                           >
-                            <ArrowDownTrayIcon className="w-5 h-5 shrink-0" aria-hidden />
-                            {t("optimize.startTrialToDownloadPdf")}
+                            {t("optimize.tailorAnotherVacancy")}
+                          </button>
+                        </div>
+                        {showOptimizeAgainForAts && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (user?.id !== "local" && !hasPaidPlan) {
+                                setOptimizePaywallOpen(true);
+                                return;
+                              }
+                              void handleImproveMore();
+                            }}
+                            disabled={isImprovingMore}
+                            className="inline-flex min-h-[3rem] w-full items-center justify-center rounded-xl border border-[#E5E7EB] bg-white px-5 text-[15px] font-medium text-[#374151] shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-colors hover:bg-[#F9FAFB] disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4578FC]/20 focus-visible:ring-offset-2"
+                          >
+                            {isImprovingMore ? t("optimize.improving") : t("optimize.optimizeAgainForAts")}
                           </button>
                         )}
-                        <button
-                          type="button"
-                          onClick={() => setPostResultFlow("newJobWarning")}
-                          className="inline-flex items-center justify-center gap-2 rounded-full px-6 py-3.5 text-[14px] font-semibold text-[#4578FC] border-2 border-[#4578FC] bg-white hover:bg-[#4578FC]/[0.06] transition-colors focus:outline-none focus:ring-2 focus:ring-[#4578FC]/30 focus:ring-offset-2 w-full sm:flex-1 sm:min-w-0"
-                        >
-                          {t("optimize.tailorAnotherVacancy")}
-                        </button>
+                        <p className="text-[11px] text-[#9CA3AF] leading-snug text-center sm:text-left">{t("optimize.downloadPdfPaidHint")}</p>
                       </div>
-                      {showOptimizeAgainForAts && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (user?.id !== "local" && !hasPaidPlan) {
-                              setOptimizePaywallOpen(true);
-                              return;
-                            }
-                            void handleImproveMore();
-                          }}
-                          disabled={isImprovingMore}
-                          className="mt-2 inline-flex items-center justify-center gap-2 rounded-full px-6 py-3 text-[13px] font-semibold text-[#4B5563] border border-[#E8ECF4] bg-[#FAFAFC] hover:bg-[#F0F2F8] disabled:opacity-50 transition-colors w-full sm:w-auto"
-                        >
-                          {isImprovingMore ? t("optimize.improving") : t("optimize.optimizeAgainForAts")}
-                        </button>
-                      )}
-                      <p className="mt-3 text-[11px] text-[#6B7280] max-w-md mx-auto leading-relaxed">{t("optimize.downloadPdfPaidHint")}</p>
                     </div>
-                  </div>
+                  </section>
                 </>
               )}
             </>

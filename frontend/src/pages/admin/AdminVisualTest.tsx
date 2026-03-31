@@ -5,7 +5,6 @@ import {
   SparklesIcon,
   ArrowDownTrayIcon,
   ChevronDownIcon,
-  CheckCircleIcon,
 } from "@heroicons/react/24/outline";
 import { t, tFormat } from "../../i18n";
 import * as api from "../../api";
@@ -546,49 +545,43 @@ export default function AdminVisualTest() {
         </Disclosure>
       </section>
 
-      {/* Prod-aligned post-result: celebrate + download + another vacancy + optional ATS pass */}
-      <div className="mt-4 mb-6 flex flex-col items-stretch w-full max-w-lg mx-auto px-2 gap-5">
-        <section className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-4 sm:p-5 text-left">
-          <div className="flex items-start gap-3">
-            <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#ECFDF3] text-[#166534]" aria-hidden>
-              <CheckCircleIcon className="w-5 h-5" />
-            </span>
-            <div className="min-w-0">
-              <h2 className="text-base sm:text-lg font-semibold text-[#181819] leading-snug">{t("optimize.resultCelebrateTitle")}</h2>
-              <p className="mt-2 text-[14px] text-[#374151] leading-relaxed">
-                {tFormat(t("optimize.resultCelebrateBody"), { file: "Anna_Muller_resume.pdf", jobTitle: MOCK.displaySpecialty })}
-              </p>
-              <p className="mt-2 text-[13px] text-[#6B7280] leading-relaxed">{t("optimize.resultCelebrateHint")}</p>
+      {/* Prod-aligned post-result export band */}
+      <section className="mt-4 mb-6 w-full max-w-3xl mx-auto rounded-2xl border border-[#E8ECF4] bg-[#FAFAFC] p-5 sm:p-8">
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between lg:gap-10">
+          <div className="min-w-0 flex-1 space-y-1.5">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#4578FC]">{t("optimize.resultExportKicker")}</p>
+            <p className="text-xl sm:text-2xl font-semibold text-[#181819] tracking-tight leading-snug">
+              {tFormat(t("optimize.resultReadyForRole"), { jobTitle: MOCK.displaySpecialty })}
+            </p>
+            <p className="text-[13px] sm:text-[14px] text-[#6B7280] truncate">{tFormat(t("optimize.resultReadySourceFile"), { file: "Anna_Muller_resume.pdf" })}</p>
+          </div>
+          <div className="flex w-full flex-col gap-3 lg:max-w-lg lg:shrink-0">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch">
+              <button
+                type="button"
+                className="inline-flex min-h-[3rem] w-full flex-1 items-center justify-center gap-2 rounded-xl px-5 text-[15px] font-semibold text-white shadow-[0_4px_20px_-8px_rgba(69,120,252,0.45)] whitespace-nowrap"
+                style={{ background: "linear-gradient(160deg, #5e8afc 0%, #4578FC 45%, #3d6ae6 100%)" }}
+              >
+                <ArrowDownTrayIcon className="w-5 h-5 shrink-0" aria-hidden />
+                {t("optimize.downloadPdf")}
+              </button>
+              <button
+                type="button"
+                className="inline-flex min-h-[3rem] w-full flex-1 items-center justify-center rounded-xl border-2 border-[#4578FC] bg-white px-5 text-[15px] font-semibold text-[#4578FC] whitespace-nowrap"
+              >
+                {t("optimize.tailorAnotherVacancy")}
+              </button>
             </div>
-          </div>
-        </section>
-        <div className="flex flex-col items-center text-center gap-1">
-          <p className="text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider">{t("optimize.nextStepDownloadTitle")}</p>
-          <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center justify-center gap-3 w-full">
             <button
               type="button"
-              className="inline-flex items-center justify-center gap-2 rounded-full px-8 py-3.5 text-[15px] font-semibold text-white shadow-[0_4px_14px_-4px_rgba(69,120,252,0.55)] w-full sm:flex-1 sm:min-w-0"
-              style={{ background: "linear-gradient(165deg, #5e8afc 0%, #4578FC 42%, #3d6ae6 100%)" }}
+              className="inline-flex min-h-[3rem] w-full items-center justify-center rounded-xl border border-[#E5E7EB] bg-white px-5 text-[15px] font-medium text-[#374151] whitespace-nowrap"
             >
-              <ArrowDownTrayIcon className="w-5 h-5 shrink-0" aria-hidden />
-              {t("optimize.startTrialToDownloadPdf")}
+              {t("optimize.optimizeAgainForAts")}
             </button>
-            <button
-              type="button"
-              className="inline-flex items-center justify-center gap-2 rounded-full px-6 py-3.5 text-[14px] font-semibold text-[#4578FC] border-2 border-[#4578FC] bg-white hover:bg-[#4578FC]/[0.06] w-full sm:flex-1 sm:min-w-0"
-            >
-              {t("optimize.tailorAnotherVacancy")}
-            </button>
+            <p className="text-[11px] text-[#9CA3AF] leading-snug text-center sm:text-left">{t("optimize.downloadPdfPaidHint")}</p>
           </div>
-          <button
-            type="button"
-            className="mt-2 inline-flex items-center justify-center gap-2 rounded-full px-6 py-3 text-[13px] font-semibold text-[#4B5563] border border-[#E8ECF4] bg-[#FAFAFC] w-full sm:w-auto"
-          >
-            {t("optimize.optimizeAgainForAts")}
-          </button>
-          <p className="mt-3 text-[11px] text-[#6B7280] max-w-md mx-auto leading-relaxed">{t("optimize.downloadPdfPaidHint")}</p>
         </div>
-      </div>
+      </section>
     </div>
   );
 
