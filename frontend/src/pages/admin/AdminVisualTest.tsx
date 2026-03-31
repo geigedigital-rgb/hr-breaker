@@ -336,25 +336,27 @@ export default function AdminVisualTest() {
           </div>
         </div>
 
-        <div className="mt-6 overflow-x-hidden">
+        <div className="mt-6 w-full min-w-0 max-w-full overflow-x-clip">
           <div
-            className="rounded-[22px] border border-transparent critical-border-shimmer p-[1px] overflow-hidden"
+            className="w-full min-w-0 max-w-full rounded-[22px] border border-transparent critical-border-shimmer p-[1px] overflow-hidden [contain:paint]"
             style={{
               background:
                 "linear-gradient(#FAFAFC, #FAFAFC) padding-box, linear-gradient(120deg, #F36B7F 0%, #E94A63 45%, #C92A4B 100%) border-box, linear-gradient(120deg, rgba(255,255,255,0) 40%, rgba(255,255,255,0.85) 50%, rgba(255,255,255,0) 60%) border-box",
-              backgroundSize: "100% 100%, 100% 100%, 240% 240%",
-              backgroundPosition: "0 0, 0 0, 200% 0",
+              backgroundSize: "100% 100%, 100% 100%, 165% 165%",
+              backgroundPosition: "0 0, 0 0, 125% 0",
               animation: "criticalBorderShimmer 3.2s linear infinite",
             }}
           >
-            <div className="rounded-[21px] bg-white p-4 sm:p-5">
-              <div className="flex items-center gap-2 mb-1.5">
+            <div className="rounded-[21px] bg-white p-4 sm:p-5 min-w-0 overflow-x-hidden">
+              <div className="flex items-start gap-2 mb-1.5 w-full min-w-0">
                 <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-[1.5px] border-[#C92A4B] text-[#C92A4B] text-[13px] font-bold">
                   !
                 </span>
-                <p className="text-[15px] sm:text-base font-semibold text-[#181819] leading-tight">{t("optimize.whyNoCallbacksTitle")}</p>
+                <p className="text-[15px] sm:text-base font-semibold text-[#181819] leading-snug min-w-0 flex-1 break-words">
+                  {t("optimize.whyNoCallbacksTitle")}
+                </p>
               </div>
-              <p className="mt-1.5 text-[13px] text-[#4B5563] leading-relaxed">{scanSummaryText}</p>
+              <p className="mt-1.5 text-[13px] text-[#4B5563] leading-relaxed break-words">{scanSummaryText}</p>
 
               <div className="mt-4 space-y-2.5">
                 {topIssues.map((issue) => (
@@ -591,14 +593,14 @@ export default function AdminVisualTest() {
   );
 
   return (
-    <div className="space-y-6 pb-8 w-full min-w-0">
+    <div className="space-y-6 pb-24 sm:pb-12 w-full min-w-0">
       <style>{`
         @keyframes criticalBorderShimmer {
           0% {
-            background-position: 0 0, 0 0, 200% 0;
+            background-position: 0 0, 0 0, 125% 0;
           }
           100% {
-            background-position: 0 0, 0 0, -200% 0;
+            background-position: 0 0, 0 0, -125% 0;
           }
         }
       `}</style>
