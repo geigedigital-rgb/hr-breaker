@@ -993,6 +993,8 @@ export default function Optimize() {
   const [_isAnalyzing, setIsAnalyzing] = useState(false);
   const [loadProgress, setLoadProgress] = useState(0);
   const [loadMessage, setLoadMessage] = useState("");
+  const [displayLoadProgress, setDisplayLoadProgress] = useState(0);
+  const [improveHintIndex, setImproveHintIndex] = useState(0);
   const [isImprovingMore, setIsImprovingMore] = useState(false);
   /** After result: full-screen step before clearing session for another vacancy (not a modal). */
   const [postResultFlow, setPostResultFlow] = useState<"main" | "newJobWarning">("main");
@@ -1691,6 +1693,14 @@ export default function Optimize() {
           t("optimize.loadingHintAnalyze4"),
         ];
   const activeLoadingHint = loadingHints[loadingHintIndex % loadingHints.length];
+  const improveLoadingHints = [
+    t("optimize.loadingImproveUser1"),
+    t("optimize.loadingImproveUser2"),
+    t("optimize.loadingImproveUser3"),
+    t("optimize.loadingImproveUser4"),
+  ];
+  const activeImproveLoadingHint = improveLoadingHints[improveHintIndex % improveLoadingHints.length];
+  const visibleLoadProgress = stage === "loading" ? Math.max(loadProgress, displayLoadProgress) : loadProgress;
 
   useEffect(() => {
     if (!isLoadingAssessment) {
@@ -1700,6 +1710,28 @@ export default function Optimize() {
     const timer = setInterval(() => setLoadingHintIndex((idx) => idx + 1), 1800);
     return () => clearInterval(timer);
   }, [isLoadingAssessment]);
+
+  useEffect(() => {
+    if (stage !== "loading") {
+      setDisplayLoadProgress(0);
+      setImproveHintIndex(0);
+      return;
+    }
+    const progressTimer = setInterval(() => {
+      setDisplayLoadProgress((prev) => {
+        if (loadProgress >= 100) return 100;
+        const current = Math.max(prev, loadProgress);
+        const step = current < 60 ? 1.4 : current < 85 ? 0.9 : 0.35;
+        const cap = loadProgress >= 92 ? 98 : 96;
+        return Math.min(cap, current + step);
+      });
+    }, 700);
+    const textTimer = setInterval(() => setImproveHintIndex((idx) => idx + 1), 2200);
+    return () => {
+      clearInterval(progressTimer);
+      clearInterval(textTimer);
+    };
+  }, [stage, loadProgress]);
 
   const summaryData = showSummaryBlocks
     ? (() => {
@@ -2698,21 +2730,24 @@ export default function Optimize() {
                 </div>
                 <p className="text-[#181819] font-medium">{t("optimize.improvingResume")}</p>
                 <p className="text-sm text-[var(--text-muted)] text-center max-w-sm">
-                  {loadMessage || t("optimize.doNotClosePage")}
+                  {activeImproveLoadingHint}
+                </p>
+                <p className="text-xs text-[var(--text-tertiary)] text-center max-w-sm">
+                  {loadMessage === t("optimize.done") ? t("optimize.done") : t("optimize.doNotClosePage")}
                 </p>
                 <div className="w-full max-w-xs space-y-2">
                   <div className="h-2 rounded-full bg-[#EBEDF5] overflow-hidden">
                     <div
                       className="h-full rounded-full bg-[#4578FC] transition-all duration-300 ease-out"
-                      style={{ width: `${Math.round(loadProgress)}%` }}
+                      style={{ width: `${Math.round(visibleLoadProgress)}%` }}
                       role="progressbar"
-                      aria-valuenow={Math.round(loadProgress)}
+                      aria-valuenow={Math.round(visibleLoadProgress)}
                       aria-valuemin={0}
                       aria-valuemax={100}
                       aria-label={t("optimize.improveProgressAria")}
                     />
                   </div>
-                  <p className="text-center text-sm font-medium text-[#181819]">{Math.round(loadProgress)}%</p>
+                  <p className="text-center text-sm font-medium text-[#181819]">{Math.round(visibleLoadProgress)}%</p>
                 </div>
               </div>
             )}
