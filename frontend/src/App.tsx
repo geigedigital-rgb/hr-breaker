@@ -25,6 +25,7 @@ import AdminUsage from "./pages/admin/AdminUsage";
 import AdminReferrals from "./pages/admin/AdminReferrals";
 import AdminReviews from "./pages/admin/AdminReviews";
 import AdminVisualTest from "./pages/admin/AdminVisualTest";
+import AdminTemplatesLab from "./pages/admin/AdminTemplatesLab";
 import { t } from "./i18n";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -115,6 +116,7 @@ function App() {
               <Route path="reviews" element={<AdminReviews />} />
               <Route path="config" element={<AdminConfig />} />
               <Route path="app" element={<AdminApp />} />
+              <Route path="templates-lab" element={<AdminTemplatesLab />} />
               <Route path="visual" element={<AdminVisualTest />} />
             </Route>
           </Routes>

@@ -5,7 +5,7 @@ from pydantic_ai import Agent
 from hr_breaker.config import get_model_settings, get_settings
 from hr_breaker.models import JobPosting
 
-SYSTEM_PROMPT = """You are a job posting parser. Extract ONLY what is explicitly stated in the text.
+LEGACY_SYSTEM_PROMPT = """You are a job posting parser. Extract ONLY what is explicitly stated in the text.
 
 Rules (strict):
 - Preserve the original language of the job posting in all extracted fields; do not translate.
@@ -16,6 +16,36 @@ Rules (strict):
 - keywords: only words/phrases that appear in the text (tools, technologies, skills named in the posting). Do not add similar terms.
 - title: exact job title as written, or "" if not found.
 - company: exact company/employer name as written, or "" if not found.
+
+Output schema: title (str), company (str), requirements (list of str), keywords (list of str), description (str). Use empty string or empty list when not in source.
+"""
+
+SYSTEM_PROMPT = """You are a job posting parser. Extract ONLY what is explicitly stated in the text.
+
+Goal: maximize downstream resume-to-job matching quality in one pass while staying factual.
+
+Rules (strict):
+- Preserve the original language of the job posting in all extracted fields; do not translate.
+- Extract exactly what appears in the source. Do NOT invent, add, or infer hidden facts.
+- If a field is not clearly present in the text, leave it empty: title="" or company="" or requirements=[] or keywords=[] or description="".
+- title: exact job title as written, or "" if not found.
+- company: exact company/employer name as written, or "" if not found.
+
+requirements:
+- Capture explicit requirements only (bullets, "Requirements", "Must have", "Nice to have", "Du bringst mit", etc.).
+- Keep one requirement per item.
+- Prefer atomic, actionable lines over long merged sentences.
+- Include both mandatory and optional requirements when explicitly labeled.
+
+keywords:
+- Include ONLY exact words/phrases present in the posting.
+- Prioritize skills/tools/technologies/frameworks/domains/certifications that influence ATS matching.
+- Deduplicate semantically identical repeats (keep canonical spelling from source).
+- Keep short keyword phrases (1-4 words) and preserve source casing where possible.
+
+description:
+- Use concise near-verbatim excerpts from responsibilities/mission/impact sections.
+- Do not paraphrase into new claims and do not add content not present in source.
 
 Output schema: title (str), company (str), requirements (list of str), keywords (list of str), description (str). Use empty string or empty list when not in source.
 """

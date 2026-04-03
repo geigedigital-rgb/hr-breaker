@@ -233,14 +233,26 @@ export async function analyze(params: {
   job_url?: string;
   output_language?: string;
 }): Promise<AnalyzeResponse> {
-  const r = await fetch(`${API}/analyze`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...authHeaders() },
-    body: JSON.stringify(params),
-  });
-  const data = await parseJsonOrThrow<AnalyzeResponse & { detail?: string }>(r);
-  if (!r.ok) throw new Error(data.detail || r.statusText);
-  return data;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 90_000);
+  try {
+    const r = await fetch(`${API}/analyze`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify(params),
+      signal: controller.signal,
+    });
+    const data = await parseJsonOrThrow<AnalyzeResponse & { detail?: string }>(r);
+    if (!r.ok) throw new Error(data.detail || r.statusText);
+    return data;
+  } catch (e) {
+    if (e instanceof DOMException && e.name === "AbortError") {
+      throw new Error("Analysis timeout. Please try again.");
+    }
+    throw e;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 // --- Landing save → login → claim flow ---
@@ -670,9 +682,140 @@ export type AdminActivityItem = {
 
 export type AdminActivityResponse = { items: AdminActivityItem[]; total: number };
 
+export type UnifiedResumeSchema = {
+  schema_version: "1.0";
+  meta: {
+    target_role?: string | null;
+    target_locale?: string | null;
+    source_checksum?: string | null;
+    layout_hints?: Record<string, string>;
+  };
+  basics: {
+    name: string;
+    label?: string | null;
+    email?: string | null;
+    phone?: string | null;
+    url?: string | null;
+    summary?: string | null;
+  };
+  work: Array<{
+    name: string;
+    position: string;
+    start_date?: string | null;
+    end_date?: string | null;
+    highlights: string[];
+  }>;
+  education: Array<{
+    institution: string;
+    area?: string | null;
+    study_type?: string | null;
+    start_date?: string | null;
+    end_date?: string | null;
+  }>;
+  skills: Array<{ name: string; level?: string | null; keywords: string[] }>;
+  projects: Array<{ name: string; description?: string | null; highlights: string[] }>;
+  certificates: Array<{ name: string; issuer?: string | null; date?: string | null }>;
+  languages: Array<{ language: string; fluency?: string | null }>;
+  awards: Array<{ title: string; summary?: string | null }>;
+  publications: Array<{ name: string; publisher?: string | null; summary?: string | null }>;
+};
+
+export type AdminTemplateListItem = {
+  id: string;
+  name: string;
+  source: string;
+  supports_photo: boolean;
+  supports_columns: boolean;
+  pdf_stability_score: number;
+  default_css_vars: Record<string, string>;
+  recommended: boolean;
+};
+
+export type AdminTemplateListResponse = { items: AdminTemplateListItem[] };
+
+export type AdminTemplateRenderHtmlResponse = {
+  html_body: string;
+  full_html: string;
+};
+
+export type AdminTemplateRenderPdfResponse = {
+  pdf_base64: string;
+  page_count: number;
+  warnings: string[];
+};
+
 export async function getAdminStats(): Promise<AdminStatsResponse> {
   const r = await fetch(`${API}/admin/stats`, { headers: authHeaders() });
   const data = await parseJsonOrThrow<AdminStatsResponse & { detail?: string }>(r);
+  if (!r.ok) throw new Error(data.detail || r.statusText);
+  return data;
+}
+
+export async function adminExtractResumeSchema(params: {
+  resume_content: string;
+  target_role?: string;
+  target_locale?: string;
+}): Promise<UnifiedResumeSchema> {
+  const r = await fetch(`${API}/admin/resume-schema/extract`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(params),
+  });
+  const data = await parseJsonOrThrow<UnifiedResumeSchema & { detail?: string }>(r);
+  if (!r.ok) throw new Error(data.detail || r.statusText);
+  return data as UnifiedResumeSchema;
+}
+
+export async function adminExtractResumeSchemaFromFile(params: {
+  file: File;
+  target_role?: string;
+  target_locale?: string;
+}): Promise<UnifiedResumeSchema> {
+  const form = new FormData();
+  form.append("file", params.file);
+  if (params.target_role) form.append("target_role", params.target_role);
+  if (params.target_locale) form.append("target_locale", params.target_locale);
+  const r = await fetch(`${API}/admin/resume-schema/extract-file`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: form,
+  });
+  const data = await parseJsonOrThrow<UnifiedResumeSchema & { detail?: string }>(r);
+  if (!r.ok) throw new Error(data.detail || r.statusText);
+  return data as UnifiedResumeSchema;
+}
+
+export async function getAdminTemplates(): Promise<AdminTemplateListResponse> {
+  const r = await fetch(`${API}/admin/templates`, { headers: authHeaders() });
+  const data = await parseJsonOrThrow<AdminTemplateListResponse & { detail?: string }>(r);
+  if (!r.ok) throw new Error(data.detail || r.statusText);
+  return data;
+}
+
+export async function adminRenderTemplateHtml(params: {
+  template_id: string;
+  schema: UnifiedResumeSchema;
+}): Promise<AdminTemplateRenderHtmlResponse> {
+  const r = await fetch(`${API}/admin/templates/render-html`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(params),
+  });
+  const data = await parseJsonOrThrow<AdminTemplateRenderHtmlResponse & { detail?: string }>(r);
+  if (!r.ok) throw new Error(data.detail || r.statusText);
+  return data;
+}
+
+export async function adminRenderTemplatePdf(params: {
+  template_id: string;
+  schema: UnifiedResumeSchema;
+}): Promise<AdminTemplateRenderPdfResponse> {
+  const r = await fetch(`${API}/admin/templates/render-pdf`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(params),
+  });
+  const data = await parseJsonOrThrow<AdminTemplateRenderPdfResponse & { detail?: string }>(r);
   if (!r.ok) throw new Error(data.detail || r.statusText);
   return data;
 }

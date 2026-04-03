@@ -14,6 +14,8 @@ import {
   Bars3Icon,
   XMarkIcon,
   ChatBubbleLeftRightIcon,
+  ChevronDoubleLeftIcon,
+  ChevronDoubleRightIcon,
 } from "@heroicons/react/24/outline";
 import { useAuth } from "./contexts/AuthContext";
 import { t } from "./i18n";
@@ -25,6 +27,7 @@ const adminNav = [
   { to: "/admin/usage", end: false, label: t("admin.nav.usage"), icon: CpuChipIcon },
   { to: "/admin/referrals", end: false, label: t("admin.nav.referrals"), icon: UserPlusIcon },
   { to: "/admin/reviews", end: false, label: t("admin.nav.reviews"), icon: ChatBubbleLeftRightIcon },
+  { to: "/admin/templates-lab", end: false, label: t("admin.nav.templatesLab"), icon: SwatchIcon },
   { to: "/admin/config", end: false, label: t("admin.nav.config"), icon: AdjustmentsHorizontalIcon },
   { to: "/admin/app", end: false, label: t("admin.nav.app"), icon: Cog6ToothIcon },
   { to: "/admin/visual", end: false, label: t("admin.nav.visual"), icon: SwatchIcon },
@@ -35,6 +38,12 @@ export default function AdminLayout() {
   const location = useLocation();
   const { user } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  useEffect(() => {
+    const saved = window.localStorage.getItem("admin_sidebar_collapsed");
+    setSidebarCollapsed(saved === "1");
+  }, []);
 
   useEffect(() => {
     if (!mobileMenuOpen) return;
@@ -50,6 +59,7 @@ export default function AdminLayout() {
   }, [location.pathname]);
 
   const closeMobileMenu = () => setMobileMenuOpen(false);
+  const compactSidebar = sidebarCollapsed && !mobileMenuOpen;
 
   const sidebarContent = (
     <>
@@ -57,13 +67,13 @@ export default function AdminLayout() {
         <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/15" aria-hidden>
           <ShieldCheckIcon className="w-5 h-5" />
         </span>
-        <div>
+        {!compactSidebar && <div>
           <div className="flex items-center gap-2">
             <img src="/logo-white.svg" alt="" className="w-6 h-6 object-contain shrink-0" />
             <div className="font-bold text-lg tracking-tight drop-shadow-sm">PitchCV</div>
           </div>
           <div className="text-[11px] font-medium text-white/70 uppercase tracking-wider">{t("admin.badge")}</div>
-        </div>
+        </div>}
       </div>
 
       <nav className="space-y-1">
@@ -74,14 +84,15 @@ export default function AdminLayout() {
             end={end}
             onClick={closeMobileMenu}
             className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${
+              `flex items-center ${compactSidebar ? "justify-center" : "gap-3"} px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${
                 isActive ? "bg-white/20 text-white shadow-sm" : "text-white/85 hover:bg-white/10 hover:text-white"
               }`
             }
             aria-current="page"
+            title={compactSidebar ? label : undefined}
           >
             <Icon className="w-5 h-5 shrink-0 opacity-100" aria-hidden />
-            {label}
+            {!compactSidebar && label}
           </NavLink>
         ))}
       </nav>
@@ -93,14 +104,15 @@ export default function AdminLayout() {
             closeMobileMenu();
             navigate("/");
           }}
-          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium text-white/80 hover:bg-white/10 hover:text-white transition-colors"
+          className={`w-full flex items-center ${compactSidebar ? "justify-center" : "gap-2.5"} px-3 py-2 rounded-lg text-xs font-medium text-white/80 hover:bg-white/10 hover:text-white transition-colors`}
+          title={compactSidebar ? t("admin.backToApp") : undefined}
         >
           <HomeIcon className="w-4 h-4 shrink-0" aria-hidden />
-          {t("admin.backToApp")}
+          {!compactSidebar && t("admin.backToApp")}
         </button>
       </div>
 
-      {user && (
+      {user && !compactSidebar && (
         <div className="pt-4 mt-4 border-t border-white/15">
           <p className="text-[11px] font-semibold text-white/70 uppercase tracking-wider px-1">{t("admin.signedInAs")}</p>
           <p className="text-sm font-medium text-white truncate mt-1 px-1" title={user.email}>
@@ -114,7 +126,7 @@ export default function AdminLayout() {
   return (
     <div className="h-screen bg-[var(--bg-page)] flex overflow-hidden" role="application" aria-label={t("admin.panelLabel")}>
       <aside
-        className="hidden md:flex w-64 shrink-0 flex-col py-6 px-4 min-h-0 overflow-y-auto text-white shadow-xl z-20"
+        className={`hidden md:flex ${sidebarCollapsed ? "w-20 px-2" : "w-64 px-4"} shrink-0 flex-col py-6 min-h-0 overflow-y-auto text-white shadow-xl z-20 transition-all`}
         style={{ background: "linear-gradient(160deg, #2f40df 0%, #1a28a8 100%)" }}
         role="navigation"
         aria-label={t("admin.navLabel")}
@@ -164,7 +176,21 @@ export default function AdminLayout() {
             <div id="admin-header-portal" className="flex-1 flex items-center min-w-0" />
           ) : (
             <>
-              <h1 className="text-base font-semibold text-[var(--text)]">{t("admin.title")}</h1>
+              <div className="flex items-center gap-2">
+                <h1 className="text-base font-semibold text-[var(--text)]">{t("admin.title")}</h1>
+                <button
+                  type="button"
+                  className="hidden md:inline-flex rounded-lg border border-[#EBEDF5] p-1.5 text-[var(--text-muted)] hover:bg-[#F5F6FA]"
+                  onClick={() => {
+                    const next = !sidebarCollapsed;
+                    setSidebarCollapsed(next);
+                    window.localStorage.setItem("admin_sidebar_collapsed", next ? "1" : "0");
+                  }}
+                  aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+                >
+                  {sidebarCollapsed ? <ChevronDoubleRightIcon className="w-4 h-4" /> : <ChevronDoubleLeftIcon className="w-4 h-4" />}
+                </button>
+              </div>
               <div className="md:hidden w-6 shrink-0" aria-hidden />
             </>
           )}

@@ -52,6 +52,9 @@ CONTENT RULES:
 - Add a summary section highlighting the most relevant experiences.
 - Try to preserve the original writing style if possible.
 - Avoid leaving an empty space at the bottom of the page if you have useful content to fill.
+- Perform deep tailoring in this single pass: align summary, skills, and each experience entry to explicit job requirements.
+- Prioritize requirement coverage: each critical requirement should map to at least one concrete resume signal when possible.
+- Refine wording toward role-relevant terminology to improve ATS matching, while keeping claims truthful.
 
 {content_rules}
 
@@ -66,6 +69,7 @@ TOOLS:
 - Use preview_resume(html) to see rendered PDF preview - call at least once before returning
 - If page_count > 1, trim content and check again
 - Do not return until check_content_length confirms fits_one_page=true
+- For single-pass quality, run check_keywords_tool(html) before final answer and address top missing terms when truthful and relevant.
 
 OPTIONAL TOOLS (use when helpful):
 - check_keywords_tool(html) - Returns missing job keywords ranked by TF-IDF importance. Use if unsure about keyword coverage.
@@ -244,6 +248,8 @@ async def optimize_resume(
     no_shame: bool = False,
     output_language: str | None = None,
     audit_user_id: str | None = None,
+    pre_ats_score: int | None = None,
+    pre_keyword_score: float | None = None,
 ) -> OptimizedResume:
     """Optimize resume for job posting.
     output_language: Preferred language for all LLM output (e.g. 'en', 'ru'). Default: English."""
@@ -266,7 +272,31 @@ Company: {job.company}
 Requirements: {', '.join(job.requirements)}
 Keywords: {', '.join(job.keywords)}
 Description: {job.description}
-{lang_override}"""
+{lang_override}
+
+## One-pass optimization objective:
+- Treat this as the main and usually only iteration.
+- Build a requirement-to-resume mapping internally before writing final HTML:
+  1) list explicit requirements and keywords from the posting,
+  2) match them to evidence from the original resume,
+  3) update wording/ordering so the strongest matches are easy for ATS and recruiter scans.
+- Keep every claim truthful to source resume content.
+"""
+    if pre_ats_score is not None or pre_keyword_score is not None:
+        pre_kw_pct = (
+            round(pre_keyword_score * 100)
+            if pre_keyword_score is not None and pre_keyword_score <= 1
+            else round(pre_keyword_score or 0)
+        )
+        prompt += f"""
+## Baseline analysis before improvement:
+- ATS score: {pre_ats_score if pre_ats_score is not None else "unknown"}%
+- Keyword score: {pre_kw_pct if pre_keyword_score is not None else "unknown"}%
+
+Optimization target for this single deep pass:
+- Maximize truthful alignment with vacancy requirements and keywords.
+- Aim for strong match quality (about 75%+ when realistically achievable from source resume).
+"""
     if no_shame:
         prompt += """
 NOTE: The user has chosen "aggressive tailoring". You MAY add skills and technologies from the job posting (Requirements/Keywords above) into the resume where they are plausible given the candidate's experience (e.g. data/analytics role + job asks for SQL, Power BI → add them to skills). Still do not fabricate job titles, companies, or achievements. The user will verify the result before sending.
@@ -310,6 +340,11 @@ KEY CHANGES — TONE (critical):
 - Good (adapt to job language): "Optimized for ATS screening", "Stronger keyword alignment with the role", "Clearer impact metrics", "Tighter structure for parsers", "Improved section hierarchy for recruiters".
 - Bad: "Added contact block", "Included phone number", "Added LinkedIn link".
 - Prefer meaning like: optimized / strengthened / clarified / aligned for ATS (and natural equivalents in German, Russian, etc.).
+
+FINAL SELF-CHECK BEFORE RETURN:
+- check_content_length says fits_one_page=true.
+- At least one check_keywords_tool pass is used and top missing relevant terms were addressed where truthful.
+- Key changes reflect real matching improvements against requirements and keywords.
 
 Output ONLY valid JSON. The html field should contain the raw HTML string.
 """

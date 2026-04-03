@@ -212,7 +212,7 @@ const en = {
     errorLabel: "Error",
     improveMoreLabel: "Improve further",
     /** Shown when post-optimize match score is still below threshold; runs standard depth + 2 extra iterations */
-    optimizeAgainForAts: "Optimize again for ATS",
+    optimizeAgainForAts: "Improve even stronger",
     autoImproveLabel: "Auto improve",
     softLabel: "Light touch",
     strictLabel: "Full optimization",
@@ -220,18 +220,59 @@ const en = {
     strictWarningTitle: "Please review",
     starting: "Starting…",
     waitingResponse: "Waiting for response…",
-    loadingHintScan1: "Extracting key signals from your resume",
-    loadingHintScan2: "Comparing your profile against job requirements",
-    loadingHintScan3: "Checking keyword relevance and ATS compatibility",
-    loadingHintScan4: "Preparing a structured assessment summary",
-    loadingHintAnalyze1: "Analyzing resume and job fit in detail",
-    loadingHintAnalyze2: "Scoring ATS relevance and keyword coverage",
-    loadingHintAnalyze3: "Building recommendation groups for improvement",
-    loadingHintAnalyze4: "Finalizing confidence checks before results",
-    loadingImproveUser1: "Tailoring your resume to the vacancy requirements",
-    loadingImproveUser2: "Improving wording and impact in key sections",
-    loadingImproveUser3: "Strengthening skills and experience alignment",
-    loadingImproveUser4: "Polishing final version for export",
+    quickFactLabel: "Quick fact",
+    loadingHintScan1: "Fact: Recruiters usually spend only a few seconds on the first resume pass.",
+    loadingHintScan2: "Fact: Role-specific keywords improve ATS visibility when used naturally.",
+    loadingHintScan3: "Fact: Impact-focused bullets are scanned faster than task-only descriptions.",
+    loadingHintScan4: "Fact: A clear one-page structure often increases interview conversion.",
+    loadingHintScan5:
+      "Fact: Roughly 75% of large employers use ATS filters — role-shaped wording clears the first gate.",
+    loadingHintScan6:
+      "Fact: Many recruiters form a first impression in about 6–8 seconds — your top third of the page matters most.",
+    loadingHintScan7:
+      "Fact: Job-specific titles and skills beat generic labels; “full-stack developer” alone rarely carries a story.",
+    loadingHintScan8:
+      "Fact: Bullets with metrics (%, $, time saved) are recalled more often than task-only lines in quick scans.",
+    loadingHintScan9:
+      "Fact: Running separate checks per vacancy catches gaps a single generic resume hides.",
+    loadingHintScan10:
+      "Fact: One tight page usually outperforms two loose ones at screening — signal density beats length.",
+    loadingHintAnalyze1: "Fact: Matching core requirements matters more than adding extra buzzwords.",
+    loadingHintAnalyze2: "Fact: Measurable outcomes make experience sections more credible.",
+    loadingHintAnalyze3: "Fact: Consistent section hierarchy helps both ATS and human reviewers.",
+    loadingHintAnalyze4: "Fact: Tailored summaries raise relevance in screening decisions.",
+    loadingHintAnalyze5:
+      "Fact: Candidates who align even 3–5 bullets with the posting often report higher reply rates in follow-up surveys.",
+    loadingHintAnalyze6:
+      "Fact: Recruiters frequently skim for 4–6 must-have skills — missing half of them hurts before humans read details.",
+    loadingHintAnalyze7:
+      "Fact: A role-tuned headline can lift perceived fit in the first screen without changing your experience.",
+    loadingHintAnalyze8:
+      "Fact: ATS parsers favor standard section names; quirky labels can bury keywords the job asks for.",
+    loadingHintAnalyze9:
+      "Fact: Parallel runs for different companies reveal which gaps repeat — that’s your upgrade backlog.",
+    loadingHintAnalyze10:
+      "Fact: Honest tailoring beats keyword stuffing; systems and humans both punish unnatural repetition.",
+    loadingImproveUser1: "Fact: Targeted edits often outperform full rewrites for real vacancies.",
+    loadingImproveUser2: "Fact: Requirement-aligned phrasing can increase shortlist chances.",
+    loadingImproveUser3: "Fact: Strong keyword coverage works best with truthful project evidence.",
+    loadingImproveUser4: "Fact: Cleaner wording improves readability for recruiters and ATS.",
+    loadingImproveUser5:
+      "Fact: Teams often keep a master resume, then spin a focused version per role — recruiters notice the difference.",
+    loadingImproveUser6:
+      "Fact: A version tuned to this posting reads as “built for us,” not “mass mailed” — that soft signal counts.",
+    loadingImproveUser7:
+      "Fact: Re-running optimization when you change the job text catches new must-haves you might have missed.",
+    loadingImproveUser8:
+      "Fact: Small wording shifts (verbs, scope, stack names) can move keyword scores by double digits without new claims.",
+    loadingImproveUser9:
+      "Fact: If you apply to 10 roles, 10 tailored PDFs beat one generic file in most recruiter workflows.",
+    loadingImproveUser10:
+      "Fact: Saving each tailored export builds a library — faster applications next time a similar role appears.",
+    loadingImproveUser11:
+      "Fact: Interview invites often go to candidates whose resume mirrors the job’s language, not the longest CV.",
+    loadingImproveUser12:
+      "Fact: Using this flow for every serious application turns tailoring into a habit — consistency compounds.",
     analysisSubLabel: "Getting ATS and keyword scores",
     scanProgressAria: "Scan progress",
     doNotClosePage: "Do not close this page",
@@ -432,6 +473,7 @@ const en = {
       usage: "Usage & LLM",
       referrals: "Referrals",
       reviews: "Reviews",
+      templatesLab: "Templates Lab",
       visual: "Visual Sandbox",
     },
     dashboard: {

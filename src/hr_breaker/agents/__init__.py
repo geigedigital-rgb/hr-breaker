@@ -5,6 +5,7 @@ from .name_extractor import extract_name
 from .resume_summary_extractor import extract_resume_summary
 from .hallucination_detector import detect_hallucinations
 from .resume_scorer import score_resume_vs_job, get_breakdown_scores
+from .resume_schema_extractor import extract_resume_schema, extract_resume_schema_strict
 
 __all__ = [
     "parse_job_posting",
@@ -16,4 +17,6 @@ __all__ = [
     "detect_hallucinations",
     "score_resume_vs_job",
     "get_breakdown_scores",
+    "extract_resume_schema",
+    "extract_resume_schema_strict",
 ]

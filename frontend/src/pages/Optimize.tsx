@@ -11,6 +11,8 @@ const RESUME_TEXT_EXTS = ["txt", "md", "html", "htm", "tex", "pdf", "doc", "docx
 
 const OPTIMIZE_CHECKOUT_SNAPSHOT_KEY = "pitchcv_optimize_checkout_snapshot_v1";
 const OPTIMIZE_PENDING_AUTO_IMPROVE_KEY = "pitchcv_optimize_pending_auto_improve";
+/** Independent rotation for scan/analyze/improve “Fact” lines (not tied to progress ticks). */
+const LOADING_FACT_ROTATE_MS = 15_000;
 
 /** Backend message when URL is a job search page, not a single job */
 const JOB_LIST_URL_MARKER = "job search page";
@@ -473,6 +475,19 @@ function getQualityLevelLabel(qualityPct: number): string {
   if (q >= 45) return t("optimize.resumeQualityLevelGood");
   if (q >= 25) return t("optimize.resumeQualityLevelFair");
   return t("optimize.resumeQualityLevelLow");
+}
+
+function clampPercent(value: number): number {
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function nudgePercentTowardAnchor(value: number, anchor: number): number {
+  const clampedValue = clampPercent(value);
+  const clampedAnchor = clampPercent(anchor);
+  const delta = clampedValue - clampedAnchor;
+  const maxSpread = 24;
+  const softenedDelta = Math.max(-maxSpread, Math.min(maxSpread, delta)) * 0.65;
+  return clampPercent(clampedAnchor + softenedDelta);
 }
 
 function cleanRecommendationReason(label: string): string {
@@ -992,9 +1007,9 @@ export default function Optimize() {
   const [preScores, setPreScores] = useState<api.AnalyzeResponse | null>(null);
   const [_isAnalyzing, setIsAnalyzing] = useState(false);
   const [loadProgress, setLoadProgress] = useState(0);
-  const [loadMessage, setLoadMessage] = useState("");
+  const loadProgressRef = useRef(0);
+  loadProgressRef.current = loadProgress;
   const [displayLoadProgress, setDisplayLoadProgress] = useState(0);
-  const [improveHintIndex, setImproveHintIndex] = useState(0);
   const [isImprovingMore, setIsImprovingMore] = useState(false);
   /** After result: full-screen step before clearing session for another vacancy (not a modal). */
   const [postResultFlow, setPostResultFlow] = useState<"main" | "newJobWarning">("main");
@@ -1005,6 +1020,7 @@ export default function Optimize() {
   const checkoutSnapshotRestoredRef = useRef(false);
   const autoImproveStartedRef = useRef(false);
   const [loadingHintIndex, setLoadingHintIndex] = useState(0);
+  const [improveHintIndex, setImproveHintIndex] = useState(0);
   const [resumeSummaryFromApi, setResumeSummaryFromApi] = useState<api.ExtractResumeSummaryResponse | null>(null);
   const [_isFetchingJobUrl, _setIsFetchingJobUrl] = useState(false);
   const [resumeInputMode, setResumeInputMode] = useState<"file" | "text">("file");
@@ -1265,7 +1281,10 @@ export default function Optimize() {
       .catch((e) => {
         if (!analyzeMountedRef.current) return;
         const msg = e instanceof Error ? e.message : String(e);
-        if (!isOfferPasteAsTextError(msg)) setError(msg);
+        if (!isOfferPasteAsTextError(msg)) {
+          setError(msg);
+          setStage("idle");
+        }
         setPreScores(null);
         if (isOfferPasteAsTextError(msg)) {
           setError(null);
@@ -1504,11 +1523,11 @@ export default function Optimize() {
     setError(null);
     setStage("loading");
     setLoadProgress(0);
-    setLoadMessage(t("optimize.starting"));
     const params = {
       resume_content: resumeContent.trim(),
       job_text: jobMode === "text" ? jobInput.trim() : undefined,
       job_url: jobMode === "url" ? jobInput.trim() : undefined,
+      max_iterations: 1,
       parallel: true,
       aggressive_tailoring: true,
       pre_ats_score: preScores?.ats_score ?? undefined,
@@ -1519,17 +1538,14 @@ export default function Optimize() {
     try {
       let res: api.OptimizeResponse;
       try {
-        res = await api.optimizeStream(params, (percent, message) => {
-          setLoadProgress(percent);
-          setLoadMessage(message);
+        res = await api.optimizeStream(params, (percent) => {
+          setLoadProgress((prev) => Math.max(prev, clampPercent(percent)));
         });
       } catch {
-        setLoadMessage(t("optimize.waitingResponse"));
         res = await api.optimize(params);
       }
       setResult(res);
       setLoadProgress(100);
-      setLoadMessage(t("optimize.done"));
       if (res.error && isOfferPasteAsTextError(res.error)) {
         setError(null);
         setStage("assessment");
@@ -1549,7 +1565,6 @@ export default function Optimize() {
         setError(msg);
       }
       setLoadProgress(100);
-      setLoadMessage("");
       setStage("assessment");
       if (isOfferPasteAsTextError(msg)) {
         setError(null);
@@ -1616,34 +1631,32 @@ export default function Optimize() {
     setIsImprovingMore(true);
     setStage("loading");
     setLoadProgress(0);
-    setLoadMessage(t("optimize.improvingResume"));
     const improvedContent = result.optimized_resume_text?.trim() || resumeContent.trim();
+    const currentAtsForRetry = atsValue ?? preScores?.ats_score;
+    const currentKwForRetry = keywordsValue?.score ?? preScores?.keyword_score;
     const params = {
       resume_content: improvedContent,
       job_text: jobMode === "text" ? jobInput.trim() : undefined,
       job_url: jobMode === "url" ? jobInput.trim() : undefined,
       parallel: true,
       aggressive_tailoring: true,
-      max_iterations: serverMaxIterations + 2,
-      pre_ats_score: preScores?.ats_score ?? undefined,
-      pre_keyword_score: preScores?.keyword_score ?? undefined,
+      max_iterations: serverMaxIterations + 1,
+      pre_ats_score: currentAtsForRetry ?? undefined,
+      pre_keyword_score: currentKwForRetry ?? undefined,
       source_was_pdf: resumeSourceWasPdf,
       output_language: api.getOutputLanguage(),
     };
     try {
       let res: api.OptimizeResponse;
       try {
-        res = await api.optimizeStream(params, (percent, message) => {
-          setLoadProgress(percent);
-          setLoadMessage(message);
+        res = await api.optimizeStream(params, (percent) => {
+          setLoadProgress((prev) => Math.max(prev, clampPercent(percent)));
         });
       } catch {
-        setLoadMessage(t("optimize.waitingResponse"));
         res = await api.optimize(params);
       }
       setResult(res);
       setLoadProgress(100);
-      setLoadMessage(t("optimize.done"));
       setStage("result");
       await refreshUser();
     } catch (e) {
@@ -1664,7 +1677,7 @@ export default function Optimize() {
         ? atsValue
         : resultKeywordPct;
   const showOptimizeAgainForAts =
-    Boolean(result && !result.error && resultOverallScore != null && resultOverallScore < 69);
+    Boolean(result && !result.error && resultOverallScore != null && resultOverallScore < 70);
 
   const showSummaryBlocks = (stage === "assessment" && preScores != null) || stage === "result";
   const recommendationGroups = groupRecommendations(preScores?.recommendations, {
@@ -1685,12 +1698,24 @@ export default function Optimize() {
           t("optimize.loadingHintScan2"),
           t("optimize.loadingHintScan3"),
           t("optimize.loadingHintScan4"),
+          t("optimize.loadingHintScan5"),
+          t("optimize.loadingHintScan6"),
+          t("optimize.loadingHintScan7"),
+          t("optimize.loadingHintScan8"),
+          t("optimize.loadingHintScan9"),
+          t("optimize.loadingHintScan10"),
         ]
       : [
           t("optimize.loadingHintAnalyze1"),
           t("optimize.loadingHintAnalyze2"),
           t("optimize.loadingHintAnalyze3"),
           t("optimize.loadingHintAnalyze4"),
+          t("optimize.loadingHintAnalyze5"),
+          t("optimize.loadingHintAnalyze6"),
+          t("optimize.loadingHintAnalyze7"),
+          t("optimize.loadingHintAnalyze8"),
+          t("optimize.loadingHintAnalyze9"),
+          t("optimize.loadingHintAnalyze10"),
         ];
   const activeLoadingHint = loadingHints[loadingHintIndex % loadingHints.length];
   const improveLoadingHints = [
@@ -1698,6 +1723,14 @@ export default function Optimize() {
     t("optimize.loadingImproveUser2"),
     t("optimize.loadingImproveUser3"),
     t("optimize.loadingImproveUser4"),
+    t("optimize.loadingImproveUser5"),
+    t("optimize.loadingImproveUser6"),
+    t("optimize.loadingImproveUser7"),
+    t("optimize.loadingImproveUser8"),
+    t("optimize.loadingImproveUser9"),
+    t("optimize.loadingImproveUser10"),
+    t("optimize.loadingImproveUser11"),
+    t("optimize.loadingImproveUser12"),
   ];
   const activeImproveLoadingHint = improveLoadingHints[improveHintIndex % improveLoadingHints.length];
   const visibleLoadProgress = stage === "loading" ? Math.max(loadProgress, displayLoadProgress) : loadProgress;
@@ -1707,7 +1740,7 @@ export default function Optimize() {
       setLoadingHintIndex(0);
       return;
     }
-    const timer = setInterval(() => setLoadingHintIndex((idx) => idx + 1), 1800);
+    const timer = setInterval(() => setLoadingHintIndex((idx) => idx + 1), LOADING_FACT_ROTATE_MS);
     return () => clearInterval(timer);
   }, [isLoadingAssessment]);
 
@@ -1719,19 +1752,20 @@ export default function Optimize() {
     }
     const progressTimer = setInterval(() => {
       setDisplayLoadProgress((prev) => {
-        if (loadProgress >= 100) return 100;
-        const current = Math.max(prev, loadProgress);
+        const lp = loadProgressRef.current;
+        if (lp >= 100) return 100;
+        const current = Math.max(prev, lp);
         const step = current < 60 ? 1.4 : current < 85 ? 0.9 : 0.35;
-        const cap = loadProgress >= 92 ? 98 : 96;
+        const cap = lp >= 92 ? 98 : 96;
         return Math.min(cap, current + step);
       });
     }, 700);
-    const textTimer = setInterval(() => setImproveHintIndex((idx) => idx + 1), 2200);
+    const textTimer = setInterval(() => setImproveHintIndex((idx) => idx + 1), LOADING_FACT_ROTATE_MS);
     return () => {
       clearInterval(progressTimer);
       clearInterval(textTimer);
     };
-  }, [stage, loadProgress]);
+  }, [stage]);
 
   const summaryData = showSummaryBlocks
     ? (() => {
@@ -1742,9 +1776,6 @@ export default function Optimize() {
         const riskPct = preScores?.rejection_risk_score != null
           ? Math.max(0, Math.min(100, Math.round(preScores.rejection_risk_score)))
           : Math.max(0, 100 - overallPct);
-        const skillsPct = preScores?.skills_score ?? kwPct;
-        const experiencePct = preScores?.experience_score ?? atsPct;
-        const portfolioPct = preScores?.portfolio_score ?? overallPct;
         const displayName = resumeSummaryFromApi?.full_name?.trim() || resumeSummary.name;
         const displaySpecialty = resumeSummaryFromApi?.specialty?.trim() || resumeSummary.specialty;
         const displaySkills = resumeSummaryFromApi?.skills?.trim() || resumeSummary.skillsLine;
@@ -1756,6 +1787,12 @@ export default function Optimize() {
                   2,
               )
             : Math.max(0, Math.min(100, 100 - riskPct));
+        const rawSkillsPct = preScores?.skills_score ?? kwPct;
+        const rawExperiencePct = preScores?.experience_score ?? atsPct;
+        const rawPortfolioPct = preScores?.portfolio_score ?? overallPct;
+        const skillsPct = nudgePercentTowardAnchor(rawSkillsPct, qualityPct);
+        const experiencePct = nudgePercentTowardAnchor(rawExperiencePct, qualityPct);
+        const portfolioPct = nudgePercentTowardAnchor(rawPortfolioPct, qualityPct);
         return {
           atsPct,
           kwPct,
@@ -1809,7 +1846,7 @@ export default function Optimize() {
       "inline-flex min-h-[3rem] w-full flex-1 items-center justify-center gap-2 rounded-xl border-2 border-[#4578FC] bg-white px-5 text-[15px] font-semibold text-[#4578FC] transition-colors hover:bg-[#4578FC]/[0.05] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4578FC]/30 focus-visible:ring-offset-2 whitespace-nowrap";
 
     return (
-      <div className="flex flex-col gap-6 w-full min-w-0 max-w-3xl mx-auto min-h-0 overflow-x-hidden pb-24 sm:pb-16">
+      <div className="flex flex-col gap-6 w-full min-w-0 max-w-3xl mx-auto min-h-0 overflow-x-hidden pb-28 sm:pb-16">
         <button
           type="button"
           onClick={() => setPostResultFlow("main")}
@@ -1855,7 +1892,25 @@ export default function Optimize() {
   }
 
   return (
-    <div className="flex flex-col gap-4 sm:gap-5 w-full min-w-0 min-h-0 overflow-x-hidden pb-24 sm:pb-12">
+    <div className="relative flex flex-col gap-4 sm:gap-5 w-full min-w-0 min-h-0 overflow-x-hidden pb-28 sm:pb-12">
+        {stage === "loading" && (
+          <div
+            className="fixed z-[5] flex items-center justify-center pointer-events-none px-4"
+            style={{
+              left: "var(--app-sidebar-width, 0px)",
+              top: "var(--app-header-height, 3.5rem)",
+              right: 0,
+              bottom: 0,
+            }}
+          >
+            <p
+              className="max-w-md text-center text-[10px] sm:text-[11px] text-[var(--text-tertiary)]/70 select-none"
+              aria-live="polite"
+            >
+              {t("optimize.doNotClosePage")}
+            </p>
+          </div>
+        )}
         {error && !isOfferPasteAsTextError(error) && (
           <div className="flex gap-2 text-sm text-[var(--text-muted)]/90 rounded-xl border border-[#EBEDF5] bg-[#FAFAFC] px-4 py-3 shrink-0" role="alert">
             <ExclamationTriangleIcon className="w-5 h-5 shrink-0 text-amber-500 mt-0.5" aria-hidden />
@@ -1865,15 +1920,9 @@ export default function Optimize() {
 
       {showSummaryBlocks && summaryData ? (
         <div className="relative flex flex-col gap-4 w-full min-w-0 max-w-3xl mx-auto px-1 sm:px-0 overflow-x-hidden">
-          <style>{`
-            @keyframes criticalBorderShimmer {
-              0% { background-position: 0 0, 0 0, 125% 0; }
-              100% { background-position: 0 0, 0 0, -125% 0; }
-            }
-          `}</style>
           {(() => {
-            const resultViewOk = stage === "result" && result && !result.error;
             const q = summaryData.qualityPct;
+            const resultViewOk = stage === "result" && result && !result.error && q >= 60;
             const ringSizes = [
               { cls: "sm:hidden", size: 104, thick: 12, fs: "text-[19px]" },
               { cls: "hidden sm:block lg:hidden", size: 110, thick: 13, fs: "text-[21px]" },
@@ -1998,10 +2047,9 @@ export default function Optimize() {
                 className="w-full min-w-0 max-w-full rounded-[22px] border border-transparent p-[1px] overflow-hidden [contain:paint]"
                 style={{
                   background:
-                    "linear-gradient(#FAFAFC, #FAFAFC) padding-box, linear-gradient(120deg, #F36B7F 0%, #E94A63 45%, #C92A4B 100%) border-box, linear-gradient(120deg, rgba(255,255,255,0) 40%, rgba(255,255,255,0.85) 50%, rgba(255,255,255,0) 60%) border-box",
-                  backgroundSize: "100% 100%, 100% 100%, 165% 165%",
-                  backgroundPosition: "0 0, 0 0, 125% 0",
-                  animation: "criticalBorderShimmer 3.2s linear infinite",
+                    "linear-gradient(#FAFAFC, #FAFAFC) padding-box, linear-gradient(120deg, #F36B7F 0%, #E94A63 45%, #C92A4B 100%) border-box",
+                  backgroundSize: "100% 100%, 100% 100%",
+                  backgroundPosition: "0 0, 0 0",
                 }}
               >
                 <div className="rounded-[21px] bg-white p-4 sm:p-5 min-w-0 overflow-x-hidden">
@@ -2163,27 +2211,6 @@ export default function Optimize() {
                       </div>
                     </section>
                   )}
-                  {(result.validation?.results?.length ?? 0) > 0 && (
-                    <section className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-4 sm:p-5" aria-labelledby="filter-details-heading">
-                      <Disclosure>
-                        <DisclosureButton id="filter-details-heading" className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider hover:text-[#181819]">{t("optimize.filterDetails")}</DisclosureButton>
-                        <DisclosurePanel className="mt-2 space-y-1.5">
-                          <p className="text-[11px] text-[var(--text-tertiary)] leading-relaxed mb-2">
-                            {t("optimize.filterDetailsDesc")}
-                          </p>
-                          <ul className="space-y-2" role="list">
-                            {(result.validation?.results ?? []).map((r) => (
-                              <li key={r.filter_name} className="flex flex-wrap items-center gap-2 text-[13px] min-w-0">
-                                <span className={r.passed ? "text-green-600 font-medium" : "text-red-600 font-medium"}>{r.passed ? "✓" : "✗"} {r.filter_name}</span>
-                                <span className="text-[var(--text-tertiary)] tabular-nums">{r.score.toFixed(2)} / {r.threshold.toFixed(2)}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        </DisclosurePanel>
-                      </Disclosure>
-                    </section>
-                  )}
-
                   <section className="mt-8 sm:mt-10 mb-6 w-full max-w-3xl mx-auto rounded-2xl border border-[#E8ECF4] bg-[#FAFAFC] p-5 sm:p-8">
                     <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between lg:gap-10">
                       <div className="min-w-0 flex-1 space-y-1.5">
@@ -2483,7 +2510,7 @@ export default function Optimize() {
                           onChange={(e) => setResumeContent(e.target.value)}
                           onBlur={handleResumePaste}
                           placeholder={t("optimize.jobTextPlaceholder")}
-                          className="w-full min-h-[5rem] max-w-md rounded-xl border border-[#c8cddc] bg-white/80 px-3 py-2.5 text-base sm:text-sm text-[#181819] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[#4578FC]/30 focus:border-[#4578FC]/50 resize-none"
+                          className="w-full min-h-[5rem] max-w-md rounded-xl border border-[#c8cddc] bg-white/80 px-3 py-2.5 text-[16px] sm:text-sm text-[#181819] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[#4578FC]/30 focus:border-[#4578FC]/50 resize-none"
                         />
                       )}
                     </div>
@@ -2564,7 +2591,7 @@ export default function Optimize() {
                     );
                   })()}
                   {stage === "idle" && !showFreeLimitOverlay && (
-                    <div className="mt-5 pt-4 border-t border-[#EBEDF5]">
+                    <div className="mt-5 pt-4 pb-3 sm:pb-0 border-t border-[#EBEDF5]">
                       {!canAnalyzeSubscription && user?.id !== "local" ? (
                         <div className="flex flex-col items-center gap-3">
                           <p className="text-center text-[12px] text-[var(--text-muted)]">
@@ -2628,7 +2655,7 @@ export default function Optimize() {
                       if (e.target.value.trim().length > 100) setOfferPasteAsText(false);
                     }}
                     placeholder={t("optimize.jobTextPlaceholder")}
-                    className="w-full min-h-[7rem] rounded-xl border border-[#EBEDF5] bg-white px-4 py-3 text-base sm:text-sm text-[#181819] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-2 focus:ring-[#4578FC]/25 focus:border-[#4578FC]/40 resize-none"
+                    className="w-full min-h-[7rem] rounded-xl border border-[#EBEDF5] bg-white px-4 py-3 text-[16px] sm:text-sm text-[#181819] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-2 focus:ring-[#4578FC]/25 focus:border-[#4578FC]/40 resize-none"
                     aria-describedby={offerPasteAsText ? "paste-job-hint" : undefined}
                   />
                 </div>
@@ -2668,7 +2695,7 @@ export default function Optimize() {
               <div className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-8 flex flex-col items-center justify-center gap-5">
                 <div className="w-14 h-14 rounded-2xl bg-[#EBEDF5] flex items-center justify-center" aria-hidden>
                   {stage === "scanning" || awaitingLandingClaim ? (
-                    <SparklesIcon className="w-7 h-7 text-[#4578FC] animate-pulse" />
+                    <SparklesIcon className="w-7 h-7 text-[#4578FC]" />
                   ) : (
                     <span
                       className="inline-block w-8 h-8 border-2 border-[#4578FC] border-t-transparent rounded-full animate-spin"
@@ -2697,7 +2724,7 @@ export default function Optimize() {
                 )}
                 {awaitingLandingClaim ? (
                   <div className="w-full max-w-xs h-2 rounded-full bg-[#EBEDF5] overflow-hidden" aria-hidden>
-                    <div className="h-full w-2/5 rounded-full bg-[#4578FC] animate-pulse" />
+                    <div className="h-full w-2/5 rounded-full bg-[#4578FC]" />
                   </div>
                 ) : stage === "scanning" ? (
                   <div className="w-full max-w-xs space-y-2">
@@ -2731,9 +2758,6 @@ export default function Optimize() {
                 <p className="text-[#181819] font-medium">{t("optimize.improvingResume")}</p>
                 <p className="text-sm text-[var(--text-muted)] text-center max-w-sm">
                   {activeImproveLoadingHint}
-                </p>
-                <p className="text-xs text-[var(--text-tertiary)] text-center max-w-sm">
-                  {loadMessage === t("optimize.done") ? t("optimize.done") : t("optimize.doNotClosePage")}
                 </p>
                 <div className="w-full max-w-xs space-y-2">
                   <div className="h-2 rounded-full bg-[#EBEDF5] overflow-hidden">

@@ -118,6 +118,8 @@ async def optimize_for_job(
     no_shame: bool = False,
     output_language: str | None = None,
     audit_user_id: str | None = None,
+    pre_ats_score: int | None = None,
+    pre_keyword_score: float | None = None,
 ) -> tuple[OptimizedResume, ValidationResult, JobPosting]:
     """
     Core optimization loop.
@@ -184,6 +186,8 @@ async def optimize_for_job(
                     no_shame=no_shame,
                     output_language=output_language,
                     audit_user_id=audit_user_id,
+                    pre_ats_score=pre_ats_score,
+                    pre_keyword_score=pre_keyword_score,
                 )
         finally:
             if heartbeat_task is not None:

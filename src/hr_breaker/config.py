@@ -40,7 +40,7 @@ class Settings(BaseModel):
     gemini_thinking_budget: int | None = 8192
     cache_dir: Path = Path(".cache/resumes")
     output_dir: Path = Path("output")
-    max_iterations: int = 5
+    max_iterations: int = 1
     pass_threshold: float = 0.7
     fast_mode: bool = True
 
@@ -135,7 +135,7 @@ def get_settings() -> Settings:
         gemini_flash_model=os.getenv("GEMINI_FLASH_MODEL") or "gemini-3-flash-preview",
         gemini_thinking_budget=thinking_budget,
         fast_mode=os.getenv("HR_BREAKER_FAST_MODE", "true").lower() in ("true", "1", "yes"),
-        max_iterations=int(os.getenv("MAX_ITERATIONS", "5")),
+        max_iterations=int(os.getenv("MAX_ITERATIONS", "1")),
         # Scraper settings
         scraper_httpx_timeout=float(os.getenv("SCRAPER_HTTPX_TIMEOUT", "15")),
         scraper_wayback_timeout=float(os.getenv("SCRAPER_WAYBACK_TIMEOUT", "10")),

@@ -22,16 +22,31 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi import FastAPI
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
-from hr_breaker.agents import extract_name, extract_resume_summary, get_breakdown_scores, parse_job_posting, score_resume_vs_job
+from hr_breaker.agents import (
+    extract_name,
+    extract_resume_schema_strict,
+    extract_resume_summary,
+    get_breakdown_scores,
+    parse_job_posting,
+    score_resume_vs_job,
+)
 from hr_breaker.config import get_settings
 from hr_breaker.filters.keyword_matcher import check_keywords
 from hr_breaker.services.pdf_parser import extract_text_from_pdf, extract_text_from_pdf_bytes
 import fitz  # pymupdf
-from hr_breaker.models import GeneratedPDF, JobPosting, ResumeSource, ValidationResult
+from hr_breaker.models import GeneratedPDF, JobPosting, ResumeSource, UnifiedResumeSchema, ValidationResult
 from hr_breaker.orchestration import optimize_for_job
-from hr_breaker.services import PDFStorage, scrape_job_posting, CloudflareBlockedError
+from hr_breaker.services import (
+    CloudflareBlockedError,
+    HTMLRenderer,
+    PDFStorage,
+    list_templates,
+    render_template_html,
+    scrape_job_posting,
+    wrap_full_html,
+)
 from hr_breaker.services.job_scraper import extract_company_logo_url
 from hr_breaker.services.auth import create_access_token, decode_token, hash_password, verify_password
 from hr_breaker.services.usage_audit import log_usage_event
@@ -459,7 +474,22 @@ async def get_current_user(
     payload = decode_token(token)
     if not payload or "sub" not in payload:
         raise HTTPException(401, "Invalid or expired token")
-    user = await user_get_by_id(pool, payload["sub"])
+    try:
+        user = await user_get_by_id(pool, payload["sub"])
+    except (TimeoutError, OSError, asyncio.TimeoutError) as e:
+        logger.warning("get_current_user: DB unavailable (%s): %s", type(e).__name__, e)
+        raise HTTPException(
+            503,
+            "Database unavailable. Check DATABASE_URL, VPN, or network — then retry.",
+        ) from e
+    except Exception as e:
+        if type(e).__module__.startswith("asyncpg"):
+            logger.warning("get_current_user: asyncpg error: %s", e)
+            raise HTTPException(
+                503,
+                "Database unavailable. Check DATABASE_URL, VPN, or network — then retry.",
+            ) from e
+        raise
     if not user:
         raise HTTPException(401, "User not found")
     if user.get("admin_blocked"):
@@ -485,7 +515,16 @@ async def get_optional_user(
     payload = decode_token(token)
     if not payload or "sub" not in payload:
         return None
-    user = await user_get_by_id(pool, payload["sub"])
+    try:
+        user = await user_get_by_id(pool, payload["sub"])
+    except (TimeoutError, OSError, asyncio.TimeoutError) as e:
+        logger.debug("get_optional_user: DB skip (%s)", type(e).__name__)
+        return None
+    except Exception as e:
+        if type(e).__module__.startswith("asyncpg"):
+            logger.debug("get_optional_user: asyncpg skip: %s", e)
+            return None
+        raise
     if user and user.get("admin_blocked"):
         raise HTTPException(403, "Account disabled")
     return user
@@ -507,13 +546,69 @@ def _partner_user_allowed(user: dict) -> bool:
     return bool(user.get("partner_program_access"))
 
 
-async def get_admin_user(user: dict | None = Depends(get_current_user)) -> dict:
-    """Require current user and admin email; else 403."""
-    if not user:
-        raise HTTPException(403, "Not authenticated")
-    if not _is_admin_user(user):
-        raise HTTPException(403, "Admin access required")
-    return user
+def _synthetic_admin_user_from_jwt(payload: dict[str, Any]) -> dict:
+    """Minimal user row when DB is down but JWT carries admin email (same secret as login)."""
+    return {
+        "id": str(payload["sub"]),
+        "email": payload.get("email") or "",
+        "admin_blocked": False,
+    }
+
+
+async def get_admin_user(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None = Depends(_http_bearer),
+) -> dict:
+    """Require valid JWT and admin email. If Postgres is unreachable, allow admin JWT claims only."""
+    pool = await get_pool()
+    if pool is None:
+        raise HTTPException(503, "Database not configured. Set DATABASE_URL in .env")
+    settings = get_settings()
+    if not settings.jwt_secret:
+        raise HTTPException(401, "Not authenticated")
+    token_query = request.query_params.get("token") if request else None
+    token = (credentials and credentials.credentials) or token_query
+    if not token:
+        raise HTTPException(401, "Not authenticated")
+    payload = decode_token(token)
+    if not payload or "sub" not in payload:
+        raise HTTPException(401, "Invalid or expired token")
+
+    email_from_jwt = (payload.get("email") or "").strip().lower()
+    admin_emails = _admin_emails_set()
+    jwt_is_configured_admin = bool(email_from_jwt and email_from_jwt in admin_emails)
+
+    try:
+        user = await user_get_by_id(pool, str(payload["sub"]))
+    except (TimeoutError, OSError, asyncio.TimeoutError) as e:
+        logger.warning("get_admin_user: DB unavailable (%s): %s", type(e).__name__, e)
+        if jwt_is_configured_admin:
+            return _synthetic_admin_user_from_jwt(payload)
+        raise HTTPException(
+            503,
+            "Database unavailable. Check DATABASE_URL, VPN, or network — then retry.",
+        ) from e
+    except Exception as e:
+        if type(e).__module__.startswith("asyncpg"):
+            logger.warning("get_admin_user: asyncpg error: %s", e)
+            if jwt_is_configured_admin:
+                return _synthetic_admin_user_from_jwt(payload)
+            raise HTTPException(
+                503,
+                "Database unavailable. Check DATABASE_URL, VPN, or network — then retry.",
+            ) from e
+        raise
+
+    if user:
+        if user.get("admin_blocked"):
+            raise HTTPException(403, "Account disabled")
+        if not _is_admin_user(user):
+            raise HTTPException(403, "Admin access required")
+        return user
+
+    if jwt_is_configured_admin:
+        return _synthetic_admin_user_from_jwt(payload)
+    raise HTTPException(401, "User not found")
 
 
 _FUNNEL_ANALYSIS_ACTIONS = frozenset({
@@ -930,6 +1025,47 @@ class VacancySearchResponse(BaseModel):
     total: int
     page: int
     page_size: int
+
+
+class AdminResumeSchemaExtractRequest(BaseModel):
+    resume_content: str
+    target_role: str | None = None
+    target_locale: str | None = None
+
+
+class AdminTemplateListItem(BaseModel):
+    id: str
+    name: str
+    source: str
+    supports_photo: bool
+    supports_columns: bool
+    pdf_stability_score: float
+    default_css_vars: dict[str, str]
+    recommended: bool
+
+
+class AdminTemplateListResponse(BaseModel):
+    items: list[AdminTemplateListItem]
+
+
+class AdminTemplateRenderRequest(BaseModel):
+    """JSON body uses key \"schema\" (JSON Resume data); Python field is resume_schema to avoid BaseModel.schema shadowing."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    template_id: str
+    resume_schema: UnifiedResumeSchema = Field(alias="schema")
+
+
+class AdminTemplateRenderHtmlResponse(BaseModel):
+    html_body: str
+    full_html: str
+
+
+class AdminTemplateRenderPdfResponse(BaseModel):
+    pdf_base64: str
+    page_count: int
+    warnings: list[str] = Field(default_factory=list)
 
 
 # --- Auth endpoints ---
@@ -1711,6 +1847,31 @@ def _extract_text_from_docx(data: bytes) -> str:
     return "\n".join(p.text for p in doc.paragraphs if p.text.strip())
 
 
+async def _resume_upload_to_text(filename: str | None, data: bytes) -> str:
+    """Plain text from uploaded resume bytes (PDF, DOCX, or UTF-8 text-like)."""
+    if not data:
+        raise HTTPException(400, "Empty file")
+    name = (filename or "resume.txt").lower()
+    if name.endswith(".pdf"):
+        tmp_path: Path | None = None
+        try:
+            with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+                tmp.write(data)
+                tmp_path = Path(tmp.name)
+            return await asyncio.to_thread(extract_text_from_pdf, tmp_path)
+        finally:
+            if tmp_path is not None:
+                tmp_path.unlink(missing_ok=True)
+    if name.endswith(".docx"):
+        return await asyncio.to_thread(_extract_text_from_docx, data)
+    if name.endswith((".txt", ".md", ".tex", ".html", ".htm")):
+        return data.decode("utf-8", errors="replace")
+    raise HTTPException(
+        400,
+        "Unsupported file type. Use PDF, DOCX, TXT, MD, TEX, or HTML.",
+    )
+
+
 @router.post("/resume/parse-docx", response_model=ParsePdfResponse)
 async def api_parse_resume_docx(file: UploadFile = File(...)) -> ParsePdfResponse:
     """Extract text from uploaded Word (.docx) resume."""
@@ -2167,6 +2328,8 @@ async def _run_optimize(
             no_shame=req.aggressive_tailoring,
             output_language=out_lang,
             audit_user_id=audit_uid,
+            pre_ats_score=req.pre_ats_score,
+            pre_keyword_score=req.pre_keyword_score,
         )
     except Exception as e:
         logger.exception("Optimize failed")
@@ -2181,6 +2344,93 @@ async def _run_optimize(
             job=JobPostingOut(title="", company="", requirements=[], keywords=[], description=""),
             error=err_msg,
         )
+
+    def _validation_score_percent(name: str) -> int | None:
+        for item in validation.results:
+            if item.filter_name == name:
+                return max(0, min(100, round(item.score * 100)))
+        return None
+
+    def _keyword_pct(value: float | None) -> int | None:
+        if value is None:
+            return None
+        if value <= 1:
+            return max(0, min(100, round(value * 100)))
+        return max(0, min(100, round(value)))
+
+    post_ats_pct = _validation_score_percent("LLMChecker")
+    post_kw_pct = _validation_score_percent("KeywordMatcher")
+    post_overall_pct = (
+        round((post_ats_pct + post_kw_pct) / 2)
+        if post_ats_pct is not None and post_kw_pct is not None
+        else None
+    )
+    pre_kw_pct = _keyword_pct(req.pre_keyword_score)
+    pre_overall_pct = (
+        round((req.pre_ats_score + pre_kw_pct) / 2)
+        if req.pre_ats_score is not None and pre_kw_pct is not None
+        else None
+    )
+    explicit_strong_retry = bool(
+        req.max_iterations is not None and req.max_iterations > settings.max_iterations
+    )
+    needs_deep_retry = bool(
+        req.aggressive_tailoring
+        and optimized
+        and validation
+        and (
+            explicit_strong_retry
+            or
+            (post_overall_pct is not None and post_overall_pct < 50)
+            or (
+                post_overall_pct is not None
+                and pre_overall_pct is not None
+                and post_overall_pct < pre_overall_pct + 6
+            )
+        )
+    )
+    if needs_deep_retry:
+        _put_progress(progress_queue, 58, "Applying deep vacancy alignment…")
+        retry_content = (optimized.pdf_text or req.resume_content).strip()
+        if retry_content:
+            retry_source = ResumeSource(content=retry_content)
+            retry_source.first_name = source.first_name
+            retry_source.last_name = source.last_name
+            retry_optimized, retry_validation, _ = await optimize_for_job(
+                retry_source,
+                job=job,
+                max_iterations=1,
+                parallel=req.parallel,
+                on_progress=on_progress if progress_queue is not None else None,
+                no_shame=True,
+                output_language=out_lang,
+                audit_user_id=audit_uid,
+            )
+            retry_post_ats = next(
+                (
+                    max(0, min(100, round(r.score * 100)))
+                    for r in retry_validation.results
+                    if r.filter_name == "LLMChecker"
+                ),
+                None,
+            )
+            retry_post_kw = next(
+                (
+                    max(0, min(100, round(r.score * 100)))
+                    for r in retry_validation.results
+                    if r.filter_name == "KeywordMatcher"
+                ),
+                None,
+            )
+            retry_overall = (
+                round((retry_post_ats + retry_post_kw) / 2)
+                if retry_post_ats is not None and retry_post_kw is not None
+                else None
+            )
+            if retry_overall is not None and (post_overall_pct is None or retry_overall >= post_overall_pct):
+                optimized = retry_optimized
+                validation = retry_validation
+                post_overall_pct = retry_overall
 
     validation_out = ValidationResultOut(
         passed=validation.passed,
@@ -2405,6 +2655,97 @@ async def api_health_db() -> HealthResponse:
 
 
 # --- Admin (marichakgroup@gmail.com or ADMIN_EMAIL) ---
+
+
+@router.post("/admin/resume-schema/extract", response_model=UnifiedResumeSchema)
+async def api_admin_extract_resume_schema(
+    req: AdminResumeSchemaExtractRequest,
+    _admin: dict = Depends(get_admin_user),
+) -> UnifiedResumeSchema:
+    content = (req.resume_content or "").strip()
+    if not content:
+        raise HTTPException(400, "resume_content is required")
+    checksum = hashlib.sha256(content.encode("utf-8")).hexdigest()
+    schema = await extract_resume_schema_strict(
+        content,
+        target_role=req.target_role,
+        target_locale=req.target_locale,
+        source_checksum=checksum,
+    )
+    return schema
+
+
+@router.post("/admin/resume-schema/extract-file", response_model=UnifiedResumeSchema)
+async def api_admin_extract_resume_schema_file(
+    file: UploadFile = File(...),
+    target_role: str | None = Form(None),
+    target_locale: str | None = Form(None),
+    _admin: dict = Depends(get_admin_user),
+) -> UnifiedResumeSchema:
+    body = await file.read()
+    text = (await _resume_upload_to_text(file.filename, body)).strip()
+    if not text:
+        raise HTTPException(400, "Could not extract text from file")
+    checksum = hashlib.sha256(body).hexdigest()
+    return await extract_resume_schema_strict(
+        text,
+        target_role=target_role,
+        target_locale=target_locale,
+        source_checksum=checksum,
+    )
+
+
+@router.get("/admin/templates", response_model=AdminTemplateListResponse)
+async def api_admin_templates(
+    _admin: dict = Depends(get_admin_user),
+) -> AdminTemplateListResponse:
+    items = [
+        AdminTemplateListItem(
+            id=t.id,
+            name=t.name,
+            source=t.source,
+            supports_photo=t.supports_photo,
+            supports_columns=t.supports_columns,
+            pdf_stability_score=t.pdf_stability_score,
+            default_css_vars=t.default_css_vars,
+            recommended=t.recommended,
+        )
+        for t in list_templates()
+    ]
+    return AdminTemplateListResponse(items=items)
+
+
+@router.post("/admin/templates/render-html", response_model=AdminTemplateRenderHtmlResponse)
+async def api_admin_templates_render_html(
+    req: AdminTemplateRenderRequest,
+    _admin: dict = Depends(get_admin_user),
+) -> AdminTemplateRenderHtmlResponse:
+    try:
+        html_body = render_template_html(req.resume_schema, req.template_id)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    full_html = wrap_full_html(html_body)
+    return AdminTemplateRenderHtmlResponse(html_body=html_body, full_html=full_html)
+
+
+@router.post("/admin/templates/render-pdf", response_model=AdminTemplateRenderPdfResponse)
+async def api_admin_templates_render_pdf(
+    req: AdminTemplateRenderRequest,
+    _admin: dict = Depends(get_admin_user),
+) -> AdminTemplateRenderPdfResponse:
+    try:
+        html_body = render_template_html(req.resume_schema, req.template_id)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    renderer = HTMLRenderer()
+    result = renderer.render(html_body)
+    pdf_b64 = base64.b64encode(result.pdf_bytes).decode("utf-8")
+    return AdminTemplateRenderPdfResponse(
+        pdf_base64=pdf_b64,
+        page_count=result.page_count,
+        warnings=result.warnings,
+    )
+
 
 @router.get("/admin/stats", response_model=AdminStatsResponse)
 async def api_admin_stats(
