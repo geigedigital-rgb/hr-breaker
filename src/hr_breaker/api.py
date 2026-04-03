@@ -118,6 +118,9 @@ def _put_progress(queue: asyncio.Queue | None, percent: int, message: str) -> No
 
 logger = logging.getLogger(__name__)
 
+FREE_ANALYSES_PER_MONTH = 10
+FREE_OPTIMIZE_PER_MONTH = 10
+
 
 def _normalized_landing_cors_origins(raw: str) -> list[str]:
     """Parse LANDING_ALLOWED_ORIGINS and ensure both apex and www for pitchcv.app when either is present."""
@@ -2171,15 +2174,18 @@ async def api_analyze(req: AnalyzeRequest, user: dict | None = Depends(get_optio
     if user_id and user_id != "local" and not _is_admin_user(user):
         pool = await get_pool()
         if pool:
-            u_data = await user_get_by_id(pool, user_id)
-            if u_data:
-                plan = u_data.get("subscription_plan") or "free"
-                status = u_data.get("subscription_status") or "free"
+            sub = await user_get_subscription(pool, user_id)
+            if sub:
+                plan = sub.get("plan") or "free"
+                status = sub.get("status") or "free"
                 has_paid = plan in ("trial", "monthly") and status in ("active", "trial")
                 if not has_paid:
-                    free_count = u_data.get("free_analyses_count", 0)
-                    if free_count >= 1:
-                        raise HTTPException(402, "Free plan limit reached (1 scan). Please upgrade to a paid plan for unlimited ATS scans.")
+                    free_count = int(sub.get("free_analyses_count") or 0)
+                    if free_count >= FREE_ANALYSES_PER_MONTH:
+                        raise HTTPException(
+                            402,
+                            f"Free plan limit reached ({FREE_ANALYSES_PER_MONTH} analyses/month). Upgrade for unlimited scans.",
+                        )
                 
                 # Increment regardless of plan so we track usage
                 await user_increment_free_analyses(pool, user_id)
@@ -2285,16 +2291,17 @@ async def _run_optimize(
     if user_id and user_id != "local" and not _is_admin_user(user):
         pool = await get_pool()
         if pool:
-            u_data = await user_get_by_id(pool, user_id)
-            if u_data:
-                plan = u_data.get("subscription_plan") or "free"
-                status = u_data.get("subscription_status") or "free"
+            sub = await user_get_subscription(pool, user_id)
+            if sub:
+                plan = sub.get("plan") or "free"
+                status = sub.get("status") or "free"
                 has_paid = plan in ("trial", "monthly") and status in ("active", "trial")
                 if not has_paid:
-                    free_opt = int(u_data.get("free_optimize_count") or 0)
-                    if free_opt >= 1:
+                    free_opt = int(sub.get("free_optimize_count") or 0)
+                    if free_opt >= FREE_OPTIMIZE_PER_MONTH:
                         err_msg = (
-                            "Free auto-improvement already used. Start a trial to run again and download PDFs."
+                            f"Free plan limit reached ({FREE_OPTIMIZE_PER_MONTH} optimizations/month). "
+                            "Start a trial to continue and download PDFs."
                         )
                         _put_progress(progress_queue, 100, err_msg)
                         raise HTTPException(402, err_msg)

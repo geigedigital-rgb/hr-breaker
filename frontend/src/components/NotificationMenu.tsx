@@ -34,7 +34,7 @@ export function NotificationMenu() {
     generated.push({
       id: "welcome",
       title: "Welcome to PitchCV!",
-      message: "You have 1 free ATS scan available. Paste your resume and job description text to see your match score.",
+      message: "You have 10 ATS scans and 10 optimizations each month on Free. Add a resume and job to see your match score.",
       actionText: "Get started",
       actionUrl: "/optimize",
       type: "info",
@@ -43,7 +43,7 @@ export function NotificationMenu() {
     });
 
     // 2. First Analysis Completed (Upsell)
-    if (user.subscription?.plan === "free" && (user.subscription?.free_analyses_count ?? 0) >= 1) {
+    if (user.subscription?.plan === "free" && (user.subscription?.free_analyses_count ?? 0) >= 10) {
       generated.push({
         id: "first_analysis_upsell",
         title: "Great start!",

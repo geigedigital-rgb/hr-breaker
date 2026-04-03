@@ -105,7 +105,7 @@ export default function Upgrade() {
                 <span>{t("upgrade.freeFeature2")}</span>
               </li>
               <li className="flex items-start gap-2.5 text-[var(--text-muted)] opacity-70">
-                <LockClosedIcon className="w-5 h-5 shrink-0" />
+                <CheckIcon className="w-5 h-5 text-emerald-500 shrink-0" />
                 <span>{t("upgrade.freeFeature3")}</span>
               </li>
               <li className="flex items-start gap-2.5 text-[var(--text-muted)] opacity-70">

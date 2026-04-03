@@ -1,7 +1,7 @@
 import { useState, useEffect, useLayoutEffect, useRef, useId } from "react";
 import { useLocation, useNavigate, useSearchParams, Link } from "react-router-dom";
 import { Disclosure, DisclosureButton, DisclosurePanel } from "@headlessui/react";
-import { SparklesIcon, ArrowUpTrayIcon, ArrowDownTrayIcon, ArrowPathIcon, ArrowLeftIcon, BriefcaseIcon, ClipboardDocumentIcon, ExclamationTriangleIcon, CheckCircleIcon, LockClosedIcon, CheckIcon, ChevronDownIcon } from "@heroicons/react/24/outline";
+import { SparklesIcon, ArrowUpTrayIcon, ArrowDownTrayIcon, ArrowPathIcon, ArrowLeftIcon, BriefcaseIcon, ClipboardDocumentIcon, ExclamationTriangleIcon, CheckCircleIcon, CheckIcon, ChevronDownIcon } from "@heroicons/react/24/outline";
 import * as api from "../api";
 import { useAuth } from "../contexts/AuthContext";
 import { t, tFormat } from "../i18n";
@@ -11,6 +11,8 @@ const RESUME_TEXT_EXTS = ["txt", "md", "html", "htm", "tex", "pdf", "doc", "docx
 
 const OPTIMIZE_CHECKOUT_SNAPSHOT_KEY = "pitchcv_optimize_checkout_snapshot_v1";
 const OPTIMIZE_PENDING_AUTO_IMPROVE_KEY = "pitchcv_optimize_pending_auto_improve";
+const FREE_ANALYSES_PER_MONTH = 10;
+const FREE_OPTIMIZES_PER_MONTH = 10;
 /** Independent rotation for scan/analyze/improve “Fact” lines (not tied to progress ticks). */
 const LOADING_FACT_ROTATE_MS = 15_000;
 
@@ -889,7 +891,7 @@ function ScoreGauge({
 
 export { CircleScore, BarScoreRow, ScoreCard, ScoreGauge };
 
-/** Upsell modal content when the free ATS scan is used; trial card matches /upgrade styling. */
+/** Upsell modal content when monthly free analysis limit is reached. */
 function OptimizeFreeLimitWall({
   checkoutError,
   checkoutLoading,
@@ -902,30 +904,25 @@ function OptimizeFreeLimitWall({
   onStartTrial: () => void;
 }) {
   return (
-    <div className="w-full max-w-xl mx-auto space-y-6 rounded-2xl bg-[#FAFAFC] p-4 sm:p-6 shadow-xl border border-[#EBEDF5]">
+    <div className="w-full max-w-xl mx-auto space-y-4 rounded-2xl bg-[#FAFAFC] p-4 sm:p-5 shadow-xl border border-[#EBEDF5]">
       <section
-        className="rounded-2xl border border-[#E8DCC8] bg-gradient-to-br from-amber-50/90 to-[#FFFBF5] p-6 sm:p-7 shadow-sm"
+        className="rounded-2xl border border-[#E6E9F5] bg-white p-4 sm:p-5 shadow-sm"
         aria-labelledby="free-limit-heading"
       >
-        <div className="flex flex-col sm:flex-row sm:items-start gap-4">
-          <div className="shrink-0 w-12 h-12 rounded-2xl bg-white border border-amber-200/80 flex items-center justify-center shadow-sm">
-            <LockClosedIcon className="w-6 h-6 text-amber-700" strokeWidth={1.75} aria-hidden />
-          </div>
-          <div className="min-w-0 space-y-2">
-            <h1 id="free-limit-heading" className="text-xl sm:text-2xl font-bold tracking-tight text-[#181819]">
-              {t("optimize.freeLimitWallTitle")}
-            </h1>
-            <p className="text-sm sm:text-[15px] text-[var(--text-muted)] leading-relaxed">
-              {t("optimize.freeLimitWallSubtitle")}
-            </p>
-            <button
-              type="button"
-              onClick={onEditSetup}
-              className="mt-3 text-sm font-semibold text-[#4578FC] hover:text-[#3d6ae6] underline-offset-2 hover:underline focus:outline-none focus:ring-2 focus:ring-[#4578FC]/30 rounded"
-            >
-              {t("optimize.freeLimitWallEditSetup")}
-            </button>
-          </div>
+        <div className="min-w-0 space-y-2">
+          <h1 id="free-limit-heading" className="text-lg sm:text-xl font-semibold tracking-tight text-[#181819]">
+            {t("optimize.freeLimitWallTitle")}
+          </h1>
+          <p className="text-sm text-[var(--text-muted)] leading-relaxed">
+            {t("optimize.freeLimitWallSubtitle")}
+          </p>
+          <button
+            type="button"
+            onClick={onEditSetup}
+            className="text-sm font-semibold text-[#4578FC] hover:text-[#3d6ae6] underline-offset-2 hover:underline focus:outline-none focus:ring-2 focus:ring-[#4578FC]/30 rounded"
+          >
+            {t("optimize.freeLimitWallEditSetup")}
+          </button>
         </div>
       </section>
 
@@ -1068,8 +1065,8 @@ export default function Optimize() {
   const hasPaidPlan = (plan === "trial" || plan === "monthly") && (subStatus === "active" || subStatus === "trial");
   const freeAnalysesCount = user?.subscription?.free_analyses_count || 0;
   const freeOptimizeCount = user?.subscription?.free_optimize_count ?? 0;
-  const canAnalyzeSubscription = hasPaidPlan || freeAnalysesCount < 1;
-  const canOptimizeSubscription = user?.id === "local" || hasPaidPlan || freeOptimizeCount < 1;
+  const canAnalyzeSubscription = hasPaidPlan || freeAnalysesCount < FREE_ANALYSES_PER_MONTH;
+  const canOptimizeSubscription = user?.id === "local" || hasPaidPlan || freeOptimizeCount < FREE_OPTIMIZES_PER_MONTH;
   /** When true, user closed the free-limit overlay to edit resume/job; compact CTA remains in step 2. */
   const [freeLimitUpsellDismissed, setFreeLimitUpsellDismissed] = useState(false);
   const [freeLimitCheckoutLoading, setFreeLimitCheckoutLoading] = useState(false);
@@ -1454,7 +1451,7 @@ export default function Optimize() {
   function handleStartScan() {
     if (!hasResume || !hasJob) return;
     if (!canAnalyzeSubscription && user?.id !== "local") {
-      setError("Free plan limit reached (1 scan). Please upgrade to a paid plan for unlimited ATS scans.");
+      setError(`Free plan limit reached (${FREE_ANALYSES_PER_MONTH} analyses/month). Please upgrade for unlimited scans.`);
       return;
     }
     setStage("scanning");
@@ -1573,7 +1570,7 @@ export default function Optimize() {
       await refreshUser();
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Optimization failed";
-      if (msg.includes("Free auto-improvement already used")) {
+      if (msg.includes("Free plan limit reached")) {
         setError(t("optimize.freeOptimizeLimitError"));
       } else if (!isOfferPasteAsTextError(msg)) {
         setError(msg);

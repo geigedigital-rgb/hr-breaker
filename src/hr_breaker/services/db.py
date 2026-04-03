@@ -214,6 +214,9 @@ async def init_table(pool) -> None:
         await conn.execute(
             f"ALTER TABLE {USERS_TABLE} ADD COLUMN IF NOT EXISTS free_optimize_count INTEGER NOT NULL DEFAULT 0"
         )
+        await conn.execute(
+            f"ALTER TABLE {USERS_TABLE} ADD COLUMN IF NOT EXISTS free_quota_month_start DATE"
+        )
         await conn.execute(f"CREATE INDEX IF NOT EXISTS idx_users_stripe_customer ON {USERS_TABLE}(stripe_customer_id)")
         await conn.execute(
             f"ALTER TABLE {USERS_TABLE} ADD COLUMN IF NOT EXISTS partner_program_access BOOLEAN NOT NULL DEFAULT FALSE"
@@ -381,7 +384,7 @@ async def user_create(pool, email: str, password_hash: str | None = None, name: 
 
 USER_SUBSCRIPTION_COLS = (
     "stripe_customer_id, stripe_subscription_id, subscription_status, subscription_plan, "
-    "current_period_end, free_analyses_count, free_optimize_count, partner_program_access, "
+    "current_period_end, free_analyses_count, free_optimize_count, free_quota_month_start, partner_program_access, "
     "market_readiness_score, last_visit_date, streak_days, admin_blocked"
 )
 
@@ -434,10 +437,13 @@ async def user_update_google_id(pool, user_id: str, google_id: str) -> None:
 # --- Subscription (Stripe) ---
 
 async def user_get_subscription(pool, user_id: str) -> dict:
-    """Return subscription info for user. Resolves effective status (e.g. trial/active past period_end -> free)."""
+    """Return subscription info for user and reset free counters monthly when needed."""
+    from datetime import timezone
+
+    month_start_utc = datetime.now(timezone.utc).date().replace(day=1)
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
-            f"SELECT subscription_status, subscription_plan, current_period_end, free_analyses_count, free_optimize_count FROM {USERS_TABLE} WHERE id = $1::uuid",
+            f"SELECT subscription_status, subscription_plan, current_period_end, free_analyses_count, free_optimize_count, free_quota_month_start FROM {USERS_TABLE} WHERE id = $1::uuid",
             user_id,
         )
     if row is None:
@@ -447,14 +453,41 @@ async def user_get_subscription(pool, user_id: str) -> dict:
     period_end = row["current_period_end"]
     free_analyses_count = row["free_analyses_count"] or 0
     free_optimize_count = int(row["free_optimize_count"] or 0)
+    free_quota_month_start = row["free_quota_month_start"]
     if period_end:
-        from datetime import timezone
         now = datetime.now(timezone.utc)
         if getattr(period_end, "tzinfo", None) is None:
             period_end = period_end.replace(tzinfo=timezone.utc)
         if period_end < now and status in ("trial", "active"):
             status = "free"
             plan = "free"
+    # Free quota resets every UTC month for non-paid users.
+    if plan == "free" and (
+        free_quota_month_start is None or free_quota_month_start < month_start_utc
+    ):
+        async with pool.acquire() as conn:
+            await conn.execute(
+                f"""
+                UPDATE {USERS_TABLE}
+                SET free_analyses_count = 0,
+                    free_optimize_count = 0,
+                    free_quota_month_start = $2
+                WHERE id = $1::uuid
+                """,
+                user_id,
+                month_start_utc,
+            )
+        free_analyses_count = 0
+        free_optimize_count = 0
+        free_quota_month_start = month_start_utc
+    if plan == "free" and free_quota_month_start is None:
+        # Backfill month marker for legacy rows in free plan.
+        async with pool.acquire() as conn:
+            await conn.execute(
+                f"UPDATE {USERS_TABLE} SET free_quota_month_start = $2 WHERE id = $1::uuid",
+                user_id,
+                month_start_utc,
+            )
     return {
         "plan": plan,
         "status": status,
@@ -534,19 +567,37 @@ async def user_set_current_period_end(pool, user_id: str, end: datetime | None) 
 
 async def user_increment_free_analyses(pool, user_id: str) -> None:
     """Increment the free analyses count for the user."""
+    from datetime import timezone
+
+    month_start_utc = datetime.now(timezone.utc).date().replace(day=1)
     async with pool.acquire() as conn:
         await conn.execute(
-            f"UPDATE {USERS_TABLE} SET free_analyses_count = free_analyses_count + 1 WHERE id = $1::uuid",
+            f"""
+            UPDATE {USERS_TABLE}
+            SET free_analyses_count = free_analyses_count + 1,
+                free_quota_month_start = COALESCE(free_quota_month_start, $2)
+            WHERE id = $1::uuid
+            """,
             user_id,
+            month_start_utc,
         )
 
 
 async def user_increment_free_optimize(pool, user_id: str) -> None:
-    """Increment completed optimize runs while user was on free plan (lifetime cap for free auto-improve)."""
+    """Increment completed optimize runs while user was on free plan."""
+    from datetime import timezone
+
+    month_start_utc = datetime.now(timezone.utc).date().replace(day=1)
     async with pool.acquire() as conn:
         await conn.execute(
-            f"UPDATE {USERS_TABLE} SET free_optimize_count = free_optimize_count + 1 WHERE id = $1::uuid",
+            f"""
+            UPDATE {USERS_TABLE}
+            SET free_optimize_count = free_optimize_count + 1,
+                free_quota_month_start = COALESCE(free_quota_month_start, $2)
+            WHERE id = $1::uuid
+            """,
             user_id,
+            month_start_utc,
         )
 
 

@@ -283,8 +283,8 @@ export default function Settings() {
                         <span>{t("upgrade.freeFeature2")}</span>
                       </li>
                       <li className="flex items-start gap-2 opacity-60">
-                        <LockClosedIcon className="w-4 h-4 shrink-0" />
-                        <span>{t("upgrade.freeFeature3")} {t("upgrade.availableWithSub")}</span>
+                        <CheckIcon className="w-4 h-4 text-purple-600 shrink-0" />
+                        <span>{t("upgrade.freeFeature3")}</span>
                       </li>
                       <li className="flex items-start gap-2 opacity-60">
                         <LockClosedIcon className="w-4 h-4 shrink-0" />
@@ -344,8 +344,8 @@ export default function Settings() {
                       <span>{t("upgrade.freeFeature2")}</span>
                     </li>
                     <li className="flex items-start gap-2 opacity-60">
-                      <LockClosedIcon className="w-4 h-4 shrink-0" />
-                      <span>{t("upgrade.freeFeature3")} {t("upgrade.availableWithSub")}</span>
+                      <CheckIcon className="w-4 h-4 text-purple-600 shrink-0" />
+                      <span>{t("upgrade.freeFeature3")}</span>
             </li>
                     <li className="flex items-start gap-2 opacity-60">
                       <LockClosedIcon className="w-4 h-4 shrink-0" />
