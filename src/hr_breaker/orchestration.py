@@ -140,6 +140,8 @@ async def optimize_for_job(
     settings = get_settings()
     if max_iterations is None:
         max_iterations = settings.max_iterations
+    # Product policy: one strict strong iteration only.
+    max_iterations = 1
 
     renderer = HTMLRenderer()
 

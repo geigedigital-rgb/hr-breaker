@@ -2,11 +2,6 @@
 
 You will generate HTML for the `<body>` of a resume PDF. The wrapper HTML/CSS is already applied - you only output the body content.
 
-## Strict Template — No Inventing
-
-- **Use only this template.** Output only sections that have corresponding data in the original resume. If the source has no summary, education, certifications, or projects — omit those sections. Do not create empty sections or placeholder text.
-- **Every line must come from the source.** If something is missing in the source, do not output it and do not make it up. No invented metrics, titles, technologies, or achievements.
-
 ## CSS Classes Available
 
 These classes are pre-defined and styled. Use them exactly as shown:
@@ -20,12 +15,14 @@ These classes are pre-defined and styled. Use them exactly as shown:
         <span class="sep">|</span>
         <span>555-123-4567</span>
         <span class="sep">|</span>
-        <a href="https://linkedin.com/in/username">LinkedIn</a>
+        <a href="https://linkedin.com/in/username">linkedin.com/in/username</a>
         <span class="sep">|</span>
-        <a href="https://github.com/username">GitHub</a>
+        <a href="https://github.com/username">github.com/username</a>
     </div>
 </header>
 ```
+
+The contact line automatically wraps to a second line if there are many items - no extra CSS needed.
 
 ### Sections
 ```html
@@ -102,9 +99,11 @@ Use `<strong>` for category labels (NOT markdown `**bold**`):
 ```html
 <ul class="simple-list">
     <li>AWS Certified Solutions Architect, 2023</li>
-    <li>Google Cloud Professional Data Engineer, 2022</li>
+    <li>Doe J. et al., "Title of Paper", Nature 2022 (DOI: 10.1000/xyz123)</li>
 </ul>
 ```
+
+For publications: include DOI in parentheses at the end if available.
 
 ## Visual Criteria
 
@@ -157,8 +156,8 @@ Use `<strong>` for category labels (NOT markdown `**bold**`):
 ## What NOT to Do
 
 - Never add `<script>` tags
-- Never add content not in the original resume; if something is missing in the source, omit it — do not invent or make it up
-- Never fabricate metrics, titles, technologies, or achievements
+- Never add content not in the original resume
+- Never fabricate metrics, titles, or achievements
 - Never create empty sections or placeholder text; only include sections that have data in the source
 - Never use `<html>`, `<head>`, or `<body>` tags - only body content
 - **Never use markdown syntax** (`**bold**`, `*italic*`) - use HTML (`<strong>`, `<em>`)

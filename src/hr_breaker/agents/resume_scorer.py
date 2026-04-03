@@ -1,4 +1,4 @@
-"""Lightweight agent: score resume text vs job (0-100) for pre-assessment."""
+"""Agents for pre-assessment scoring and improvement insights."""
 
 from functools import lru_cache
 
@@ -17,7 +17,14 @@ class ResumeScore(BaseModel):
 
 SYSTEM_PROMPT = """You are an ATS (Applicant Tracking System) scorer. Given a resume (plain text) and a job posting summary, output a single integer score from 0 to 100.
 
-Score 0-100: how well the resume matches the job (keywords, experience relevance, clarity). Be strict but fair. Output ONLY the score as a JSON object: {"score": N}.
+Score rubric (strict but fair):
+- 90-100: Strong direct match on core requirements, role relevance, and concrete impact.
+- 70-89: Good match with minor gaps or weaker evidence in some key areas.
+- 50-69: Partial match; important requirements are missing or weakly evidenced.
+- 0-49: Poor match; substantial gaps for this role.
+
+Evaluate by: requirement coverage, keyword/skill alignment, role/seniority relevance, measurable outcomes, and clarity for ATS parsing.
+Output ONLY the score as JSON: {"score": N}.
 """
 
 
@@ -61,9 +68,7 @@ async def score_resume_vs_job(
         if audit_user_id:
             pool = await get_pool()
             inp, out = tokens_from_run_result(result)
-            await log_usage_event(
-                pool, audit_user_id, "analyze_ats_score", model, input_tokens=inp, output_tokens=out
-            )
+            await log_usage_event(pool, audit_user_id, "analyze_ats_score", model, input_tokens=inp, output_tokens=out)
         return score
     except Exception as e:
         if audit_user_id:
@@ -79,67 +84,58 @@ async def score_resume_vs_job(
         raise
 
 
-class BreakdownScores(BaseModel):
-    """Independent scores 0-100: Skills, Experience, Portfolio."""
+class AnalysisInsights(BaseModel):
+    """Risk and actionable improvement insights for pre-analysis."""
 
-    skills: int  # match of skills/keywords to job
-    experience: int  # relevance of work experience to job
-    portfolio: int  # projects, achievements, certifications relevance
     rejection_risk_score: int  # 0-100, where 100 means very high rejection risk
-    critical_issues: list[str] = Field(default_factory=list)  # 1-2 short issues that drive rejection risk
-    risk_summary: str | None = None  # short plain-language explanation of the risk
-    improvement_tips: str | None = None  # optional: short text with headers and tips for better match
+    critical_issues: list[str] = Field(default_factory=list)
+    risk_summary: str | None = None
+    improvement_tips: str | None = None
 
 
-BREAKDOWN_SYSTEM = """You are an ATS analyst. Given a resume (plain text) and a job posting summary, output independent scores and risk analysis.
+INSIGHTS_SYSTEM = """You are an ATS analyst. Given a resume (plain text) and a job posting summary, output risk analysis and actionable tips.
 
-SCORES (required, integers 0-100):
-- skills: How well the resume's skills and keywords match the job requirements (tools, technologies, methodologies).
-- experience: How relevant the candidate's work experience is to the role (titles, domains, seniority).
-- portfolio: How well projects, achievements, certifications, or education match what the job values.
-- rejection_risk_score: Probability of rejection at screening stage (0-100). Higher means worse.
+OUTPUT FIELDS:
+- rejection_risk_score (required, integer 0-100): probability of rejection at screening stage. Higher means worse.
+- critical_issues (required, list of 1-2 short strings): top issues that most likely cause rejection.
+- risk_summary (optional, short string): one concise sentence explaining risk and why.
+- improvement_tips (optional): 2-4 short blocks with clear headers (e.g. "Keywords", "Experience", "Structure"), each with 1-2 practical tips.
 
 RISK CONSISTENCY RULES (required):
-- If there are critical gaps (missing core skills, missing quantified impact, weak role relevance), rejection_risk_score MUST be elevated.
+- If there are critical gaps (missing core skills, missing quantified impact, weak role relevance), rejection_risk_score must be elevated.
 - If you output critical_issues, rejection_risk_score should usually not be low.
-- Very low risk (<30) is only valid when resume is strongly aligned across skills, experience and portfolio.
+- Very low risk (<30) is only valid when alignment to role is strong and clear.
 
-CRITICAL ISSUES (required, list of 1-2 short strings):
-- Provide the top issues that most likely cause rejection. Each issue should be short and concrete.
+LANGUAGE:
+- Write improvement_tips in the language specified in the user message (default: English).
 
-RISK SUMMARY (optional, short string):
-- One concise sentence explaining the current rejection risk and why.
-
-IMPROVEMENT_TIPS (optional): If the resume could be improved for this job, provide a short text (2-4 blocks). Each block: a clear header (e.g. "Keywords", "Experience", "Structure") and 1-2 short sentences with concrete tips for better match. Use line breaks between blocks. Write improvement_tips in the language specified in the user message (default: English). If the resume is already an excellent match (scores high), you may leave improvement_tips empty or null.
-
-Be strict but fair. Output valid integers 0-100 for each score field."""
+Be strict but fair. Output valid values matching the schema."""
 
 
 @lru_cache
-def get_breakdown_scorer_agent() -> Agent:
+def get_analysis_insights_agent() -> Agent:
     settings = get_settings()
     return Agent(
         f"google-gla:{settings.gemini_flash_model}",
-        output_type=BreakdownScores,
-        system_prompt=BREAKDOWN_SYSTEM,
+        output_type=AnalysisInsights,
+        system_prompt=INSIGHTS_SYSTEM,
         model_settings=get_model_settings(),
     )
 
 
-async def get_breakdown_scores(
+async def get_analysis_insights(
     resume_text: str,
     job: JobPosting,
     output_language: str | None = None,
     audit_user_id: str | None = None,
-) -> BreakdownScores:
-    """Return independent Skills/Experience/Portfolio and rejection-risk fields from LLM.
-    output_language: e.g. 'en', 'ru'. Default English. Used for improvement_tips text."""
+) -> AnalysisInsights:
+    """Return rejection risk and improvement tips from LLM."""
     from hr_breaker.services.db import get_pool
     from hr_breaker.services.usage_audit import log_usage_event, tokens_from_run_result
 
     settings = get_settings()
     model = settings.gemini_flash_model
-    agent = get_breakdown_scorer_agent()
+    agent = get_analysis_insights_agent()
     summary = _job_summary(job)
     lang_instruction = ""
     if output_language and output_language.lower() != "en":
@@ -153,7 +149,7 @@ async def get_breakdown_scores(
             await log_usage_event(
                 pool,
                 audit_user_id,
-                "analyze_breakdown",
+                "analyze_insights",
                 model,
                 success=False,
                 error_message=str(e)[:2000],
@@ -172,12 +168,9 @@ async def get_breakdown_scores(
         pool = await get_pool()
         inp, out_tok = tokens_from_run_result(result)
         await log_usage_event(
-            pool, audit_user_id, "analyze_breakdown", model, input_tokens=inp, output_tokens=out_tok
+            pool, audit_user_id, "analyze_insights", model, input_tokens=inp, output_tokens=out_tok
         )
-    return BreakdownScores(
-        skills=max(0, min(100, out.skills)),
-        experience=max(0, min(100, out.experience)),
-        portfolio=max(0, min(100, out.portfolio)),
+    return AnalysisInsights(
         rejection_risk_score=max(0, min(100, out.rejection_risk_score)),
         critical_issues=critical_issues,
         risk_summary=risk_summary,

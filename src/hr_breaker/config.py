@@ -135,7 +135,8 @@ def get_settings() -> Settings:
         gemini_flash_model=os.getenv("GEMINI_FLASH_MODEL") or "gemini-3-flash-preview",
         gemini_thinking_budget=thinking_budget,
         fast_mode=os.getenv("HR_BREAKER_FAST_MODE", "true").lower() in ("true", "1", "yes"),
-        max_iterations=int(os.getenv("MAX_ITERATIONS", "1")),
+        # Product policy: always single-pass optimization.
+        max_iterations=1,
         # Scraper settings
         scraper_httpx_timeout=float(os.getenv("SCRAPER_HTTPX_TIMEOUT", "15")),
         scraper_wayback_timeout=float(os.getenv("SCRAPER_WAYBACK_TIMEOUT", "10")),

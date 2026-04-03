@@ -28,7 +28,7 @@ from hr_breaker.agents import (
     extract_name,
     extract_resume_schema_strict,
     extract_resume_summary,
-    get_breakdown_scores,
+    get_analysis_insights,
     parse_job_posting,
     score_resume_vs_job,
 )
@@ -290,10 +290,6 @@ class AnalyzeResponse(BaseModel):
     keyword_threshold: float
     job: JobPostingOut | None = None  # parsed job for preview when job_url was used
     recommendations: list[RecommendationItem] = Field(default_factory=list)
-    # Independent breakdown from LLM (Skills, Experience, Portfolio) 0-100
-    skills_score: int | None = None
-    experience_score: int | None = None
-    portfolio_score: int | None = None
     # LLM-provided rejection risk 0-100 and top critical reasons
     rejection_risk_score: int | None = None
     critical_issues: list[str] = Field(default_factory=list)
@@ -613,7 +609,7 @@ async def get_admin_user(
 
 _FUNNEL_ANALYSIS_ACTIONS = frozenset({
     "analyze_ats_score",
-    "analyze_breakdown",
+    "analyze_insights",
     "job_parse",
     "extract_name",
 })
@@ -1741,9 +1737,9 @@ async def api_landing_analyze(
         raise HTTPException(500, "Job parsing failed.")
 
     kw_result = await asyncio.to_thread(check_keywords, resume_content, job)
-    ats_score, breakdown = await asyncio.gather(
+    ats_score, insights = await asyncio.gather(
         score_resume_vs_job(resume_content, job),
-        get_breakdown_scores(resume_content, job),
+        get_analysis_insights(resume_content, job),
     )
     job_out = JobPostingOut(
         title=job.title,
@@ -1758,12 +1754,14 @@ async def api_landing_analyze(
         keyword_threshold=settings.filter_keyword_threshold,
         missing_keywords=kw_result.missing_keywords,
         job_keywords=job.keywords or [],
+        requirements=job.requirements or [],
+        critical_issues=insights.critical_issues,
         has_requirements=bool(job.requirements),
     )
     logger.info("Landing analyze OK ip=%s ats=%s", ip, ats_score)
     risk_score = _normalize_rejection_risk(
-        model_risk=breakdown.rejection_risk_score,
-        critical_issues=breakdown.critical_issues,
+        model_risk=insights.rejection_risk_score,
+        critical_issues=insights.critical_issues,
         ats_score=ats_score,
         keyword_score=kw_result.score,
         keyword_threshold=settings.filter_keyword_threshold,
@@ -1774,13 +1772,10 @@ async def api_landing_analyze(
         keyword_threshold=settings.filter_keyword_threshold,
         job=job_out,
         recommendations=recommendations,
-        skills_score=breakdown.skills,
-        experience_score=breakdown.experience,
-        portfolio_score=breakdown.portfolio,
         rejection_risk_score=risk_score,
-        critical_issues=breakdown.critical_issues,
-        risk_summary=breakdown.risk_summary,
-        improvement_tips=breakdown.improvement_tips,
+        critical_issues=insights.critical_issues,
+        risk_summary=insights.risk_summary,
+        improvement_tips=insights.improvement_tips,
     )
 
 
@@ -2063,6 +2058,8 @@ def _build_recommendations(
     keyword_threshold: float,
     missing_keywords: list[str],
     job_keywords: list[str],
+    requirements: list[str],
+    critical_issues: list[str],
     has_requirements: bool,
 ) -> list[RecommendationItem]:
     """Return three categories in a stable order."""
@@ -2071,21 +2068,75 @@ def _build_recommendations(
     need_structure = ats_score < 70
     need_requirements = has_requirements and (ats_score < 80 or keyword_score < keyword_threshold)
 
-    # Labels: max 2 words for UI chips (green check = OK, orange ! = improve).
+    def _clean_label(text: str) -> str:
+        t = " ".join((text or "").strip().split())
+        t = t.rstrip(" .,:;")
+        return t[:90]
+
+    def _structure_labels_from_issues(issues: list[str]) -> list[str]:
+        labels: list[str] = []
+        for issue in issues:
+            low = (issue or "").lower()
+            if any(x in low for x in ("typo", "grammar", "spelling", "fehler", "ошиб")):
+                labels.append("Fix spelling and grammar issues")
+            elif any(x in low for x in ("paragraph", "bullet", "section", "structure", "format")):
+                labels.append("Restructure long paragraphs into clear bullets")
+            elif any(x in low for x in ("clarity", "unclear", "readability")):
+                labels.append("Improve clarity with concise evidence-driven wording")
+        if not labels and need_structure:
+            labels = ["Use clear section headings"]
+        uniq: list[str] = []
+        for l in labels:
+            c = _clean_label(l)
+            if c and c not in uniq:
+                uniq.append(c)
+            if len(uniq) >= 3:
+                break
+        return uniq
+
+    def _requirements_labels(reqs: list[str], kws: list[str], issues: list[str]) -> list[str]:
+        labels: list[str] = []
+        req_candidates = [r for r in reqs if (r or "").strip()]
+        for kw in kws[:6]:
+            kl = kw.lower()
+            hit = next((r for r in req_candidates if kl in r.lower()), None)
+            if hit:
+                labels.append(_clean_label(hit))
+        for issue in issues:
+            low = (issue or "").lower()
+            if any(x in low for x in ("missing", "gap", "must-have", "requirement", "anforder")):
+                labels.append(_clean_label(issue))
+        if not labels and need_requirements:
+            labels = ["Address must-have requirements explicitly"]
+        uniq: list[str] = []
+        for l in labels:
+            if l and l not in uniq:
+                uniq.append(l)
+            if len(uniq) >= 3:
+                break
+        return uniq
+
     if need_kw:
-        kw_labels = ["Add keywords"] if not meaningful else [f"{w}" for w in meaningful[:3]]  # 1–2 word keywords when possible
-        if len(kw_labels) > 1 and any(len(l.split()) > 2 for l in kw_labels):
-            kw_labels = ["Add keywords"]
+        kw_labels = [_clean_label(w) for w in meaningful[:4] if _clean_label(w)]
+        if not kw_labels:
+            kw_labels = [
+                "Mirror exact vacancy terminology",
+                "Add role-specific hard skills",
+            ]
     else:
         kw_labels = ["OK"]
 
-    structure_label = "Clear sections" if need_structure else "OK"
-    requirements_label = "Match requirements" if need_requirements else "OK"
+    structure_labels = _structure_labels_from_issues(critical_issues) if need_structure else ["OK"]
+    req_labels = (
+        _requirements_labels(requirements, meaningful, critical_issues)
+        if need_requirements
+        else ["OK"]
+    )
 
     return [
         RecommendationItem(category="Keywords", labels=kw_labels),
-        RecommendationItem(category="Structure", labels=[structure_label]),
-        RecommendationItem(category="Requirements", labels=[requirements_label]),
+        RecommendationItem(category="Structure", labels=structure_labels),
+        RecommendationItem(category="Requirements", labels=req_labels),
     ]
 
 
@@ -2178,9 +2229,9 @@ async def api_analyze(req: AnalyzeRequest, user: dict | None = Depends(get_optio
     out_lang = (req.output_language or "en").strip().lower() or "en"
     kw_result = await asyncio.to_thread(check_keywords, resume_stripped, job)
     # Run ATS and breakdown (Skills/Experience/Portfolio) in parallel
-    ats_score, breakdown = await asyncio.gather(
+    ats_score, insights = await asyncio.gather(
         score_resume_vs_job(resume_stripped, job, audit_user_id=audit_uid),
-        get_breakdown_scores(resume_stripped, job, output_language=out_lang, audit_user_id=audit_uid),
+        get_analysis_insights(resume_stripped, job, output_language=out_lang, audit_user_id=audit_uid),
     )
     job_out = JobPostingOut(
         title=job.title,
@@ -2195,6 +2246,8 @@ async def api_analyze(req: AnalyzeRequest, user: dict | None = Depends(get_optio
         keyword_threshold=settings.filter_keyword_threshold,
         missing_keywords=kw_result.missing_keywords,
         job_keywords=job.keywords or [],
+        requirements=job.requirements or [],
+        critical_issues=insights.critical_issues,
         has_requirements=bool(job.requirements),
     )
     if user:
@@ -2202,8 +2255,8 @@ async def api_analyze(req: AnalyzeRequest, user: dict | None = Depends(get_optio
         if pool:
             await user_increment_readiness(pool, str(user["id"]), delta=READINESS_DELTA_ANALYSIS)
     risk_score = _normalize_rejection_risk(
-        model_risk=breakdown.rejection_risk_score,
-        critical_issues=breakdown.critical_issues,
+        model_risk=insights.rejection_risk_score,
+        critical_issues=insights.critical_issues,
         ats_score=ats_score,
         keyword_score=kw_result.score,
         keyword_threshold=settings.filter_keyword_threshold,
@@ -2214,13 +2267,10 @@ async def api_analyze(req: AnalyzeRequest, user: dict | None = Depends(get_optio
         keyword_threshold=settings.filter_keyword_threshold,
         job=job_out,
         recommendations=recommendations,
-        skills_score=breakdown.skills,
-        experience_score=breakdown.experience,
-        portfolio_score=breakdown.portfolio,
         rejection_risk_score=risk_score,
-        critical_issues=breakdown.critical_issues,
-        risk_summary=breakdown.risk_summary,
-        improvement_tips=breakdown.improvement_tips,
+        critical_issues=insights.critical_issues,
+        risk_summary=insights.risk_summary,
+        improvement_tips=insights.improvement_tips,
     )
 
 
@@ -2322,7 +2372,7 @@ async def _run_optimize(
         optimized, validation, job = await optimize_for_job(
             source,
             job_text=job_text,
-            max_iterations=req.max_iterations or settings.max_iterations,
+            max_iterations=1,
             parallel=req.parallel,
             on_progress=on_progress if progress_queue is not None else None,
             no_shame=req.aggressive_tailoring,
@@ -2345,92 +2395,7 @@ async def _run_optimize(
             error=err_msg,
         )
 
-    def _validation_score_percent(name: str) -> int | None:
-        for item in validation.results:
-            if item.filter_name == name:
-                return max(0, min(100, round(item.score * 100)))
-        return None
-
-    def _keyword_pct(value: float | None) -> int | None:
-        if value is None:
-            return None
-        if value <= 1:
-            return max(0, min(100, round(value * 100)))
-        return max(0, min(100, round(value)))
-
-    post_ats_pct = _validation_score_percent("LLMChecker")
-    post_kw_pct = _validation_score_percent("KeywordMatcher")
-    post_overall_pct = (
-        round((post_ats_pct + post_kw_pct) / 2)
-        if post_ats_pct is not None and post_kw_pct is not None
-        else None
-    )
-    pre_kw_pct = _keyword_pct(req.pre_keyword_score)
-    pre_overall_pct = (
-        round((req.pre_ats_score + pre_kw_pct) / 2)
-        if req.pre_ats_score is not None and pre_kw_pct is not None
-        else None
-    )
-    explicit_strong_retry = bool(
-        req.max_iterations is not None and req.max_iterations > settings.max_iterations
-    )
-    needs_deep_retry = bool(
-        req.aggressive_tailoring
-        and optimized
-        and validation
-        and (
-            explicit_strong_retry
-            or
-            (post_overall_pct is not None and post_overall_pct < 50)
-            or (
-                post_overall_pct is not None
-                and pre_overall_pct is not None
-                and post_overall_pct < pre_overall_pct + 6
-            )
-        )
-    )
-    if needs_deep_retry:
-        _put_progress(progress_queue, 58, "Applying deep vacancy alignment…")
-        retry_content = (optimized.pdf_text or req.resume_content).strip()
-        if retry_content:
-            retry_source = ResumeSource(content=retry_content)
-            retry_source.first_name = source.first_name
-            retry_source.last_name = source.last_name
-            retry_optimized, retry_validation, _ = await optimize_for_job(
-                retry_source,
-                job=job,
-                max_iterations=1,
-                parallel=req.parallel,
-                on_progress=on_progress if progress_queue is not None else None,
-                no_shame=True,
-                output_language=out_lang,
-                audit_user_id=audit_uid,
-            )
-            retry_post_ats = next(
-                (
-                    max(0, min(100, round(r.score * 100)))
-                    for r in retry_validation.results
-                    if r.filter_name == "LLMChecker"
-                ),
-                None,
-            )
-            retry_post_kw = next(
-                (
-                    max(0, min(100, round(r.score * 100)))
-                    for r in retry_validation.results
-                    if r.filter_name == "KeywordMatcher"
-                ),
-                None,
-            )
-            retry_overall = (
-                round((retry_post_ats + retry_post_kw) / 2)
-                if retry_post_ats is not None and retry_post_kw is not None
-                else None
-            )
-            if retry_overall is not None and (post_overall_pct is None or retry_overall >= post_overall_pct):
-                optimized = retry_optimized
-                validation = retry_validation
-                post_overall_pct = retry_overall
+    # Single strict pass only: no second deep-retry generation.
 
     validation_out = ValidationResultOut(
         passed=validation.passed,

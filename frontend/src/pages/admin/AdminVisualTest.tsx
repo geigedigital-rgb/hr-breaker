@@ -13,9 +13,6 @@ import * as api from "../../api";
 const MOCK = {
   atsPct: 72,
   kwPct: 68,
-  skillsPct: 75,
-  experiencePct: 62,
-  portfolioPct: 48,
   displayName: "Anna Muller",
   displaySpecialty: "Senior Product Manager",
   displaySkills: "Agile, Scrum, Jira, SQL, Stakeholder Management, Roadmapping, A/B Testing, OKRs",
@@ -205,26 +202,6 @@ function getQualityLevelLabelSandbox(qualityPct: number): string {
   return t("optimize.resumeQualityLevelLow");
 }
 
-function MiniMetricRow({ label, percent }: { label: string; percent: number }) {
-  return (
-    <div className="space-y-1.5">
-      <div className="flex items-baseline justify-between gap-2">
-        <p className="text-[12px] font-medium text-[#4B5563]">{label}</p>
-        <p className="text-[13px] font-semibold text-[#181819] tabular-nums">{Math.round(percent)}%</p>
-      </div>
-      <div className="h-1.5 rounded-full bg-[#E9EDF4] overflow-hidden">
-        <div
-          className="h-full rounded-full"
-          style={{
-            width: `${Math.max(0, Math.min(100, percent))}%`,
-            background: "linear-gradient(90deg, #dc2626 0%, #f59e0b 22%, #16a34a 58%, #16a34a 100%)",
-          }}
-        />
-      </div>
-    </div>
-  );
-}
-
 export default function AdminVisualTest() {
   const [viewMode, setViewMode] = useState<ViewMode>("both");
 
@@ -327,11 +304,6 @@ export default function AdminVisualTest() {
                   </p>
                 </div>
               </div>
-            </div>
-            <div className="border-t border-[#F3F4F6] pt-4 grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
-              <MiniMetricRow label={t("optimize.skills")} percent={MOCK.skillsPct} />
-              <MiniMetricRow label={t("optimize.experience")} percent={MOCK.experiencePct} />
-              <MiniMetricRow label={t("optimize.portfolio")} percent={MOCK.portfolioPct} />
             </div>
           </div>
         </div>
@@ -494,11 +466,6 @@ export default function AdminVisualTest() {
                   </p>
                 </div>
               </div>
-            </div>
-            <div className="border-t border-[#BBF7D0] pt-4 grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
-              <MiniMetricRow label={t("optimize.skills")} percent={88} />
-              <MiniMetricRow label={t("optimize.experience")} percent={79} />
-              <MiniMetricRow label={t("optimize.portfolio")} percent={65} />
             </div>
           </div>
         </div>

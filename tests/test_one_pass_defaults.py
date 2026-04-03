@@ -6,10 +6,10 @@ def test_settings_default_max_iterations_is_one():
     assert Settings().max_iterations == 1
 
 
-def test_max_iterations_env_override_still_supported(monkeypatch):
+def test_max_iterations_env_override_is_ignored(monkeypatch):
     monkeypatch.setenv("MAX_ITERATIONS", "3")
     settings = get_settings()
-    assert settings.max_iterations == 3
+    assert settings.max_iterations == 1
 
 
 def test_job_parser_keeps_legacy_prompt_and_uses_new_prompt():

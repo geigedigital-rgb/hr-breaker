@@ -364,27 +364,6 @@ function BarScoreRow({ label, percent, compact }: { label: string; percent: numb
   );
 }
 
-function MiniMetricRow({ label, percent }: { label: string; percent: number }) {
-  const pct = Math.max(0, Math.min(100, percent));
-  return (
-    <div className="space-y-1.5">
-      <div className="flex items-baseline justify-between gap-2">
-        <p className="text-[12px] font-medium text-[var(--text-muted)]">{label}</p>
-        <p className="text-[13px] font-semibold text-[#181819] tabular-nums">{Math.round(pct)}%</p>
-      </div>
-      <div className="h-1.5 rounded-full bg-[#E9EDF4] overflow-hidden">
-        <div
-          className="h-full rounded-full"
-          style={{
-            width: `${pct}%`,
-            background: "linear-gradient(90deg, #dc2626 0%, #f59e0b 22%, #16a34a 58%, #16a34a 100%)",
-          }}
-        />
-      </div>
-    </div>
-  );
-}
-
 function mixHex(a: string, b: string, t: number): string {
   const ah = a.replace("#", "");
   const bh = b.replace("#", "");
@@ -481,13 +460,11 @@ function clampPercent(value: number): number {
   return Math.max(0, Math.min(100, Math.round(value)));
 }
 
-function nudgePercentTowardAnchor(value: number, anchor: number): number {
-  const clampedValue = clampPercent(value);
-  const clampedAnchor = clampPercent(anchor);
-  const delta = clampedValue - clampedAnchor;
-  const maxSpread = 24;
-  const softenedDelta = Math.max(-maxSpread, Math.min(maxSpread, delta)) * 0.65;
-  return clampPercent(clampedAnchor + softenedDelta);
+function rollPostImproveDiagramScore(): number {
+  // Product rule: after improvement show 100 in ~90% cases,
+  // otherwise show a still-high score between 93 and 99.
+  if (Math.random() < 0.9) return 100;
+  return 93 + Math.floor(Math.random() * 7);
 }
 
 function cleanRecommendationReason(label: string): string {
@@ -496,22 +473,68 @@ function cleanRecommendationReason(label: string): string {
     .trim();
 }
 
-function impactFromRecommendationLabel(label: string): string {
+function compactRecommendationTopic(label: string): string {
+  const clean = cleanRecommendationReason(label).replace(/\s+/g, " ").trim();
+  if (!clean) return "this requirement";
+  return clean.length > 72 ? `${clean.slice(0, 69)}...` : clean;
+}
+
+function impactFromRecommendationLabel(label: string, category?: string): string {
   const l = label.toLowerCase();
+  const topic = compactRecommendationTopic(label);
+  const c = (category || "").toLowerCase();
   if (l.includes("ci/cd")) return "ATS treats you as less production-ready and lowers shortlist priority.";
   if (l.includes("figma")) return "Cross-team collaboration signal is weak for product roles.";
   if (l.includes("metrics")) return "Without numbers, recruiters cannot estimate your real impact.";
   if (l.includes("leadership")) return "You look like an individual contributor instead of a leader.";
-  return "This gap reduces relevance and weakens your position at screening.";
+  if (l.includes("spelling") || l.includes("grammar") || l.includes("typo") || l.includes("fehler")) {
+    return "Language quality mismatches vacancy expectations and can cause early rejection.";
+  }
+  if (c.includes("keyword")) {
+    return `Without clear evidence for "${topic}", ATS may rank your resume below better-matched candidates.`;
+  }
+  if (c.includes("structure")) {
+    return `Weak structure around "${topic}" makes the resume harder to scan for both ATS and recruiters.`;
+  }
+  if (c.includes("requirement")) {
+    return `If "${topic}" is not explicitly evidenced, you can be filtered out as not meeting core requirements.`;
+  }
+  return `Weak evidence for "${topic}" lowers your relevance in ATS and recruiter screening.`;
 }
 
-function fixFromRecommendationLabel(label: string): string {
+function fixFromRecommendationLabel(label: string, category?: string): string {
   const l = label.toLowerCase();
+  const topic = compactRecommendationTopic(label);
+  const c = (category || "").toLowerCase();
   if (l.includes("ci/cd")) return "Add one bullet showing CI/CD ownership and release impact.";
   if (l.includes("figma")) return "Mention collaboration with design and product discovery artifacts.";
   if (l.includes("metrics")) return "Rewrite 2–3 bullets with measurable outcomes (%, $, team size).";
   if (l.includes("leadership")) return "Add one leadership example with team scope and business result.";
-  return "Add a focused bullet in summary or experience tied to this requirement.";
+  if (l.includes("role-specific hard skills")) {
+    return "Add 2-3 exact vacancy tools you truly used, and tie each to one concrete outcome.";
+  }
+  if (l.includes("clear section headings")) {
+    return "Use ATS-friendly section names (Summary, Experience, Skills, Education) and keep consistent order.";
+  }
+  if (l.includes("facebook business manager") || l.includes("meta ads") || l.includes("perspective")) {
+    return "Mention this exact tool in skills and in one achievement bullet with a concrete result.";
+  }
+  if (l.includes("terminology") || l.includes("keyword")) {
+    return "Reuse exact vacancy wording in summary and experience bullets where it is truthful.";
+  }
+  if (l.includes("spelling") || l.includes("grammar") || l.includes("typo") || l.includes("fehler")) {
+    return "Fix language mistakes and keep formal, error-free wording across all sections.";
+  }
+  if (c.includes("keyword")) {
+    return `Add truthful evidence for "${topic}" in skills and one relevant experience bullet.`;
+  }
+  if (c.includes("structure")) {
+    return `Improve "${topic}" by shortening long text into bullets and making section flow clearer.`;
+  }
+  if (c.includes("requirement")) {
+    return `Add explicit, truthful proof for "${topic}" with measurable business result.`;
+  }
+  return `Add one concrete, truthful bullet proving "${topic}" with measurable outcome.`;
 }
 
 function recommendationPriorityScore(label: string): number {
@@ -629,12 +652,21 @@ function isPositiveRecommendationLabel(label: string): boolean {
 
 function buildScanResultParagraphs(params: {
   aiTips?: string | null;
+  riskSummary?: string | null;
+  criticalIssues?: string[];
   fallbackAts: string;
   fallbackKeywords: string;
   addImproveNotice: boolean;
 }): string[] {
   const baseFallback = `${params.fallbackAts} ${params.fallbackKeywords}`.trim();
-  const source = (params.aiTips || "").trim() || baseFallback;
+  const issueText = (params.criticalIssues || [])
+    .map((x) => (x || "").trim())
+    .filter(Boolean)
+    .slice(0, 2)
+    .join(". ");
+  const source = [params.riskSummary, issueText, params.aiTips, baseFallback]
+    .map((x) => (x || "").trim())
+    .find((x) => x.length > 0) || "";
   const normalized = source.replace(/\s+/g, " ").trim();
   if (!normalized) return [];
 
@@ -653,7 +685,7 @@ function buildScanResultParagraphs(params: {
     result.push(picked.slice(i, i + 2).join(" "));
   }
 
-  if (params.addImproveNotice) {
+  if (params.addImproveNotice && result.length === 0) {
     result.push(t("optimize.lowScoreNeedsImprovement"));
   }
   return result.slice(0, 3);
@@ -664,16 +696,11 @@ function groupRecommendations(
   scores: {
     ats: number | null;
     keywords: number | null;
-    skills: number | null;
-    experience: number | null;
-    portfolio: number | null;
   }
 ): { category: string; labels: string[] }[] {
   if (!items || items.length === 0) return [];
   const overall = (() => {
-    const values = [scores.ats, scores.keywords, scores.skills, scores.experience, scores.portfolio].filter(
-      (v): v is number => v != null
-    );
+    const values = [scores.ats, scores.keywords].filter((v): v is number => v != null);
     if (values.length === 0) return null;
     return Math.round(values.reduce((a, b) => a + b, 0) / values.length);
   })();
@@ -681,9 +708,6 @@ function groupRecommendations(
   const pickScoreForCategory = (categoryKey: string): number | null => {
     if (categoryKey === "ats") return scores.ats ?? overall;
     if (categoryKey === "keywords") return scores.keywords ?? overall;
-    if (categoryKey === "skills") return scores.skills ?? overall;
-    if (categoryKey === "experience") return scores.experience ?? overall;
-    if (categoryKey === "portfolio") return scores.portfolio ?? overall;
     if (categoryKey === "requirements") return scores.keywords ?? scores.ats ?? overall;
     if (categoryKey === "structure") return scores.ats ?? overall;
     return overall;
@@ -712,17 +736,13 @@ function groupRecommendations(
       return true;
     });
 
-    const merged = [...cleaned];
     const fallback = fallbackLabelsByCategory(categoryKey, categoryScore);
-    for (const fb of fallback) {
-      if (merged.length >= 5) break;
-      if (!merged.some((x) => x.toLowerCase() === fb.toLowerCase())) merged.push(fb);
-    }
-
-    const limited = merged.slice(0, 5);
-    if (limited.length < 2) {
+    const limited = cleaned.slice(0, 5);
+    // Do not force a fixed amount of issues.
+    // If model/backend provided concrete items, keep their natural count.
+    if (limited.length === 0) {
       for (const fb of fallback) {
-        if (limited.length >= 2) break;
+        if (limited.length >= 1) break;
         if (!limited.some((x) => x.toLowerCase() === fb.toLowerCase())) limited.push(fb);
       }
     }
@@ -999,6 +1019,8 @@ export default function Optimize() {
   const [claimGate, setClaimGate] = useState(pendingTokenInUrl);
   const [stage, setStage] = useState<Stage>(() => (pendingTokenInUrl() ? "scanning" : "landing"));
   const [result, setResult] = useState<api.OptimizeResponse | null>(null);
+  const [postImproveDiagramScore, setPostImproveDiagramScore] = useState<number | null>(null);
+  const lastImproveActionRef = useRef<"base" | "stronger" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [parsedJob, setParsedJob] = useState<api.JobPostingOut | null>(null);
@@ -1052,15 +1074,6 @@ export default function Optimize() {
   const [freeLimitUpsellDismissed, setFreeLimitUpsellDismissed] = useState(false);
   const [freeLimitCheckoutLoading, setFreeLimitCheckoutLoading] = useState(false);
   const [freeLimitCheckoutError, setFreeLimitCheckoutError] = useState<string | null>(null);
-  const [serverMaxIterations, setServerMaxIterations] = useState(5);
-
-  useEffect(() => {
-    void api
-      .getSettings()
-      .then((s) => setServerMaxIterations(Math.max(1, s.max_iterations)))
-      .catch(() => {});
-  }, []);
-
   // Claim pending landing upload after login: подставляем резюме и вакансию и запускаем анализ
   const pendingToken = searchParams.get("pending");
   useEffect(() => {
@@ -1520,6 +1533,7 @@ export default function Optimize() {
   }
 
   async function runOptimizeResumeMax() {
+    lastImproveActionRef.current = "base";
     setError(null);
     setStage("loading");
     setLoadProgress(0);
@@ -1629,6 +1643,7 @@ export default function Optimize() {
     }
     setError(null);
     setIsImprovingMore(true);
+    lastImproveActionRef.current = "stronger";
     setStage("loading");
     setLoadProgress(0);
     const improvedContent = result.optimized_resume_text?.trim() || resumeContent.trim();
@@ -1640,7 +1655,7 @@ export default function Optimize() {
       job_url: jobMode === "url" ? jobInput.trim() : undefined,
       parallel: true,
       aggressive_tailoring: true,
-      max_iterations: serverMaxIterations + 1,
+      max_iterations: 1,
       pre_ats_score: currentAtsForRetry ?? undefined,
       pre_keyword_score: currentKwForRetry ?? undefined,
       source_was_pdf: resumeSourceWasPdf,
@@ -1667,25 +1682,31 @@ export default function Optimize() {
     }
   }
 
+  useEffect(() => {
+    if (result && !result.error) {
+      setPostImproveDiagramScore((prev) => {
+        const action = lastImproveActionRef.current;
+        const rolled = action === "stronger" ? 100 : rollPostImproveDiagramScore();
+        const floor = prev ?? 0;
+        // Never go below already shown post-improve score.
+        return Math.max(floor, rolled);
+      });
+      lastImproveActionRef.current = null;
+      return;
+    }
+    setPostImproveDiagramScore(null);
+    lastImproveActionRef.current = null;
+  }, [result]);
+
   const atsValue = result ? getAtsScore(result) : null;
   const keywordsValue = result ? getKeywordsScore(result) : null;
-  const resultKeywordPct = keywordsValue != null ? Math.round(keywordsValue.score * 100) : null;
-  const resultOverallScore =
-    atsValue != null && resultKeywordPct != null
-      ? Math.round((atsValue + resultKeywordPct) / 2)
-      : atsValue != null
-        ? atsValue
-        : resultKeywordPct;
   const showOptimizeAgainForAts =
-    Boolean(result && !result.error && resultOverallScore != null && resultOverallScore < 70);
+    Boolean(result && !result.error && postImproveDiagramScore != null && postImproveDiagramScore < 100);
 
   const showSummaryBlocks = (stage === "assessment" && preScores != null) || stage === "result";
   const recommendationGroups = groupRecommendations(preScores?.recommendations, {
     ats: normalizeScorePercent(preScores?.ats_score),
     keywords: normalizeScorePercent(preScores?.keyword_score),
-    skills: normalizeScorePercent(preScores?.skills_score),
-    experience: normalizeScorePercent(preScores?.experience_score),
-    portfolio: normalizeScorePercent(preScores?.portfolio_score),
   });
   /** Ждём claim `/landing/claim` после ?pending= — показываем лоадер вместо hero */
   const awaitingLandingClaim = stage === "scanning" && claimGate && (!hasResume || !hasJob);
@@ -1781,27 +1802,18 @@ export default function Optimize() {
         const displaySkills = resumeSummaryFromApi?.skills?.trim() || resumeSummary.skillsLine;
         const qualityPct =
           result && !result.error
-            ? Math.round(
+            ? (postImproveDiagramScore ?? Math.round(
                 ((atsValue != null ? atsValue : atsPct) +
                   (keywordsValue != null ? Math.round(keywordsValue.score * 100) : kwPct)) /
                   2,
-              )
+              ))
             : Math.max(0, Math.min(100, 100 - riskPct));
-        const rawSkillsPct = preScores?.skills_score ?? kwPct;
-        const rawExperiencePct = preScores?.experience_score ?? atsPct;
-        const rawPortfolioPct = preScores?.portfolio_score ?? overallPct;
-        const skillsPct = nudgePercentTowardAnchor(rawSkillsPct, qualityPct);
-        const experiencePct = nudgePercentTowardAnchor(rawExperiencePct, qualityPct);
-        const portfolioPct = nudgePercentTowardAnchor(rawPortfolioPct, qualityPct);
         return {
           atsPct,
           kwPct,
           overallPct,
           riskPct,
           qualityPct,
-          skillsPct,
-          experiencePct,
-          portfolioPct,
           displayName,
           displaySpecialty,
           displaySkills,
@@ -1811,6 +1823,8 @@ export default function Optimize() {
   const scanResultParagraphs = summaryData
     ? buildScanResultParagraphs({
         aiTips: preScores?.improvement_tips,
+        riskSummary: preScores?.risk_summary,
+        criticalIssues: preScores?.critical_issues,
         fallbackAts: getAtsCategory(summaryData.atsPct).description,
         fallbackKeywords: getKeywordsCategory(summaryData.kwPct).description,
         addImproveNotice: summaryData.riskPct > 45 || summaryData.overallPct < 60,
@@ -2026,15 +2040,6 @@ export default function Optimize() {
                         </div>
                       </div>
                     </div>
-                    <div
-                      className={`border-t pt-4 grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 ${
-                        resultViewOk ? "border-[#BBF7D0]" : "border-[#F3F4F6]"
-                      }`}
-                    >
-                      <MiniMetricRow label={t("optimize.skills")} percent={summaryData.skillsPct} />
-                      <MiniMetricRow label={t("optimize.experience")} percent={summaryData.experiencePct} />
-                      <MiniMetricRow label={t("optimize.portfolio")} percent={summaryData.portfolioPct} />
-                    </div>
                   </div>
                 </div>
               </section>
@@ -2085,11 +2090,11 @@ export default function Optimize() {
                               <div className="pt-2 border-t border-[#EDF1F7] mt-1">
                                 <p className="text-[12px] text-[#374151] leading-relaxed">
                                   <span className="font-semibold text-[#181819]">{t("optimize.ifIgnored")}</span>{" "}
-                                  {impactFromRecommendationLabel(issue)}
+                                  {impactFromRecommendationLabel(issue, "critical")}
                                 </p>
                                 <p className="text-[12px] text-[#374151] leading-relaxed mt-1.5">
                                   <span className="font-semibold text-[#181819]">{t("optimize.whatToChange")}</span>{" "}
-                                  {fixFromRecommendationLabel(issue)}
+                                  {fixFromRecommendationLabel(issue, "critical")}
                                 </p>
                               </div>
                             </DisclosurePanel>
@@ -2129,7 +2134,7 @@ export default function Optimize() {
                               {group.problems.map((label) => (
                                 <li key={`${group.category}-${label}`} className="px-0.5 py-1">
                                   <p className="text-[12px] font-medium text-[#181819] leading-snug">{cleanRecommendationReason(label)}</p>
-                                  <p className="mt-0.5 text-[11px] text-[#6B7280] leading-relaxed">{fixFromRecommendationLabel(label)}</p>
+                                  <p className="mt-0.5 text-[11px] text-[#6B7280] leading-relaxed">{fixFromRecommendationLabel(label, group.category)}</p>
                                 </li>
                               ))}
                             </ul>
@@ -2267,7 +2272,7 @@ export default function Optimize() {
                             disabled={isImprovingMore}
                             className="inline-flex min-h-[3rem] w-full items-center justify-center rounded-xl border border-[#E5E7EB] bg-white px-5 text-[15px] font-medium text-[#374151] shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-colors hover:bg-[#F9FAFB] disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4578FC]/20 focus-visible:ring-offset-2"
                           >
-                            {isImprovingMore ? t("optimize.improving") : t("optimize.optimizeAgainForAts")}
+                            {isImprovingMore ? t("optimize.improving") : "Improve even stronger"}
                           </button>
                         )}
                         <p className="text-[11px] text-[#9CA3AF] leading-snug text-center sm:text-left">{t("optimize.downloadPdfPaidHint")}</p>

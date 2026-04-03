@@ -200,10 +200,6 @@ export type AnalyzeResponse = {
   keyword_threshold: number;
   job?: JobPostingOut | null;
   recommendations?: RecommendationItem[];
-  /** Independent LLM breakdown 0-100 */
-  skills_score?: number | null;
-  experience_score?: number | null;
-  portfolio_score?: number | null;
   /** LLM-provided rejection risk 0-100 */
   rejection_risk_score?: number | null;
   /** Top reasons that drive rejection risk */
