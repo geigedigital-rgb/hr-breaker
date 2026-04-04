@@ -1977,7 +1977,8 @@ async def api_resume_thumbnail(file: UploadFile = File(...)) -> Response:
             if doc.page_count == 0:
                 raise HTTPException(400, "PDF has no pages")
             page = doc[0]
-            pix = page.get_pixmap(dpi=120)
+            # alpha=False: some PDFs yield a fully transparent pixmap; PNG then looks blank in <img>.
+            pix = page.get_pixmap(dpi=120, alpha=False)
             png_bytes = pix.tobytes("png")
             return Response(
                 content=png_bytes,
@@ -3534,7 +3535,7 @@ async def api_history_thumbnail(filename: str, user: dict | None = Depends(get_c
             if doc.page_count == 0:
                 raise HTTPException(404, "PDF has no pages")
             page = doc[0]
-            pix = page.get_pixmap(dpi=120)
+            pix = page.get_pixmap(dpi=120, alpha=False)
             png_bytes = pix.tobytes("png")
             return Response(
                 content=png_bytes,

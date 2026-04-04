@@ -1051,6 +1051,9 @@ export default function Optimize() {
   /** Keeps thumbnail URL after lastUploadedPdfFile is cleared (e.g. after register), so we still show real image. */
   const [resumeThumbnailUrl, setResumeThumbnailUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  /** Latest blob URL for PDF preview — read in effects without subscribing to re-runs. */
+  const resumeThumbnailUrlRef = useRef<string | null>(null);
+  resumeThumbnailUrlRef.current = resumeThumbnailUrl;
   const step2SectionRef = useRef<HTMLDivElement>(null);
   const prevHadResumeRef = useRef(false);
   const claimedPendingRef = useRef<string | null>(null);
@@ -1315,10 +1318,11 @@ export default function Optimize() {
       });
   }, [stage, hasResume, hasJob, jobMode, jobInput, resumeContent, result, refreshUser]);
 
-  // PDF thumbnail for compact match card if not yet loaded from Step 1 preview
+  // PDF thumbnail on assessment when user is not logged in (no register-upload path).
   useEffect(() => {
     if (stage !== "assessment" || !lastUploadedPdfFile || resumeThumbnailUrl) return;
     if (!lastUploadedPdfFile.name.toLowerCase().endsWith(".pdf")) return;
+    if (user) return;
     let cancelled = false;
     api
       .getResumeThumbnailUrl(lastUploadedPdfFile)
@@ -1329,14 +1333,43 @@ export default function Optimize() {
     return () => {
       cancelled = true;
     };
-  }, [stage, lastUploadedPdfFile, resumeThumbnailUrl]);
+  }, [stage, lastUploadedPdfFile, resumeThumbnailUrl, user]);
 
-  // После успешного анализа сохранить загруженный PDF в «Мои резюме», если пользователь авторизован
+  // После успешного анализа: сначала PNG превью (пока есть File), затем register — иначе гонка с очисткой File ломала превью.
   useEffect(() => {
     if (!preScores || !lastUploadedPdfFile || !user) return;
     const file = lastUploadedPdfFile;
-    setLastUploadedPdfFile(null);
-    api.registerResumeUpload(file).then(() => void refreshUser()).catch(() => {});
+    let cancelled = false;
+    void (async () => {
+      try {
+        const isPdf = file.name.toLowerCase().endsWith(".pdf");
+        if (isPdf && !resumeThumbnailUrlRef.current) {
+          try {
+            const url = await api.getResumeThumbnailUrl(file);
+            if (cancelled) {
+              URL.revokeObjectURL(url);
+              return;
+            }
+            setResumeThumbnailUrl(url);
+          } catch {
+            /* превью опционально */
+          }
+        }
+        if (cancelled) return;
+        setLastUploadedPdfFile(null);
+        try {
+          await api.registerResumeUpload(file);
+        } catch {
+          /* не блокируем экран оценки */
+        }
+        if (!cancelled) void refreshUser();
+      } catch {
+        if (!cancelled) setLastUploadedPdfFile(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [preScores, lastUploadedPdfFile, user, refreshUser]);
 
   async function handleResumePaste() {
@@ -2020,16 +2053,7 @@ export default function Optimize() {
                               );
                             }
                             if (lastUploadedPdfFile && lastUploadedPdfFile.name.toLowerCase().endsWith(".pdf")) {
-                              if (!resumeThumbnailUrl) {
-                                return <div className="absolute inset-0 bg-[#F8FAFD] animate-pulse" aria-hidden />;
-                              }
-                              return (
-                                <img
-                                  src={resumeThumbnailUrl}
-                                  alt=""
-                                  className="absolute inset-0 w-full h-full object-cover object-top opacity-90"
-                                />
-                              );
+                              return <div className="absolute inset-0 bg-[#F8FAFD] animate-pulse" aria-hidden />;
                             }
                             if (isPdfFromHistory && user?.id && user.id !== "local" && !lastUploadedPdfFile && uploadedFileName) {
                               return <ResumeHistoryThumbnailPreview filename={uploadedFileName} />;
