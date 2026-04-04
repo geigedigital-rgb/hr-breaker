@@ -120,6 +120,8 @@ logger = logging.getLogger(__name__)
 
 FREE_ANALYSES_PER_MONTH = 10
 FREE_OPTIMIZE_PER_MONTH = 10
+PENDING_EXPORT_TTL_SECONDS = 15 * 60
+PENDING_EXPORT_DIRNAME = "pending_optimize_exports"
 
 
 def _normalized_landing_cors_origins(raw: str) -> list[str]:
@@ -140,6 +142,81 @@ def _normalized_landing_cors_origins(raw: str) -> list[str]:
         out.append(apex)
         seen.add(apex)
     return out
+
+
+def _pending_export_dir() -> Path:
+    d = pdf_storage.output_dir / PENDING_EXPORT_DIRNAME
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _cleanup_expired_pending_exports() -> None:
+    now_ts = time.time()
+    base = _pending_export_dir()
+    for meta_path in base.glob("*.json"):
+        try:
+            data = json.loads(meta_path.read_text(encoding="utf-8"))
+            created_at = float(data.get("created_at") or 0.0)
+            if created_at and now_ts - created_at <= PENDING_EXPORT_TTL_SECONDS:
+                continue
+        except Exception:
+            pass
+        token = meta_path.stem
+        pdf_path = base / f"{token}.pdf"
+        try:
+            meta_path.unlink(missing_ok=True)
+        except Exception:
+            pass
+        try:
+            pdf_path.unlink(missing_ok=True)
+        except Exception:
+            pass
+
+
+def _save_pending_export(*, user_id: str, pdf_bytes: bytes, filename: str, meta: dict[str, Any]) -> tuple[str, float]:
+    _cleanup_expired_pending_exports()
+    token = secrets.token_urlsafe(24)
+    base = _pending_export_dir()
+    created_at = time.time()
+    expires_at = created_at + PENDING_EXPORT_TTL_SECONDS
+    (base / f"{token}.pdf").write_bytes(pdf_bytes)
+    payload = {
+        "created_at": created_at,
+        "expires_at": expires_at,
+        "user_id": user_id,
+        "filename": filename,
+        **(meta or {}),
+    }
+    (base / f"{token}.json").write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    return token, expires_at
+
+
+def _read_pending_export(token: str) -> dict[str, Any] | None:
+    _cleanup_expired_pending_exports()
+    safe = (token or "").strip()
+    if not safe or "/" in safe or "\\" in safe:
+        return None
+    base = _pending_export_dir()
+    meta_path = base / f"{safe}.json"
+    pdf_path = base / f"{safe}.pdf"
+    if not meta_path.is_file() or not pdf_path.is_file():
+        return None
+    try:
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    created_at = float(meta.get("created_at") or 0.0)
+    if created_at and time.time() - created_at > PENDING_EXPORT_TTL_SECONDS:
+        try:
+            meta_path.unlink(missing_ok=True)
+        except Exception:
+            pass
+        try:
+            pdf_path.unlink(missing_ok=True)
+        except Exception:
+            pass
+        return None
+    return {"token": safe, "meta": meta, "pdf_path": pdf_path, "meta_path": meta_path}
 
 
 # CORS: app frontend + landing (pitchcv.app + www — distinct origins in browsers)
@@ -332,6 +409,8 @@ class OptimizeResponse(BaseModel):
     success: bool
     pdf_base64: str | None = None
     pdf_filename: str | None = None
+    pending_export_token: str | None = None
+    pending_export_expires_at: str | None = None
     validation: ValidationResultOut
     job: JobPostingOut
     key_changes: list[ChangeDetailOut] | None = None
@@ -2436,6 +2515,8 @@ async def _run_optimize(
 
     pdf_filename = None
     pdf_b64 = None
+    pending_export_token: str | None = None
+    pending_export_expires_at: str | None = None
     optimized_resume_text: str | None = None
     _put_progress(progress_queue, 85, "Saving PDF…")
     can_export_pdf = True
@@ -2500,6 +2581,28 @@ async def _run_optimize(
         txt = (optimized.pdf_text or "").strip()
         if txt:
             optimized_resume_text = txt
+        if user and user.get("id"):
+            pending_name = pdf_storage.generate_path(
+                source.first_name, source.last_name, job.company, job.title,
+                unique_suffix=datetime.now().strftime("%Y%m%d_%H%M%S"),
+            ).name
+            pending_export_token, pending_exp_ts = _save_pending_export(
+                user_id=str(user["id"]),
+                pdf_bytes=optimized.pdf_bytes,
+                filename=pending_name,
+                meta={
+                    "source_checksum": source.checksum,
+                    "company": job.company,
+                    "job_title": job.title,
+                    "first_name": source.first_name,
+                    "last_name": source.last_name,
+                    "pre_ats_score": req.pre_ats_score,
+                    "pre_keyword_score": req.pre_keyword_score,
+                    "job_url": req.job_url,
+                    "source_was_pdf": bool(req.source_was_pdf),
+                },
+            )
+            pending_export_expires_at = datetime.fromtimestamp(pending_exp_ts, tz=timezone.utc).isoformat()
     _put_progress(progress_queue, 100, "Done")
 
     if opt_uid:
@@ -2536,6 +2639,8 @@ async def _run_optimize(
         success=validation.passed and bool(optimized and optimized.pdf_bytes),
         pdf_base64=pdf_b64,
         pdf_filename=pdf_filename,
+        pending_export_token=pending_export_token,
+        pending_export_expires_at=pending_export_expires_at,
         validation=validation_out,
         job=job_out,
         key_changes=key_changes_out,
@@ -2591,6 +2696,78 @@ async def api_optimize_stream(req: OptimizeRequest, user: dict | None = Depends(
         event_stream(),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.get("/optimize/pending-export/{token}")
+async def api_download_pending_optimize_export(token: str, user: dict = Depends(get_current_user)):
+    """Download previously generated optimize PDF after upgrade, without re-running optimize."""
+    uid = str(user.get("id") or "")
+    if not uid or uid == "local":
+        raise HTTPException(401, "Sign in is required")
+    if not _is_admin_user(user):
+        pool = await get_pool()
+        if not pool:
+            raise HTTPException(503, "Database unavailable")
+        sub = await user_get_subscription(pool, uid)
+        plan = sub.get("plan") or "free"
+        status = sub.get("status") or "free"
+        has_paid = plan in ("trial", "monthly") and status in ("active", "trial")
+        if not has_paid:
+            raise HTTPException(402, "PDF export requires trial or subscription")
+
+    pending = _read_pending_export(token)
+    if not pending:
+        raise HTTPException(404, "Saved optimize session not found or expired")
+    meta = pending["meta"]
+    owner_uid = str(meta.get("user_id") or "")
+    if owner_uid != uid and not _is_admin_user(user):
+        raise HTTPException(403, "Not allowed")
+    pdf_path_pending: Path = pending["pdf_path"]
+    if not pdf_path_pending.is_file():
+        raise HTTPException(404, "Saved PDF not found")
+
+    company = str(meta.get("company") or "")
+    job_title = str(meta.get("job_title") or "")
+    first_name = meta.get("first_name")
+    last_name = meta.get("last_name")
+    final_path = pdf_storage.generate_path(
+        first_name, last_name, company, job_title, unique_suffix=datetime.now().strftime("%Y%m%d_%H%M%S")
+    )
+    final_path.parent.mkdir(parents=True, exist_ok=True)
+    final_path.write_bytes(pdf_path_pending.read_bytes())
+    await pdf_storage.save_record_async(
+        GeneratedPDF(
+            path=final_path,
+            source_checksum=str(meta.get("source_checksum") or ""),
+            company=company,
+            job_title=job_title,
+            timestamp=datetime.now(),
+            first_name=first_name if isinstance(first_name, str) else None,
+            last_name=last_name if isinstance(last_name, str) else None,
+            pre_ats_score=meta.get("pre_ats_score"),
+            post_ats_score=None,
+            pre_keyword_score=meta.get("pre_keyword_score"),
+            post_keyword_score=None,
+            company_logo_url=None,
+            job_url=meta.get("job_url"),
+            source_was_pdf=bool(meta.get("source_was_pdf")),
+        ),
+        user_id=uid,
+    )
+    try:
+        pending["meta_path"].unlink(missing_ok=True)
+    except Exception:
+        pass
+    try:
+        pdf_path_pending.unlink(missing_ok=True)
+    except Exception:
+        pass
+    return FileResponse(
+        final_path,
+        media_type="application/pdf",
+        filename=final_path.name,
+        headers={"Cache-Control": "no-store"},
     )
 
 

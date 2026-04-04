@@ -1035,6 +1035,7 @@ export default function Optimize() {
   const [optimizePaywallOpen, setOptimizePaywallOpen] = useState(false);
   const [optimizePaywallCheckoutLoading, setOptimizePaywallCheckoutLoading] = useState(false);
   const [optimizePaywallCheckoutError, setOptimizePaywallCheckoutError] = useState<string | null>(null);
+  const [pendingPdfDownloadLoading, setPendingPdfDownloadLoading] = useState(false);
   const [pendingAutoImproveAfterCheckout, setPendingAutoImproveAfterCheckout] = useState(false);
   const checkoutSnapshotRestoredRef = useRef(false);
   const autoImproveStartedRef = useRef(false);
@@ -1123,22 +1124,26 @@ export default function Optimize() {
         resumeSourceWasPdf?: boolean;
         uploadedFileName?: string | null;
         resumeSummaryFromApi?: api.ExtractResumeSummaryResponse | null;
+        result?: api.OptimizeResponse | null;
+        stage?: Stage;
       };
-      if (p.v !== 1 || !p.preScores) return;
+      if (p.v !== 1) return;
       setResumeContent(p.resumeContent ?? "");
       setJobInput(p.jobInput ?? "");
       setJobMode(p.jobMode === "url" ? "url" : "text");
-      setPreScores(p.preScores);
+      setPreScores(p.preScores ?? null);
       setParsedJob(p.parsedJob ?? null);
       setResumeSourceWasPdf(!!p.resumeSourceWasPdf);
       setUploadedFileName(p.uploadedFileName ?? null);
       setResumeSummaryFromApi(p.resumeSummaryFromApi ?? null);
-      setResult(null);
+      setResult(p.result ?? null);
       setError(null);
-      setStage("assessment");
-      setPendingAutoImproveAfterCheckout(true);
+      const hasResultToResume = !!(p.result && !p.result.error);
+      setStage(hasResultToResume ? "result" : (p.stage === "result" ? "assessment" : (p.stage ?? "assessment")));
+      setPendingAutoImproveAfterCheckout(!hasResultToResume);
       checkoutSnapshotRestoredRef.current = true;
       sessionStorage.removeItem(OPTIMIZE_CHECKOUT_SNAPSHOT_KEY);
+      sessionStorage.removeItem(OPTIMIZE_PENDING_AUTO_IMPROVE_KEY);
     } catch {
       /* ignore */
     }
@@ -1484,7 +1489,7 @@ export default function Optimize() {
 
   function persistOptimizeSnapshotForCheckout() {
     try {
-      if (!preScores || !resumeContent.trim() || !jobInput.trim()) return;
+      if (!resumeContent.trim() || !jobInput.trim()) return;
       const payload = {
         v: 1 as const,
         resumeContent,
@@ -1495,6 +1500,8 @@ export default function Optimize() {
         resumeSourceWasPdf,
         uploadedFileName,
         resumeSummaryFromApi,
+        result,
+        stage,
       };
       sessionStorage.setItem(OPTIMIZE_CHECKOUT_SNAPSHOT_KEY, JSON.stringify(payload));
       sessionStorage.setItem(OPTIMIZE_PENDING_AUTO_IMPROVE_KEY, "1");
@@ -1527,6 +1534,19 @@ export default function Optimize() {
     } finally {
       setOptimizePaywallCheckoutLoading(false);
     }
+  }
+
+  function openDownloadCheckoutFlow() {
+    if (!user || user.id === "local") {
+      navigate("/login");
+      return;
+    }
+    persistOptimizeSnapshotForCheckout();
+    const q = new URLSearchParams();
+    q.set("return_to", "/optimize");
+    if (result?.pending_export_token) q.set("pending", result.pending_export_token);
+    if (result?.pending_export_expires_at) q.set("exp", result.pending_export_expires_at);
+    navigate(`/checkout/download-resume?${q.toString()}`);
   }
 
   async function runOptimizeResumeMax() {
@@ -1584,6 +1604,32 @@ export default function Optimize() {
         setParsedJob(null);
         setOfferPasteAsText(true);
       }
+    }
+  }
+
+  async function handleDownloadPendingPdf() {
+    if (!result?.pending_export_token || pendingPdfDownloadLoading) return;
+    setPendingPdfDownloadLoading(true);
+    setError(null);
+    try {
+      const { blob, filename } = await api.downloadPendingOptimizePdf(result.pending_export_token);
+      const url = URL.createObjectURL(blob);
+      try {
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+      setResult((prev) => (prev ? { ...prev, pending_export_token: null } : prev));
+      await refreshUser();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not download PDF");
+    } finally {
+      setPendingPdfDownloadLoading(false);
     }
   }
 
@@ -1884,8 +1930,19 @@ export default function Optimize() {
                     <ArrowDownTrayIcon className="w-5 h-5 shrink-0" aria-hidden />
                     {t("optimize.downloadPdf")}
                   </a>
+                ) : hasPaidPlan && result.pending_export_token ? (
+                  <button
+                    type="button"
+                    onClick={() => void handleDownloadPendingPdf()}
+                    className={ctaPrimaryCls}
+                    style={{ background: "linear-gradient(160deg, #5e8afc 0%, #4578FC 45%, #3d6ae6 100%)" }}
+                    disabled={pendingPdfDownloadLoading}
+                  >
+                    <ArrowDownTrayIcon className="w-5 h-5 shrink-0" aria-hidden />
+                    {pendingPdfDownloadLoading ? "Downloading..." : t("optimize.downloadPdf")}
+                  </button>
                 ) : (
-                  <button type="button" onClick={() => void handleOptimizePaywallStartTrial()} className={ctaPrimaryCls} style={{ background: "linear-gradient(160deg, #5e8afc 0%, #4578FC 45%, #3d6ae6 100%)" }} disabled={optimizePaywallCheckoutLoading}>
+                  <button type="button" onClick={openDownloadCheckoutFlow} className={ctaPrimaryCls} style={{ background: "linear-gradient(160deg, #5e8afc 0%, #4578FC 45%, #3d6ae6 100%)" }} disabled={optimizePaywallCheckoutLoading}>
                     <ArrowDownTrayIcon className="w-5 h-5 shrink-0" aria-hidden />
                     {t("optimize.downloadPdf")}
                   </button>
@@ -2236,10 +2293,21 @@ export default function Optimize() {
                               <ArrowDownTrayIcon className="w-5 h-5 shrink-0" aria-hidden />
                               {t("optimize.downloadPdf")}
                             </a>
+                          ) : hasPaidPlan && result.pending_export_token ? (
+                            <button
+                              type="button"
+                              onClick={() => void handleDownloadPendingPdf()}
+                              className="inline-flex min-h-[3rem] w-full flex-1 items-center justify-center gap-2 rounded-xl px-5 text-[15px] font-semibold text-white shadow-[0_4px_20px_-8px_rgba(69,120,252,0.45)] transition-[transform,opacity] hover:opacity-[0.96] active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4578FC]/40 focus-visible:ring-offset-2 disabled:opacity-50 whitespace-nowrap"
+                              style={{ background: "linear-gradient(160deg, #5e8afc 0%, #4578FC 45%, #3d6ae6 100%)" }}
+                              disabled={pendingPdfDownloadLoading}
+                            >
+                              <ArrowDownTrayIcon className="w-5 h-5 shrink-0" aria-hidden />
+                              {pendingPdfDownloadLoading ? "Downloading..." : t("optimize.downloadPdf")}
+                            </button>
                           ) : (
                             <button
                               type="button"
-                              onClick={() => void handleOptimizePaywallStartTrial()}
+                              onClick={openDownloadCheckoutFlow}
                               className="inline-flex min-h-[3rem] w-full flex-1 items-center justify-center gap-2 rounded-xl px-5 text-[15px] font-semibold text-white shadow-[0_4px_20px_-8px_rgba(69,120,252,0.45)] transition-[transform,opacity] hover:opacity-[0.96] active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4578FC]/40 focus-visible:ring-offset-2 disabled:opacity-50 whitespace-nowrap"
                               style={{ background: "linear-gradient(160deg, #5e8afc 0%, #4578FC 45%, #3d6ae6 100%)" }}
                               disabled={optimizePaywallCheckoutLoading}

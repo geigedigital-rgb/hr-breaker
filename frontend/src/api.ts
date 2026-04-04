@@ -57,11 +57,18 @@ export type OptimizeResponse = {
   success: boolean;
   pdf_base64: string | null;
   pdf_filename: string | null;
+  pending_export_token?: string | null;
+  pending_export_expires_at?: string | null;
   validation: ValidationResultOut;
   job: JobPostingOut;
   key_changes?: ChangeDetailOut[] | null;
   error: string | null;
   optimized_resume_text?: string | null;
+};
+
+export type DownloadPendingOptimizePdfResponse = {
+  blob: Blob;
+  filename: string;
 };
 export type HistoryItem = {
   filename: string;
@@ -297,6 +304,30 @@ export async function optimize(params: {
   const data = await parseJsonOrThrow<OptimizeResponse & { detail?: string }>(r);
   if (!r.ok) throw new Error(data.detail || "Optimize failed");
   return data;
+}
+
+export async function downloadPendingOptimizePdf(token: string): Promise<DownloadPendingOptimizePdfResponse> {
+  const r = await fetch(`${API}/optimize/pending-export/${encodeURIComponent(token)}`, {
+    method: "GET",
+    headers: authHeaders(),
+  });
+  if (!r.ok) {
+    let detail = r.statusText;
+    try {
+      const parsed = await parseJsonOrThrow<{ detail?: string }>(r);
+      detail = parsed.detail || detail;
+    } catch {
+      const text = await r.text().catch(() => "");
+      detail = text || detail;
+    }
+    throw new Error(detail || "Could not download PDF");
+  }
+  const blob = await r.blob();
+  const cd = r.headers.get("content-disposition") || "";
+  const m = cd.match(/filename\*=UTF-8''([^;]+)|filename="?([^"]+)"?/i);
+  const rawName = (m?.[1] || m?.[2] || "").trim();
+  const filename = rawName ? decodeURIComponent(rawName) : "optimized_resume.pdf";
+  return { blob, filename };
 }
 
 /** Optimize with real progress via SSE. onProgress(percent, message) is called for each event. */

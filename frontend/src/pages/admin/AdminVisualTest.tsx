@@ -1,5 +1,6 @@
 import { useMemo, useState, useEffect } from "react";
 import { createPortal } from "react-dom";
+import { useNavigate } from "react-router-dom";
 import { Disclosure, DisclosureButton, DisclosurePanel } from "@headlessui/react";
 import {
   SparklesIcon,
@@ -203,6 +204,7 @@ function getQualityLevelLabelSandbox(qualityPct: number): string {
 }
 
 export default function AdminVisualTest() {
+  const navigate = useNavigate();
   const [viewMode, setViewMode] = useState<ViewMode>("both");
 
   const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
@@ -533,6 +535,9 @@ export default function AdminVisualTest() {
             <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch">
               <button
                 type="button"
+                onClick={() =>
+                  navigate("/checkout/download-resume?sandbox=1&pending=sandbox_demo&return_to=%2Fadmin%2Fvisual")
+                }
                 className="inline-flex min-h-[3rem] w-full flex-1 items-center justify-center gap-2 rounded-xl px-5 text-[15px] font-semibold text-white shadow-[0_4px_20px_-8px_rgba(69,120,252,0.45)] whitespace-nowrap"
                 style={{ background: "linear-gradient(160deg, #5e8afc 0%, #4578FC 45%, #3d6ae6 100%)" }}
               >

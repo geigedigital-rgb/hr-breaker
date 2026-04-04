@@ -11,6 +11,7 @@ import Progress from "./pages/Progress";
 import Vacancies from "./pages/Vacancies";
 import Settings from "./pages/Settings";
 import Upgrade from "./pages/Upgrade";
+import DownloadCheckout from "./pages/DownloadCheckout";
 import Partner from "./pages/Partner";
 import Login from "./pages/Login";
 import AuthCallback from "./pages/AuthCallback";
@@ -96,6 +97,7 @@ function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/signup-success" element={<SignupSuccess />} />
             <Route path="/auth/callback" element={<AuthCallback />} />
+            <Route path="/checkout/download-resume" element={<RequireAuth><DownloadCheckout /></RequireAuth>} />
             <Route path="/" element={<RequireAuth><Layout /></RequireAuth>}>
               <Route index element={<Home />} />
               <Route path="optimize" element={<Optimize />} />
