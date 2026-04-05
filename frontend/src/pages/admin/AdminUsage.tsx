@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { getAdminUsageAudit, type AdminUsageAuditItem } from "../../api";
-import { t } from "../../i18n";
+import { adminAuditActionLabel, t } from "../../i18n";
 
 export default function AdminUsage() {
   const [items, setItems] = useState<AdminUsageAuditItem[]>([]);
@@ -72,7 +72,12 @@ export default function AdminUsage() {
                   <td className="px-3 py-2 text-[var(--text-muted)] truncate max-w-[140px]" title={row.user_email ?? undefined}>
                     {row.user_email ?? "—"}
                   </td>
-                  <td className="px-3 py-2 font-mono text-xs text-[var(--text)]">{row.action}</td>
+                  <td
+                    className="px-3 py-2 text-xs text-[var(--text)] max-w-[220px]"
+                    title={row.action || undefined}
+                  >
+                    {adminAuditActionLabel(row.action)}
+                  </td>
                   <td className="px-3 py-2 text-xs text-[var(--text-muted)] truncate max-w-[120px]" title={row.model ?? undefined}>
                     {row.model ?? "—"}
                   </td>

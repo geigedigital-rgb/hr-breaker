@@ -2627,13 +2627,30 @@ async def _run_optimize(
     pool_done = await get_pool()
     if audit_uid and pool_done:
         ok = validation.passed and bool(optimized and optimized.pdf_bytes)
+        opt_fail_reason: str | None = None
+        if not ok:
+            if not optimized:
+                opt_fail_reason = "Optimizer produced no result"
+            elif not getattr(optimized, "pdf_bytes", None):
+                opt_fail_reason = "PDF was not generated (no bytes from renderer)"
+            elif not validation.passed:
+                opt_fail_reason = "Validation filters did not pass"
+            else:
+                opt_fail_reason = "Optimize finished without a successful PDF"
+        oc_meta: dict = {
+            "validation_passed": validation.passed,
+            "has_pdf": bool(optimized and optimized.pdf_bytes),
+        }
+        if pending_export_token:
+            oc_meta["pending_export"] = True
         await log_usage_event(
             pool_done,
             audit_uid,
             "optimize_complete",
             None,
             success=ok,
-            metadata={"validation_passed": validation.passed, "has_pdf": bool(optimized and optimized.pdf_bytes)},
+            error_message=opt_fail_reason,
+            metadata=oc_meta,
         )
 
     return OptimizeResponse(

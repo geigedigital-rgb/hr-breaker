@@ -543,6 +543,20 @@ const en = {
       journeyLogHint:
         "Saved PDFs, analysis/optimize events, and short flags from each run. Newest first — last ~200 audit rows and ~150 PDFs per load, one request.",
       failed: "failed",
+      /** Admin timeline & usage table: labels for usage_audit `action` codes (fallback: raw code). */
+      journeyAction: {
+        analyze_ats_score: "Analyze — ATS match score",
+        analyze_insights: "Analyze — risk & improvement insights",
+        job_parse: "Job posting parsed (LLM)",
+        extract_name: "Name extracted from resume",
+        analyze_job_scrape: "Analyze — job URL fetch failed",
+        optimize_job_scrape: "Optimize — job URL fetch failed",
+        optimize_extract_name: "Optimize — name extraction failed",
+        optimize_pipeline: "Optimize — pipeline error",
+        optimize_generate: "Optimize — AI resume generation",
+        optimize_complete: "Optimize — run finished",
+        stripe_checkout_completed: "Stripe — subscription checkout",
+      },
     },
     reviews: {
       title: "Reviews moderation",
@@ -648,6 +662,13 @@ function get(obj: Record<string, unknown>, path: string): string | undefined {
 export function t(key: string): string {
   const out = get(en as Record<string, unknown>, key);
   return out ?? key;
+}
+
+/** Human-readable label for `usage_audit` action codes in admin (Usage table, user journey). */
+export function adminAuditActionLabel(action: string | null | undefined): string {
+  if (action == null || action === "") return "—";
+  const v = get(en as Record<string, unknown>, `admin.userDetail.journeyAction.${action}`);
+  return typeof v === "string" ? v : action;
 }
 
 /** Replace {name}, {n} etc. in template with values. */

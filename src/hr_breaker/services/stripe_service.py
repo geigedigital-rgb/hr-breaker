@@ -13,6 +13,7 @@ import logging
 from datetime import datetime, timezone, timedelta
 
 from hr_breaker.config import get_settings
+from hr_breaker.services.usage_audit import log_usage_event
 
 logger = logging.getLogger(__name__)
 
@@ -234,6 +235,8 @@ async def handle_checkout_session_completed(
 
         # $2.99: if STRIPE_PRICE_TRIAL_ID is set, Checkout already collected it (one-time line item on first invoice).
         # Legacy: no trial price id → charge here (user saw $0 on Checkout).
+        trial_checkout_ok = True
+        trial_checkout_err: str | None = None
         if price_key == PRICE_KEY_TRIAL and not (get_settings().stripe_price_trial_id or "").strip():
             try:
                 customer_id = getattr(session, "customer", None)
@@ -253,11 +256,27 @@ async def handle_checkout_session_completed(
                     logger.info("Trial signup fee $2.99 charged for user %s (legacy webhook path)", user_id)
             except Exception as e:
                 logger.exception("Failed to charge trial $2.99 for user %s: %s", user_id, e)
+                trial_checkout_ok = False
+                trial_checkout_err = str(e)[:2000]
                 try:
                     stripe.Subscription.modify(sub_id, cancel_at_period_end=True)
                     logger.warning("Subscription set to cancel at period end after failed $2.99 charge")
                 except Exception as e2:
                     logger.exception("Failed to cancel subscription: %s", e2)
+        await log_usage_event(
+            pool,
+            str(user_id),
+            "stripe_checkout_completed",
+            None,
+            success=trial_checkout_ok,
+            error_message=trial_checkout_err,
+            metadata={
+                "price_key": price_key or "",
+                "subscription_plan": "trial",
+                "subscription_status": "trial",
+                "stripe_subscription_id": sub.id,
+            },
+        )
         return
 
     # Active (no trial) — e.g. monthly signup
@@ -271,6 +290,19 @@ async def handle_checkout_session_completed(
             current_period_end=current_period_end,
         )
         logger.info("Subscription activated for user %s until %s", user_id, current_period_end)
+        await log_usage_event(
+            pool,
+            str(user_id),
+            "stripe_checkout_completed",
+            None,
+            success=True,
+            metadata={
+                "price_key": price_key or "",
+                "subscription_plan": "monthly",
+                "subscription_status": "active",
+                "stripe_subscription_id": sub.id,
+            },
+        )
 
 
 async def handle_subscription_updated(

@@ -8,7 +8,7 @@ import {
   patchAdminUserSubscription,
   type AdminUserDetail,
 } from "../../api";
-import { t, tFormat } from "../../i18n";
+import { adminAuditActionLabel, t, tFormat } from "../../i18n";
 
 function isoDaysFromNow(days: number): string {
   const d = new Date();
@@ -317,8 +317,14 @@ export default function AdminUserDetail() {
                 const tin = j.input_tokens ?? 0;
                 const tout = j.output_tokens ?? 0;
                 if (tin > 0 || tout > 0) auditMetaParts.push(`${tin}→${tout} tok`);
+                const code = (j.action || j.title || "").trim();
+                if (code && adminAuditActionLabel(code) !== code) auditMetaParts.push(code);
               }
               const auditMetaLine = auditMetaParts.length > 0 ? auditMetaParts.join(" · ") : null;
+              const entryTitle =
+                j.kind === "audit"
+                  ? adminAuditActionLabel((j.action || j.title || "").trim() || null)
+                  : j.title;
               return (
                 <li key={`${j.kind}-${j.at}-${i}`} className="relative">
                   <span className="absolute -left-[1.15rem] top-1.5 h-2 w-2 rounded-full bg-[#4578FC]" aria-hidden />
@@ -326,7 +332,7 @@ export default function AdminUserDetail() {
                     {j.at ? new Date(j.at).toLocaleString() : "—"}
                   </p>
                   <p className="font-medium text-[var(--text)]">
-                    {j.title}
+                    {entryTitle}
                     {j.kind === "audit" && j.success === false ? (
                       <span className="ml-2 text-xs text-red-600">{t("admin.userDetail.failed")}</span>
                     ) : null}
