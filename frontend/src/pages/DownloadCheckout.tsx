@@ -14,15 +14,6 @@ import * as api from "../api";
 import { useAuth } from "../contexts/AuthContext";
 import { t } from "../i18n";
 
-/** Neutral notice (resume.io–style): no amber/red fills. */
-function InlineNotice({ children }: { children: ReactNode }) {
-  return (
-    <p className="text-[13px] text-[#4B5563] leading-relaxed border border-[#E5E7EB] bg-white rounded-lg px-3.5 py-2.5">
-      {children}
-    </p>
-  );
-}
-
 function StepItem({
   label,
   state,
@@ -60,10 +51,61 @@ function SandboxFeatureRow({
   children: ReactNode;
 }) {
   return (
-    <li className="flex gap-3.5 items-start text-[13px] text-[#374151] leading-snug">
-      <Icon className="w-[22px] h-[22px] shrink-0 text-[#111827] mt-0.5" strokeWidth={1.25} />
-      <span>{children}</span>
+    <li className="flex gap-4 sm:gap-5 items-start text-[13px] text-[#374151] leading-snug">
+      <span
+        className="inline-flex h-[1lh] w-[22px] shrink-0 items-center justify-center self-start text-[#111827]"
+        aria-hidden
+      >
+        <Icon className="w-[22px] h-[22px] shrink-0" strokeWidth={1.25} />
+      </span>
+      <span className="min-w-0 flex-1">{children}</span>
     </li>
+  );
+}
+
+/** Strikethrough “was” prices shown before current trial / monthly amounts */
+const PRICE_WAS_TRIAL = "$5.99";
+const PRICE_WAS_MONTHLY = "$39";
+
+const SUBSCRIPTION_BENEFITS: { text: string; icon: string }[] = [
+  { text: "Instantly tailor your resume to any job", icon: "target.svg" },
+  { text: "Unlock AI-powered resume optimization", icon: "cv.svg" },
+  { text: "Start getting more callbacks from your applications", icon: "dollar.svg" },
+  { text: "Get noticed by recruiters faster", icon: "bag.svg" },
+  { text: "Make sure your resume gets past ATS filters", icon: "puzle.svg" },
+  { text: "Become a top 1% candidate", icon: "0fficedress.svg" },
+  { text: "7-day money-back guarantee", icon: "time.svg" },
+  { text: "24/7 support whenever you need help", icon: "chat.svg" },
+];
+
+const TRUST_EMPLOYER_LOGOS: { file: string; label: string }[] = [
+  { file: "amazon.png", label: "Amazon" },
+  { file: "asml.png", label: "ASML" },
+  { file: "canva.png", label: "Canva" },
+  { file: "dhl.png", label: "DHL" },
+  { file: "spotyfy.png", label: "Spotify" },
+  { file: "vw.png", label: "Volkswagen" },
+];
+
+function EmployerTrustStrip() {
+  return (
+    <div className="mt-3 w-full lg:mt-4">
+      <p className="text-center text-[11px] font-semibold uppercase tracking-[0.1em] text-[#6B7280] mb-2 sm:mb-2.5">
+        {t("upgrade.trustEmployersTitle")}
+      </p>
+      <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-4 sm:gap-x-8">
+        {TRUST_EMPLOYER_LOGOS.map(({ file, label }) => (
+          <img
+            key={file}
+            src={`/logos/${file}`}
+            alt={label}
+            className="h-7 w-auto max-h-8 max-w-[104px] object-contain sm:h-8"
+            loading="lazy"
+            decoding="async"
+          />
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -74,7 +116,7 @@ export default function DownloadCheckout() {
   const [params] = useSearchParams();
   const [loadingPlan, setLoadingPlan] = useState<"trial" | "monthly" | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [sandboxSelected, setSandboxSelected] = useState<"trial" | "monthly">("trial");
+  const [selectedPlan, setSelectedPlan] = useState<"trial" | "monthly">("trial");
   const [socialProofCount] = useState(() => 412 + Math.floor(Math.random() * (670 - 412 + 1)));
 
   const fromState = location.state as { pendingExportToken?: string; returnTo?: string } | null;
@@ -116,6 +158,14 @@ export default function DownloadCheckout() {
     return `${baseUrl}/checkout/download-resume?${q.toString()}`;
   }, [pendingExportToken, returnTo]);
 
+  const continueDisabled =
+    loadingPlan !== null ||
+    (!sandboxMode && !pendingExportToken) ||
+    (!sandboxMode && remainingSeconds === 0);
+
+  const showCheckoutSubtitle =
+    !sandboxMode || canceled || Boolean(error);
+
   async function startCheckout(priceKey: "trial" | "monthly") {
     if (sandboxMode) {
       setError("Sandbox mode: checkout is disabled. This page is for UI flow preview.");
@@ -143,7 +193,7 @@ export default function DownloadCheckout() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F4F6FB] text-[#181819]">
+    <div className="min-h-screen bg-[#F5F8FF] text-[#181819]">
       <header className="border-b border-[#E6EAF4] bg-white/85 backdrop-blur-sm sticky top-0 z-20">
         <div className="max-w-6xl mx-auto px-4 md:px-6 h-16 flex items-center justify-between gap-4">
           <Link to={returnTo} className="inline-flex items-center gap-2 shrink-0">
@@ -172,240 +222,275 @@ export default function DownloadCheckout() {
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-4 md:px-6 py-8 md:py-10">
-        <section className="rounded-2xl border border-[#E6EAF4] bg-white p-5 md:p-7 shadow-sm">
-          <div className="flex flex-col lg:flex-row gap-6 lg:gap-7">
-            <div className="lg:w-[330px] shrink-0 space-y-4">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#4578FC]">Resume export</p>
-              <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">Choose a plan to unlock PDF download</h1>
-              <p className="text-sm text-[#5B6378] leading-relaxed">
-                Your optimized resume is already saved in this session. After payment, you return to your result page and download it.
-              </p>
-              {sandboxMode ? (
-                <InlineNotice>
-                  Sandbox mode for admin: no Stripe redirect, no charges, visual flow only.
-                </InlineNotice>
-              ) : pendingExportToken ? (
-                <InlineNotice>
-                  Saved optimization found. No repeated analysis or optimization will run after payment.
-                </InlineNotice>
-              ) : (
-                <InlineNotice>
-                  Saved optimization token is missing. Return to optimize and click Download PDF again.
-                </InlineNotice>
-              )}
-              {!sandboxMode && pendingExportToken && timerLabel && (
-                <div className="inline-flex items-center gap-2 rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-[12px] text-[#374151]">
-                  <span className="text-[#6B7280]">Saved for</span>
-                  <span className="font-semibold tabular-nums text-[#111827]">{timerLabel}</span>
-                </div>
-              )}
-              {!sandboxMode && pendingExportToken && remainingSeconds === 0 && (
-                <InlineNotice>
-                  Saved session expired. Return to optimize and click Download PDF again.
-                </InlineNotice>
-              )}
-              {canceled && (
-                <InlineNotice>Payment was canceled. Your saved optimization is still available.</InlineNotice>
-              )}
-              {error && <InlineNotice>{error}</InlineNotice>}
-            </div>
+      <main className="max-w-[1200px] mx-auto px-6 pb-32 pt-3 lg:px-8 lg:pb-14 lg:pt-8">
+        <h1 className="text-2xl sm:text-3xl md:text-[2rem] font-semibold tracking-tight text-[#111827] text-center mb-3 lg:mb-5">
+          {t("upgrade.checkoutPageTitle")}
+        </h1>
 
-            {sandboxMode ? (
-              <div className="flex-1 flex flex-col gap-5 min-w-0">
-                <div className="grid sm:grid-cols-2 gap-4 sm:gap-5 items-start">
-                  <div className="relative pb-5">
+        {showCheckoutSubtitle ? (
+          <div className="mb-4 space-y-2 text-[13px] text-[#5B6378] max-w-2xl mx-auto text-center leading-relaxed">
+            {!sandboxMode && pendingExportToken ? (
+              <>
+                <p>
+                  Your optimized resume is saved for this session. After payment you return to your result page and
+                  download the PDF.
+                </p>
+                {timerLabel ? (
+                  <p className="text-[#111827]">
+                    <span className="text-[#6B7280]">Saved for</span>{" "}
+                    <span className="font-semibold tabular-nums">{timerLabel}</span>
+                  </p>
+                ) : null}
+              </>
+            ) : !sandboxMode ? (
+              <p className="text-amber-900/90">No saved session. Go back to Optimize and tap Download PDF again.</p>
+            ) : null}
+            {!sandboxMode && pendingExportToken && remainingSeconds === 0 ? (
+              <p className="text-red-700">Session expired. Run optimize again.</p>
+            ) : null}
+            {canceled ? <p>Payment was canceled — you can try again.</p> : null}
+            {error ? <p className="text-red-700">{error}</p> : null}
+          </div>
+        ) : null}
+
+        <div className="grid grid-cols-1 gap-y-3 lg:grid-cols-[2fr_3fr] lg:gap-x-10 lg:gap-y-7 lg:items-stretch">
+          <div className="min-w-0 flex flex-col h-full min-h-0 lg:row-start-1 lg:col-start-1">
+            <>
+                <div className="shrink-0 flex flex-col gap-2 lg:grid lg:grid-cols-2 lg:items-start lg:gap-4">
+                  <div className="relative w-full min-w-0 lg:mb-4">
+                    <div
+                      className="absolute bottom-full left-0 right-0 z-30 mb-2 max-lg:hidden lg:flex lg:justify-center"
+                      role="status"
+                      aria-live="polite"
+                    >
+                      <div className="relative w-max max-w-full rounded-lg border border-white/15 bg-[#0c1222] px-2.5 py-2 text-center shadow-[0_12px_36px_rgba(2,6,23,0.5)] ring-1 ring-black/20">
+                        <p className="text-[11px] font-semibold leading-tight text-white tabular-nums">
+                          <span className="text-[#93C5FD]">{socialProofCount}</span>
+                          <span className="font-medium text-white/90"> people chose this</span>
+                        </p>
+                        <p className="mt-0.5 text-[10px] font-medium leading-tight text-white/65">
+                          in the last 24 hours
+                        </p>
+                        <div
+                          className="pointer-events-none absolute left-1/2 top-full h-0 w-0 -translate-x-1/2 border-x-[7px] border-t-[8px] border-x-transparent border-t-[#0c1222]"
+                          aria-hidden
+                        />
+                      </div>
+                    </div>
                     <button
                       type="button"
-                      onClick={() => setSandboxSelected("trial")}
+                      onClick={() => setSelectedPlan("trial")}
                       className={`w-full text-left rounded-xl bg-white p-4 sm:p-5 transition-shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4578FC]/35 focus-visible:ring-offset-2 ${
-                        sandboxSelected === "trial"
+                        selectedPlan === "trial"
                           ? "border-2 border-[#4578FC] shadow-[0_1px_3px_rgba(69,120,252,0.12)]"
                           : "border border-[#E5E7EB] hover:border-[#D1D5DB]"
                       }`}
                     >
-                      <div className="flex gap-3">
-                        <span
-                          className={`mt-0.5 flex h-4 w-4 shrink-0 rounded-full border-2 items-center justify-center ${
-                            sandboxSelected === "trial" ? "border-[#4578FC]" : "border-[#D1D5DB]"
-                          }`}
-                          aria-hidden
-                        >
-                          {sandboxSelected === "trial" ? (
-                            <span className="h-2 w-2 rounded-full bg-[#4578FC]" />
-                          ) : null}
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-[15px] font-medium text-[#111827]">7-days</p>
-                          <p className="mt-1 text-[28px] font-bold tracking-tight text-[#111827] tabular-nums leading-none">
-                            {t("upgrade.trialPrice")}
-                          </p>
-                          <p className="mt-2.5 text-[11px] leading-snug text-[#6B7280]">
-                            {socialProofCount} people chose this in the last 24 hours
+                      <div className="flex items-center justify-between gap-3 lg:hidden">
+                        <div className="flex min-w-0 items-center gap-2 sm:gap-2.5">
+                          <span
+                            className={`flex h-4 w-4 shrink-0 rounded-full border-2 items-center justify-center ${
+                              selectedPlan === "trial" ? "border-[#4578FC]" : "border-[#D1D5DB]"
+                            }`}
+                            aria-hidden
+                          >
+                            {selectedPlan === "trial" ? (
+                              <span className="h-2 w-2 rounded-full bg-[#4578FC]" />
+                            ) : null}
+                          </span>
+                          <div className="flex min-w-0 flex-wrap items-center gap-2">
+                            <span className="text-sm font-medium text-[#111827]">7-days</span>
+                            <span className="inline-flex shrink-0 items-center rounded-md bg-gradient-to-r from-[#4578FC] to-[#5B6CF0] px-3 py-1 text-xs font-bold uppercase tracking-wide text-white shadow-sm sm:px-3.5 sm:py-1.5 sm:text-[13px]">
+                              Most popular
+                            </span>
+                          </div>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <p className="flex flex-wrap items-baseline justify-end gap-2 text-2xl sm:text-3xl font-bold tracking-tight text-[#111827] tabular-nums leading-none">
+                            <span className="text-lg sm:text-xl font-semibold text-[#9CA3AF] line-through decoration-[#9CA3AF]">
+                              {PRICE_WAS_TRIAL}
+                            </span>
+                            <span>{t("upgrade.trialPrice")}</span>
                           </p>
                         </div>
                       </div>
+                      <div className="hidden lg:flex lg:flex-col lg:gap-2">
+                        <div className="flex items-start gap-2.5">
+                          <span
+                            className={`mt-0.5 flex h-4 w-4 shrink-0 rounded-full border-2 items-center justify-center ${
+                              selectedPlan === "trial" ? "border-[#4578FC]" : "border-[#D1D5DB]"
+                            }`}
+                            aria-hidden
+                          >
+                            {selectedPlan === "trial" ? (
+                              <span className="h-2 w-2 rounded-full bg-[#4578FC]" />
+                            ) : null}
+                          </span>
+                          <p className="text-sm font-medium text-[#111827]">7-days</p>
+                        </div>
+                        <p className="flex flex-wrap items-baseline gap-2 text-xl lg:text-2xl font-bold tracking-tight text-[#111827] tabular-nums leading-none">
+                          <span className="text-base lg:text-lg font-semibold text-[#9CA3AF] line-through decoration-[#9CA3AF]">
+                            {PRICE_WAS_TRIAL}
+                          </span>
+                          <span>{t("upgrade.trialPrice")}</span>
+                        </p>
+                      </div>
                     </button>
                     <span
-                      className="pointer-events-none absolute bottom-0 left-1/2 z-[1] -translate-x-1/2 translate-y-1/2 whitespace-nowrap rounded-md bg-gradient-to-r from-[#4578FC] to-[#5B6CF0] px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-white shadow-sm"
+                      className="pointer-events-none absolute bottom-0 left-1/2 z-[35] hidden -translate-x-1/2 translate-y-1/2 whitespace-nowrap rounded-md bg-gradient-to-r from-[#4578FC] to-[#5B6CF0] px-2.5 py-0.5 text-[9px] sm:text-[10px] font-bold uppercase tracking-wide text-white shadow-sm lg:inline-flex"
                       aria-hidden
                     >
                       Most popular
                     </span>
                   </div>
+
                   <button
                     type="button"
-                    onClick={() => setSandboxSelected("monthly")}
+                    onClick={() => setSelectedPlan("monthly")}
                     className={`w-full text-left rounded-xl bg-white p-4 sm:p-5 transition-shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4578FC]/25 focus-visible:ring-offset-2 ${
-                      sandboxSelected === "monthly"
+                      selectedPlan === "monthly"
                         ? "border-2 border-[#4578FC] shadow-[0_1px_3px_rgba(69,120,252,0.12)]"
                         : "border border-[#E5E7EB] hover:border-[#D1D5DB]"
                     }`}
                   >
-                    <div className="flex gap-3">
-                      <span
-                        className={`mt-0.5 flex h-4 w-4 shrink-0 rounded-full border-2 items-center justify-center ${
-                          sandboxSelected === "monthly" ? "border-[#4578FC]" : "border-[#D1D5DB]"
-                        }`}
-                        aria-hidden
-                      >
-                        {sandboxSelected === "monthly" ? (
-                          <span className="h-2 w-2 rounded-full bg-[#4578FC]" />
-                        ) : null}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-[15px] font-medium text-[#111827]">{t("upgrade.monthlyTitle")}</p>
-                        <p className="mt-1 text-[28px] font-bold tracking-tight text-[#111827] tabular-nums leading-none">
-                          {t("upgrade.monthlyPrice")}
-                          <span className="text-[15px] font-semibold text-[#6B7280]"> /mo</span>
+                    <div className="flex items-center justify-between gap-3 lg:hidden">
+                      <div className="flex min-w-0 items-center gap-2.5">
+                        <span
+                          className={`flex h-4 w-4 shrink-0 rounded-full border-2 items-center justify-center ${
+                            selectedPlan === "monthly" ? "border-[#4578FC]" : "border-[#D1D5DB]"
+                          }`}
+                          aria-hidden
+                        >
+                          {selectedPlan === "monthly" ? (
+                            <span className="h-2 w-2 rounded-full bg-[#4578FC]" />
+                          ) : null}
+                        </span>
+                        <p className="text-sm font-medium text-[#111827]">{t("upgrade.monthlyTitle")}</p>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <p className="flex flex-wrap items-baseline justify-end gap-2 text-2xl sm:text-3xl font-bold tracking-tight text-[#111827] tabular-nums leading-none">
+                          <span className="text-lg sm:text-xl font-semibold text-[#9CA3AF] line-through decoration-[#9CA3AF]">
+                            {PRICE_WAS_MONTHLY}
+                          </span>
+                          <span>
+                            {t("upgrade.monthlyPrice")}
+                            <span className="text-base font-semibold text-[#6B7280]"> /mo</span>
+                          </span>
                         </p>
                       </div>
+                    </div>
+                    <div className="hidden lg:flex lg:flex-col lg:gap-2">
+                      <div className="flex items-start gap-2.5">
+                        <span
+                          className={`mt-0.5 flex h-4 w-4 shrink-0 rounded-full border-2 items-center justify-center ${
+                            selectedPlan === "monthly" ? "border-[#4578FC]" : "border-[#D1D5DB]"
+                          }`}
+                          aria-hidden
+                        >
+                          {selectedPlan === "monthly" ? (
+                            <span className="h-2 w-2 rounded-full bg-[#4578FC]" />
+                          ) : null}
+                        </span>
+                        <p className="text-sm font-medium text-[#111827]">{t("upgrade.monthlyTitle")}</p>
+                      </div>
+                      <p className="flex flex-wrap items-baseline gap-2 text-xl lg:text-2xl font-bold tracking-tight text-[#111827] tabular-nums leading-none">
+                        <span className="text-base lg:text-lg font-semibold text-[#9CA3AF] line-through decoration-[#9CA3AF]">
+                          {PRICE_WAS_MONTHLY}
+                        </span>
+                        <span>
+                          {t("upgrade.monthlyPrice")}
+                          <span className="text-sm font-semibold text-[#6B7280]"> /mo</span>
+                        </span>
+                      </p>
                     </div>
                   </button>
                 </div>
 
-                <div className="rounded-xl border border-[#E5E7EB] bg-white px-4 py-5 sm:px-6 sm:py-6">
-                  <ul className="space-y-4">
+                <div className="mt-2 rounded-xl border border-[#E6EAF4] bg-white px-6 py-7 shadow-[0_1px_3px_rgba(15,23,42,0.04)] sm:rounded-none sm:border-0 sm:bg-transparent sm:px-5 sm:py-6 sm:shadow-none lg:mt-2 lg:px-6 lg:py-6">
+                  <ul className="shrink-0 space-y-[20px] lg:space-y-6">
                     <SandboxFeatureRow Icon={DocumentDuplicateIcon}>
-                      <strong className="font-semibold text-[#111827]">Unlimited</strong> ATS scans and AI resume
-                      optimizations
+                      <strong className="font-semibold text-[#111827]">Unlimited</strong> ATS scans &amp; AI resume
+                      optimization
                     </SandboxFeatureRow>
                     <SandboxFeatureRow Icon={BriefcaseIcon}>
-                      {t("upgrade.trialFeature3")} — {t("upgrade.monthlyFeature2")}
+                      Job-specific tailoring &amp; ATS keyword matching
                     </SandboxFeatureRow>
                     <SandboxFeatureRow Icon={DocumentTextIcon}>
-                      {t("upgrade.monthlyFeature5")} and {t("upgrade.trialFeature4").toLowerCase()}
+                      Save multiple tailored resumes · PDF export
                     </SandboxFeatureRow>
                     <SandboxFeatureRow Icon={AcademicCapIcon}>
-                      <strong className="font-semibold text-[#111827]">Full access</strong> for 7 days, then{" "}
-                      {t("upgrade.monthlyTitle").toLowerCase()} billing — {t("upgrade.trialFeature2")},{" "}
-                      {t("upgrade.trialFeature4").toLowerCase()}
+                      Full access 7 days, then {t("upgrade.monthlyTitle").toLowerCase()} · AI optimize &amp; PDF
                     </SandboxFeatureRow>
                     <SandboxFeatureRow Icon={ClockIcon}>
-                      Auto-renews at {t("upgrade.monthlyPrice")}/mo after 7 days (billed monthly). Cancel anytime.
+                      Auto-renews at <span className="font-normal">{t("upgrade.monthlyPrice")}</span>/mo after 7 days
                     </SandboxFeatureRow>
                     <SandboxFeatureRow Icon={BanknotesIcon}>
-                      <strong className="font-semibold text-[#111827]">Billing &amp; refunds</strong> —{" "}
-                      {t("upgrade.billingRules4")}
+                      <strong className="font-semibold text-[#111827]">Money Back Guarantee</strong>
                     </SandboxFeatureRow>
                   </ul>
                 </div>
-
-                <div className="grid sm:grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    disabled={loadingPlan !== null}
-                    onClick={() => void startCheckout("trial")}
-                    className="h-11 rounded-lg border-2 border-[#4578FC] bg-white text-sm font-semibold text-[#4578FC] hover:bg-[#F5F8FF] disabled:opacity-50 transition-colors"
-                  >
-                    {loadingPlan === "trial" ? t("upgrade.redirectingStripe") : t("upgrade.startTrial")}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={loadingPlan !== null}
-                    onClick={() => void startCheckout("monthly")}
-                    className="h-11 rounded-lg border border-[#D1D5DB] bg-white text-sm font-semibold text-[#374151] hover:bg-[#F9FAFB] disabled:opacity-50 transition-colors"
-                  >
-                    {loadingPlan === "monthly" ? t("upgrade.redirectingStripe") : t("upgrade.subscribe")}
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="flex-1 grid md:grid-cols-2 gap-4">
-                <article className="rounded-2xl border border-[#C9D7FF] bg-[#F7FAFF] p-5 flex flex-col">
-                  <div className="flex items-start justify-between gap-3">
-                    <h2 className="text-lg font-semibold">{t("upgrade.trialTitle")}</h2>
-                    <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-full bg-[#4578FC] text-white">
-                      {t("upgrade.recommended")}
-                    </span>
-                  </div>
-                  <p className="mt-2 text-3xl font-bold">{t("upgrade.trialPrice")}</p>
-                  <p className="text-xs text-[#5B6378] mt-1">{t("upgrade.trialAutoRenew")}</p>
-                  <ul className="mt-5 space-y-2 text-sm text-[#1F2937] flex-1">
-                    <li className="flex items-start gap-2">
-                      <CheckIcon className="w-4 h-4 mt-0.5 text-[#4578FC]" />
-                      {t("upgrade.trialFeature1")}
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <CheckIcon className="w-4 h-4 mt-0.5 text-[#4578FC]" />
-                      {t("upgrade.trialFeature2")}
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <CheckIcon className="w-4 h-4 mt-0.5 text-[#4578FC]" />
-                      {t("upgrade.trialFeature3")}
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <CheckIcon className="w-4 h-4 mt-0.5 text-[#4578FC]" />
-                      {t("upgrade.trialFeature4")}
-                    </li>
-                  </ul>
-                  <button
-                    type="button"
-                    disabled={(!pendingExportToken && !sandboxMode) || (!sandboxMode && remainingSeconds === 0) || loadingPlan !== null}
-                    onClick={() => void startCheckout("trial")}
-                    className="mt-5 h-11 rounded-xl text-sm font-semibold text-white disabled:opacity-50"
-                    style={{ background: "linear-gradient(160deg, #5e8afc 0%, #4578FC 45%, #3d6ae6 100%)" }}
-                  >
-                    {loadingPlan === "trial" ? t("upgrade.redirectingStripe") : t("upgrade.startTrial")}
-                  </button>
-                </article>
-
-                <article className="rounded-2xl border border-[#E6EAF4] bg-white p-5 flex flex-col">
-                  <h2 className="text-lg font-semibold">{t("upgrade.monthlyTitle")}</h2>
-                  <p className="mt-2 text-3xl font-bold">{t("upgrade.monthlyPrice")}</p>
-                  <p className="text-xs text-[#5B6378] mt-1">{t("upgrade.monthlyDesc")}</p>
-                  <ul className="mt-5 space-y-2 text-sm text-[#1F2937] flex-1">
-                    <li className="flex items-start gap-2">
-                      <CheckIcon className="w-4 h-4 mt-0.5 text-emerald-600" />
-                      {t("upgrade.monthlyFeature1")}
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <CheckIcon className="w-4 h-4 mt-0.5 text-emerald-600" />
-                      {t("upgrade.monthlyFeature2")}
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <CheckIcon className="w-4 h-4 mt-0.5 text-emerald-600" />
-                      {t("upgrade.monthlyFeature3")}
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <CheckIcon className="w-4 h-4 mt-0.5 text-emerald-600" />
-                      {t("upgrade.monthlyFeature4")}
-                    </li>
-                  </ul>
-                  <button
-                    type="button"
-                    disabled={(!pendingExportToken && !sandboxMode) || (!sandboxMode && remainingSeconds === 0) || loadingPlan !== null}
-                    onClick={() => void startCheckout("monthly")}
-                    className="mt-5 h-11 rounded-xl text-sm font-semibold border border-[#D5DBEA] text-[#181819] bg-white hover:bg-[#F5F7FC] disabled:opacity-50"
-                  >
-                    {loadingPlan === "monthly" ? t("upgrade.redirectingStripe") : t("upgrade.subscribe")}
-                  </button>
-                </article>
-              </div>
-            )}
+                <EmployerTrustStrip />
+            </>
           </div>
-        </section>
+
+          <aside className="min-w-0 h-full flex flex-col rounded-2xl bg-white border border-[#E6EAF4] p-6 md:p-8 shadow-[0_4px_24px_rgba(15,23,42,0.06)] lg:row-start-1 lg:col-start-2">
+            <h2 className="text-lg md:text-xl font-semibold tracking-tight text-[#111827] mb-6 shrink-0 text-center">
+              {t("upgrade.allSubscriptionBenefits")}
+            </h2>
+            <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-3.5 text-[13px] md:text-sm leading-snug text-[#374151] flex-1 min-h-0 content-start">
+              {SUBSCRIPTION_BENEFITS.map(({ text, icon }) => (
+                <li
+                  key={text}
+                  className="flex gap-2 items-center rounded-xl bg-[#f7f9fc] px-3.5 py-3"
+                >
+                  <img
+                    src={`/icons/${icon}`}
+                    alt=""
+                    width={34}
+                    height={34}
+                    className="w-[34px] h-[34px] shrink-0 object-contain"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                  <span className="min-w-0">{text}</span>
+                </li>
+              ))}
+            </ul>
+            <div className="mt-6 max-lg:hidden shrink-0 flex flex-col items-stretch">
+              <button
+                type="button"
+                disabled={continueDisabled}
+                onClick={() => void startCheckout(selectedPlan)}
+                className="w-full h-12 rounded-xl text-sm font-semibold text-white bg-[#339d5d] hover:bg-[#2e8a52] disabled:opacity-50 disabled:pointer-events-none transition-colors shadow-sm"
+              >
+                {loadingPlan !== null ? t("upgrade.redirectingStripe") : t("upgrade.checkoutContinue")}
+              </button>
+              <p className="mt-2 text-center text-[11px] leading-snug text-[#6B7280]">
+                {t("upgrade.checkoutMoneyBackGuarantee")}
+              </p>
+            </div>
+          </aside>
+        </div>
       </main>
+
+      <div
+        className="lg:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-[#E6EAF4] bg-[#F5F8FF]/95 backdrop-blur-md px-6 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-8px_32px_rgba(15,23,42,0.08)]"
+        role="presentation"
+      >
+        <div className="max-w-[1200px] mx-auto flex flex-col items-stretch">
+          <button
+            type="button"
+            disabled={continueDisabled}
+            onClick={() => void startCheckout(selectedPlan)}
+            className="w-full h-12 rounded-xl text-sm font-semibold text-white bg-[#339d5d] hover:bg-[#2e8a52] disabled:opacity-50 disabled:pointer-events-none transition-colors shadow-sm"
+          >
+            {loadingPlan !== null ? t("upgrade.redirectingStripe") : t("upgrade.checkoutContinue")}
+          </button>
+          <p className="mt-2 text-center text-[11px] leading-snug text-[#6B7280]">
+            {t("upgrade.checkoutMoneyBackGuarantee")}
+          </p>
+        </div>
+      </div>
     </div>
   );
 }

@@ -456,6 +456,11 @@ const en = {
     howItWorks: "How it works",
     howItWorks1: "Payment and auto-renewal via Stripe.",
     howItWorks2: "You can cancel anytime before the next charge.",
+    checkoutContinue: "Continue",
+    checkoutMoneyBackGuarantee: "7-day money-back guarantee",
+    checkoutPageTitle: "You're one step closer to getting hired",
+    allSubscriptionBenefits: "All Subscription Benefits",
+    trustEmployersTitle: "Our users landed jobs at:",
   },
   admin: {
     panelLabel: "Admin panel",
