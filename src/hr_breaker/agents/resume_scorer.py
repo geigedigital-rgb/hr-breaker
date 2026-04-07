@@ -84,32 +84,57 @@ async def score_resume_vs_job(
         raise
 
 
+class CallbackBlocker(BaseModel):
+    """One concrete reason callbacks are unlikely, with impact and fix (no generic CTAs)."""
+
+    headline: str  # short diagnostic title, specific to THIS resume vs THIS job
+    impact: str  # one sentence: why this hurts screening / callbacks
+    action: str  # one sentence: truthful next step (tools, metrics, wording from posting)
+
+
 class AnalysisInsights(BaseModel):
     """Risk and actionable improvement insights for pre-analysis."""
 
     rejection_risk_score: int  # 0-100, where 100 means very high rejection risk
-    critical_issues: list[str] = Field(default_factory=list)
+    callback_blockers: list[CallbackBlocker] = Field(default_factory=list)
     risk_summary: str | None = None
     improvement_tips: str | None = None
+    improvement_keywords: list[str] = Field(default_factory=list)
+    improvement_structure: list[str] = Field(default_factory=list)
+    improvement_requirements: list[str] = Field(default_factory=list)
 
 
-INSIGHTS_SYSTEM = """You are an ATS analyst. Given a resume (plain text) and a job posting summary, output risk analysis and actionable tips.
+INSIGHTS_SYSTEM = """You are an ATS and recruiter screening analyst. Given a resume (plain text) and a job posting summary, output structured, SPECIFIC insights for THIS pair only.
 
 OUTPUT FIELDS:
-- rejection_risk_score (required, integer 0-100): probability of rejection at screening stage. Higher means worse.
-- critical_issues (required, list of 1-2 short strings): top issues that most likely cause rejection.
-- risk_summary (optional, short string): one concise sentence explaining risk and why.
-- improvement_tips (optional): 2-4 short blocks with clear headers (e.g. "Keywords", "Experience", "Structure"), each with 1-2 practical tips.
+- rejection_risk_score (required, integer 0-100): probability of rejection at screening. Higher = worse.
 
-RISK CONSISTENCY RULES (required):
-- If there are critical gaps (missing core skills, missing quantified impact, weak role relevance), rejection_risk_score must be elevated.
-- If you output critical_issues, rejection_risk_score should usually not be low.
-- Very low risk (<30) is only valid when alignment to role is strong and clear.
+- callback_blockers (required, 1-2 objects): why this candidate may not get callbacks for THIS role.
+  Each object: headline, impact, action — all three required, each one short sentence.
+  headline: name a CONCRETE gap (e.g. missing tool X from posting, no metric for Y, role focus mismatch). NEVER use generic imperatives alone like "Add role-specific hard skills", "Mirror terminology", "Address requirements", "Improve keywords".
+  impact: why that gap hurts ATS or human screening (one sentence).
+  action: one truthful, specific step referencing tools/skills/requirements from the posting or resume where relevant.
+
+- improvement_keywords (required, 1-3 strings): keyword / skills / terminology alignment. Each string ONE self-contained sentence: concrete gap or reinforcement + what to add (mention real tools/stack from the job when applicable). No generic one-liners without job/resume context.
+
+- improvement_structure (required, 1-3 strings): layout, scanability, sections, bullets, length. Same style: one sentence each, specific to this resume.
+
+- improvement_requirements (required, 1-3 strings): must-have requirements from the posting vs evidence in the resume. One sentence each; quote or paraphrase a real requirement when possible. Never output only "Address must-have requirements explicitly".
+
+- risk_summary (optional): one sentence summarizing overall risk.
+- improvement_tips (optional): legacy free-form tips; may be omitted if redundant.
+
+FORBIDDEN (do not output as headline or as the sole content of any string):
+Phrases that are only meta-advice with no resume/job anchor, e.g. "Add role-specific hard skills", "Mirror exact vacancy terminology", "Address must-have requirements explicitly", "Improve keyword coverage" without naming what is missing.
+
+RISK CONSISTENCY:
+- Strong gaps → higher rejection_risk_score.
+- Very low risk (<30) only if alignment is clearly strong.
 
 LANGUAGE:
-- Write improvement_tips in the language specified in the user message (default: English).
+- Write ALL user-facing strings in the language specified in the user message (default: English).
 
-Be strict but fair. Output valid values matching the schema."""
+Be strict but fair. Output valid JSON matching the schema."""
 
 
 @lru_cache
@@ -139,7 +164,12 @@ async def get_analysis_insights(
     summary = _job_summary(job)
     lang_instruction = ""
     if output_language and output_language.lower() != "en":
-        lang_instruction = f"\n\nWrite improvement_tips in: {output_language}."
+        lang_instruction = (
+            f"\n\nWrite ALL user-facing strings (callback_blockers, improvement lists, "
+            f"risk_summary, improvement_tips) in: {output_language}."
+        )
+    else:
+        lang_instruction = "\n\nWrite ALL user-facing strings in English."
     prompt = f"## Job:\n{summary}\n\n## Resume (text):\n{resume_text[:6000]}{lang_instruction}"
     try:
         result = await agent.run(prompt)
@@ -162,8 +192,43 @@ async def get_analysis_insights(
     risk_summary = getattr(out, "risk_summary", None)
     if isinstance(risk_summary, str):
         risk_summary = risk_summary.strip() or None
-    critical_issues = [str(x).strip() for x in (getattr(out, "critical_issues", None) or []) if str(x).strip()]
-    critical_issues = critical_issues[:2]
+
+    def _clamp_str(s: str, max_len: int) -> str:
+        t = " ".join((s or "").strip().split())
+        return t[:max_len] if len(t) > max_len else t
+
+    blockers: list[CallbackBlocker] = []
+    raw_blockers = getattr(out, "callback_blockers", None) or []
+    for item in raw_blockers[:2]:
+        if isinstance(item, CallbackBlocker):
+            b = item
+        elif isinstance(item, dict):
+            try:
+                b = CallbackBlocker(**item)
+            except Exception:
+                continue
+        else:
+            continue
+        h, i, a = _clamp_str(b.headline, 220), _clamp_str(b.impact, 320), _clamp_str(b.action, 320)
+        if h and i and a:
+            blockers.append(CallbackBlocker(headline=h, impact=i, action=a))
+
+    def _clamp_lines(lines: object, max_n: int, max_len: int) -> list[str]:
+        if not isinstance(lines, list):
+            return []
+        out_lines: list[str] = []
+        for x in lines:
+            s = _clamp_str(str(x), max_len)
+            if s and s not in out_lines:
+                out_lines.append(s)
+            if len(out_lines) >= max_n:
+                break
+        return out_lines
+
+    kw = _clamp_lines(getattr(out, "improvement_keywords", None), 3, 400)
+    st = _clamp_lines(getattr(out, "improvement_structure", None), 3, 400)
+    rq = _clamp_lines(getattr(out, "improvement_requirements", None), 3, 400)
+
     if audit_user_id:
         pool = await get_pool()
         inp, out_tok = tokens_from_run_result(result)
@@ -172,7 +237,10 @@ async def get_analysis_insights(
         )
     return AnalysisInsights(
         rejection_risk_score=max(0, min(100, out.rejection_risk_score)),
-        critical_issues=critical_issues,
+        callback_blockers=blockers,
         risk_summary=risk_summary,
         improvement_tips=tips,
+        improvement_keywords=kw,
+        improvement_structure=st,
+        improvement_requirements=rq,
     )

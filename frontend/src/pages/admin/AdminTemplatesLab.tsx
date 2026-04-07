@@ -168,9 +168,16 @@ export default function AdminTemplatesLab() {
   const [templateMenuOpen, setTemplateMenuOpen] = useState(false);
   const [commitPreviewTick, setCommitPreviewTick] = useState(0);
   const previewReqIdRef = useRef(0);
+  const previewAbortRef = useRef<AbortController | null>(null);
+  const previewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const renderSchemaRef = useRef<UnifiedResumeSchema>(EMPTY_SCHEMA);
+  const templateIdRef = useRef("");
   const previewCanvasHostRef = useRef<HTMLDivElement>(null);
   const templateMenuRef = useRef<HTMLDivElement>(null);
   const renderSchema = useMemo(() => normalizeSchemaForRender(schema), [schema]);
+
+  renderSchemaRef.current = renderSchema;
+  templateIdRef.current = templateId;
 
   const isEditableField = useCallback((el: EventTarget | null): boolean => {
     if (!(el instanceof HTMLElement)) return false;
@@ -195,37 +202,74 @@ export default function AdminTemplatesLab() {
       .catch((e) => setError(String(e)));
   }, []);
 
-  const requestPreviewRender = useCallback(
-    (delayMs: number) => {
-      if (!templateId) return () => {};
+  /** Single queue: cancels prior timer and in-flight fetch. Refs = no stale schema/template. */
+  const schedulePreview = useCallback((delayMs: number) => {
+    if (previewTimerRef.current !== null) {
+      clearTimeout(previewTimerRef.current);
+      previewTimerRef.current = null;
+    }
+    previewTimerRef.current = setTimeout(() => {
+      previewTimerRef.current = null;
+      const tid = templateIdRef.current;
+      if (!tid) return;
+
+      previewAbortRef.current?.abort();
+      const ac = new AbortController();
+      previewAbortRef.current = ac;
+
       const reqId = ++previewReqIdRef.current;
-      const timer = window.setTimeout(() => {
-        setLoadingPreview(true);
-        setError(null);
-        adminRenderTemplatePdf({ template_id: templateId, schema: renderSchema })
-          .then((res) => {
-            if (reqId !== previewReqIdRef.current) return;
-            setPdfPageCount(res.page_count);
-            setPdfWarnings(res.warnings);
-            setPreviewPdfBytes(b64ToUint8Array(res.pdf_base64));
-          })
-          .catch((e) => {
-            if (reqId === previewReqIdRef.current) setError(String(e));
-          })
-          .finally(() => {
-            if (reqId === previewReqIdRef.current) setLoadingPreview(false);
-          });
-      }, delayMs);
-      return () => window.clearTimeout(timer);
+      setLoadingPreview(true);
+      setError(null);
+      adminRenderTemplatePdf({
+        template_id: tid,
+        schema: renderSchemaRef.current,
+        signal: ac.signal,
+      })
+        .then((res) => {
+          if (reqId !== previewReqIdRef.current) return;
+          setPdfPageCount(res.page_count);
+          setPdfWarnings(res.warnings);
+          setPreviewPdfBytes(b64ToUint8Array(res.pdf_base64));
+        })
+        .catch((e) => {
+          if (e instanceof DOMException && e.name === "AbortError") return;
+          if (e instanceof Error && e.name === "AbortError") return;
+          if (reqId === previewReqIdRef.current) setError(String(e));
+        })
+        .finally(() => {
+          if (reqId === previewReqIdRef.current) setLoadingPreview(false);
+        });
+    }, delayMs);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (previewTimerRef.current !== null) {
+        clearTimeout(previewTimerRef.current);
+        previewTimerRef.current = null;
+      }
+      previewAbortRef.current?.abort();
     },
-    [templateId, renderSchema]
+    []
   );
 
-  // Data edits: debounce for smoother typing.
-  useEffect(() => requestPreviewRender(450), [renderSchema, requestPreviewRender]);
+  // Typing / structured edits: debounced server render; abort stale in-flight PDF when schema moves again.
+  useEffect(() => {
+    schedulePreview(380);
+    return () => {
+      if (previewTimerRef.current !== null) {
+        clearTimeout(previewTimerRef.current);
+        previewTimerRef.current = null;
+      }
+      previewAbortRef.current?.abort();
+    };
+  }, [renderSchema, schedulePreview]);
 
-  // Template change or commit (blur/enter): immediate render.
-  useEffect(() => requestPreviewRender(0), [templateId, commitPreviewTick, requestPreviewRender]);
+  // Template menu or blur/enter commit: flush immediately and cancel pending debounce.
+  useEffect(() => {
+    if (!templateId) return;
+    schedulePreview(0);
+  }, [templateId, commitPreviewTick, schedulePreview]);
 
   useEffect(() => {
     if (!templateMenuOpen) return;
@@ -246,6 +290,7 @@ export default function AdminTemplatesLab() {
     const host = previewCanvasHostRef.current;
     if (!host) return;
     let renderSeq = 0;
+    let resizeDebounce: ReturnType<typeof setTimeout> | null = null;
 
     const renderPages = async () => {
       const seq = ++renderSeq;
@@ -287,11 +332,16 @@ export default function AdminTemplatesLab() {
 
     renderPages();
     const ro = new ResizeObserver(() => {
-      renderPages();
+      if (resizeDebounce !== null) clearTimeout(resizeDebounce);
+      resizeDebounce = setTimeout(() => {
+        resizeDebounce = null;
+        if (!cancelled) renderPages();
+      }, 120);
     });
     ro.observe(host);
     return () => {
       cancelled = true;
+      if (resizeDebounce !== null) clearTimeout(resizeDebounce);
       ro.disconnect();
     };
   }, [previewPdfBytes]);

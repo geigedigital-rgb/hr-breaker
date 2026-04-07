@@ -201,6 +201,12 @@ export type RecommendationItem = {
   labels: string[];
 };
 
+export type CallbackBlockerOut = {
+  headline: string;
+  impact: string;
+  action: string;
+};
+
 export type AnalyzeResponse = {
   ats_score: number;
   keyword_score: number;
@@ -209,8 +215,10 @@ export type AnalyzeResponse = {
   recommendations?: RecommendationItem[];
   /** LLM-provided rejection risk 0-100 */
   rejection_risk_score?: number | null;
-  /** Top reasons that drive rejection risk */
+  /** Short headlines derived from callback_blockers (legacy / scan text) */
   critical_issues?: string[];
+  /** 1–2 structured reasons: headline + impact + action from LLM */
+  callback_blockers?: CallbackBlockerOut[];
   /** One-line explanation for rejection risk */
   risk_summary?: string | null;
   /** LLM-generated tips with headers for recommendations block */
@@ -836,11 +844,14 @@ export async function adminRenderTemplateHtml(params: {
 export async function adminRenderTemplatePdf(params: {
   template_id: string;
   schema: UnifiedResumeSchema;
+  signal?: AbortSignal;
 }): Promise<AdminTemplateRenderPdfResponse> {
+  const { signal, ...body } = params;
   const r = await fetch(`${API}/admin/templates/render-pdf`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
-    body: JSON.stringify(params),
+    body: JSON.stringify(body),
+    signal,
   });
   const data = await parseJsonOrThrow<AdminTemplateRenderPdfResponse & { detail?: string }>(r);
   if (!r.ok) throw new Error(data.detail || r.statusText);

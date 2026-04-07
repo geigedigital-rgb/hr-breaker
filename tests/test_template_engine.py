@@ -34,6 +34,15 @@ def test_templates_have_recommended_whitelist():
     assert len(all_templates) >= 3
     assert len(recommended) >= 1
     assert all(t.recommended for t in recommended)
+    rx_ids = {t.id for t in all_templates if t.source == "reactive-resume"}
+    assert rx_ids >= {
+        "reactive-chikorita",
+        "reactive-ditto",
+        "reactive-gengar",
+        "reactive-onyx",
+        "reactive-lapras",
+        "reactive-ditgar",
+    }
 
 
 def test_template_render_smoke_pdf_stability():

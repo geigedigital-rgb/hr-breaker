@@ -539,6 +539,14 @@ function fixFromRecommendationLabel(label: string, category?: string): string {
   return `Add one concrete, truthful bullet proving "${topic}" with measurable outcome.`;
 }
 
+/** LLM often returns one full sentence per item — avoid duplicating with a generic fix line. */
+function recommendationLabelIsSelfContained(label: string): boolean {
+  const t = label.trim();
+  if (t.length >= 88) return true;
+  if (/[.!?]\s/.test(t)) return true;
+  return false;
+}
+
 function recommendationPriorityScore(label: string): number {
   const l = label.toLowerCase();
   let score = 1;
@@ -1914,7 +1922,12 @@ export default function Optimize() {
   const problemLabelsSorted = recommendationGroups
     .flatMap((g) => g.labels.filter((l) => !isPositiveRecommendationLabel(l)))
     .sort((a, b) => recommendationPriorityScore(b) - recommendationPriorityScore(a));
-  const topIssuesOptimize = problemLabelsSorted.slice(0, 2);
+  const callbackBlockersOptimize = (preScores?.callback_blockers || [])
+    .filter((b) => (b.headline || "").trim())
+    .slice(0, 2);
+  const topIssuesOptimizeLegacy = problemLabelsSorted.slice(0, 2);
+  const showWhyNoCallbacksSection =
+    stage === "assessment" && (callbackBlockersOptimize.length > 0 || topIssuesOptimizeLegacy.length > 0);
   const scanSummaryTextOptimize =
     scanResultParagraphs.length > 0 ? scanResultParagraphs.join(" ") : t("optimize.lowScoreNeedsImprovement");
 
@@ -2124,7 +2137,7 @@ export default function Optimize() {
             );
           })()}
 
-          {stage === "assessment" && topIssuesOptimize.length > 0 && (
+          {showWhyNoCallbacksSection && (
             <div className="mt-2 w-full min-w-0 max-w-full overflow-x-clip">
               <div
                 className="w-full min-w-0 max-w-full rounded-[22px] border border-transparent p-[1px] overflow-hidden [contain:paint]"
@@ -2146,40 +2159,79 @@ export default function Optimize() {
                   </div>
                   <p className="mt-1.5 text-[13px] text-[#4B5563] leading-relaxed break-words">{scanSummaryTextOptimize}</p>
                   <div className="mt-4 space-y-2.5">
-                    {topIssuesOptimize.map((issue) => (
-                      <Disclosure key={issue}>
-                        {({ open }) => (
-                          <div className="rounded-xl bg-white ring-1 ring-[#EDF1F7]">
-                            <DisclosureButton className="w-full flex items-center gap-3 px-3.5 py-3 text-left hover:bg-[#F8FAFD] transition-colors rounded-xl">
-                              <div className="min-w-0 flex-1">
-                                <p className="text-[13px] font-semibold text-[#181819] leading-snug">
-                                  {cleanRecommendationReason(issue)}
-                                </p>
-                                <div className="mt-0.5 inline-flex items-center gap-1.5">
-                                  <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#FDECEF] px-1.5 text-[11px] font-bold text-[#C92A4B]">
-                                    !
-                                  </span>
-                                  <p className="text-[11px] text-[#C92A4B] font-medium">{t("optimize.criticalReason")}</p>
-                                </div>
+                    {callbackBlockersOptimize.length > 0
+                      ? callbackBlockersOptimize.map((cb, i) => (
+                          <Disclosure key={`cb-${i}-${cb.headline.slice(0, 48)}`}>
+                            {({ open }) => (
+                              <div className="rounded-xl bg-white ring-1 ring-[#EDF1F7]">
+                                <DisclosureButton className="w-full flex items-center gap-3 px-3.5 py-3 text-left hover:bg-[#F8FAFD] transition-colors rounded-xl">
+                                  <div className="min-w-0 flex-1">
+                                    <p className="text-[13px] font-semibold text-[#181819] leading-snug">
+                                      {cleanRecommendationReason(cb.headline)}
+                                    </p>
+                                    <div className="mt-0.5 inline-flex items-center gap-1.5">
+                                      <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#FDECEF] px-1.5 text-[11px] font-bold text-[#C92A4B]">
+                                        !
+                                      </span>
+                                      <p className="text-[11px] text-[#C92A4B] font-medium">{t("optimize.criticalReason")}</p>
+                                    </div>
+                                  </div>
+                                  <ChevronDownIcon
+                                    className={`w-4 h-4 text-[#6B7280] transition-transform shrink-0 ${open ? "rotate-180" : ""}`}
+                                  />
+                                </DisclosureButton>
+                                <DisclosurePanel className="px-3.5 pb-3.5 pt-0">
+                                  <div className="pt-2 border-t border-[#EDF1F7] mt-1">
+                                    <p className="text-[12px] text-[#374151] leading-relaxed">
+                                      <span className="font-semibold text-[#181819]">{t("optimize.ifIgnored")}</span>{" "}
+                                      {(cb.impact || "").trim()}
+                                    </p>
+                                    <p className="text-[12px] text-[#374151] leading-relaxed mt-1.5">
+                                      <span className="font-semibold text-[#181819]">{t("optimize.whatToChange")}</span>{" "}
+                                      {(cb.action || "").trim()}
+                                    </p>
+                                  </div>
+                                </DisclosurePanel>
                               </div>
-                              <ChevronDownIcon className={`w-4 h-4 text-[#6B7280] transition-transform shrink-0 ${open ? "rotate-180" : ""}`} />
-                            </DisclosureButton>
-                            <DisclosurePanel className="px-3.5 pb-3.5 pt-0">
-                              <div className="pt-2 border-t border-[#EDF1F7] mt-1">
-                                <p className="text-[12px] text-[#374151] leading-relaxed">
-                                  <span className="font-semibold text-[#181819]">{t("optimize.ifIgnored")}</span>{" "}
-                                  {impactFromRecommendationLabel(issue, "critical")}
-                                </p>
-                                <p className="text-[12px] text-[#374151] leading-relaxed mt-1.5">
-                                  <span className="font-semibold text-[#181819]">{t("optimize.whatToChange")}</span>{" "}
-                                  {fixFromRecommendationLabel(issue, "critical")}
-                                </p>
+                            )}
+                          </Disclosure>
+                        ))
+                      : topIssuesOptimizeLegacy.map((issue) => (
+                          <Disclosure key={issue}>
+                            {({ open }) => (
+                              <div className="rounded-xl bg-white ring-1 ring-[#EDF1F7]">
+                                <DisclosureButton className="w-full flex items-center gap-3 px-3.5 py-3 text-left hover:bg-[#F8FAFD] transition-colors rounded-xl">
+                                  <div className="min-w-0 flex-1">
+                                    <p className="text-[13px] font-semibold text-[#181819] leading-snug">
+                                      {cleanRecommendationReason(issue)}
+                                    </p>
+                                    <div className="mt-0.5 inline-flex items-center gap-1.5">
+                                      <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#FDECEF] px-1.5 text-[11px] font-bold text-[#C92A4B]">
+                                        !
+                                      </span>
+                                      <p className="text-[11px] text-[#C92A4B] font-medium">{t("optimize.criticalReason")}</p>
+                                    </div>
+                                  </div>
+                                  <ChevronDownIcon
+                                    className={`w-4 h-4 text-[#6B7280] transition-transform shrink-0 ${open ? "rotate-180" : ""}`}
+                                  />
+                                </DisclosureButton>
+                                <DisclosurePanel className="px-3.5 pb-3.5 pt-0">
+                                  <div className="pt-2 border-t border-[#EDF1F7] mt-1">
+                                    <p className="text-[12px] text-[#374151] leading-relaxed">
+                                      <span className="font-semibold text-[#181819]">{t("optimize.ifIgnored")}</span>{" "}
+                                      {impactFromRecommendationLabel(issue, "critical")}
+                                    </p>
+                                    <p className="text-[12px] text-[#374151] leading-relaxed mt-1.5">
+                                      <span className="font-semibold text-[#181819]">{t("optimize.whatToChange")}</span>{" "}
+                                      {fixFromRecommendationLabel(issue, "critical")}
+                                    </p>
+                                  </div>
+                                </DisclosurePanel>
                               </div>
-                            </DisclosurePanel>
-                          </div>
-                        )}
-                      </Disclosure>
-                    ))}
+                            )}
+                          </Disclosure>
+                        ))}
                   </div>
                 </div>
               </div>
@@ -2212,7 +2264,11 @@ export default function Optimize() {
                               {group.problems.map((label) => (
                                 <li key={`${group.category}-${label}`} className="px-0.5 py-1">
                                   <p className="text-[12px] font-medium text-[#181819] leading-snug">{cleanRecommendationReason(label)}</p>
-                                  <p className="mt-0.5 text-[11px] text-[#6B7280] leading-relaxed">{fixFromRecommendationLabel(label, group.category)}</p>
+                                  {!recommendationLabelIsSelfContained(label) ? (
+                                    <p className="mt-0.5 text-[11px] text-[#6B7280] leading-relaxed">
+                                      {fixFromRecommendationLabel(label, group.category)}
+                                    </p>
+                                  ) : null}
                                 </li>
                               ))}
                             </ul>

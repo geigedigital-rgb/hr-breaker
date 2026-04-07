@@ -25,6 +25,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel, ConfigDict, Field
 
 from hr_breaker.agents import (
+    AnalysisInsights,
     extract_name,
     extract_resume_schema_strict,
     extract_resume_summary,
@@ -364,6 +365,14 @@ class RecommendationItem(BaseModel):
     labels: list[str]
 
 
+class CallbackBlockerOut(BaseModel):
+    """LLM-structured reasons for weak callback likelihood (1-2 items)."""
+
+    headline: str
+    impact: str
+    action: str
+
+
 class AnalyzeResponse(BaseModel):
     ats_score: int  # 0-100
     keyword_score: float
@@ -373,6 +382,7 @@ class AnalyzeResponse(BaseModel):
     # LLM-provided rejection risk 0-100 and top critical reasons
     rejection_risk_score: int | None = None
     critical_issues: list[str] = Field(default_factory=list)
+    callback_blockers: list[CallbackBlockerOut] = Field(default_factory=list)
     risk_summary: str | None = None
     improvement_tips: str | None = None  # LLM-generated tips with headers for "recommendations" block
 
@@ -1830,20 +1840,24 @@ async def api_landing_analyze(
         keywords=job.keywords,
         description=job.description,
     )
-    recommendations = _build_recommendations(
+    recommendations = _recommendations_from_insights(
+        insights,
         ats_score=ats_score,
         keyword_score=kw_result.score,
         keyword_threshold=settings.filter_keyword_threshold,
         missing_keywords=kw_result.missing_keywords,
         job_keywords=job.keywords or [],
         requirements=job.requirements or [],
-        critical_issues=insights.critical_issues,
         has_requirements=bool(job.requirements),
     )
+    callback_heads = _critical_headlines_from_insights(insights)
+    callback_out = [
+        CallbackBlockerOut(headline=b.headline, impact=b.impact, action=b.action) for b in insights.callback_blockers
+    ]
     logger.info("Landing analyze OK ip=%s ats=%s", ip, ats_score)
     risk_score = _normalize_rejection_risk(
         model_risk=insights.rejection_risk_score,
-        critical_issues=insights.critical_issues,
+        critical_issues=callback_heads,
         ats_score=ats_score,
         keyword_score=kw_result.score,
         keyword_threshold=settings.filter_keyword_threshold,
@@ -1855,7 +1869,8 @@ async def api_landing_analyze(
         job=job_out,
         recommendations=recommendations,
         rejection_risk_score=risk_score,
-        critical_issues=insights.critical_issues,
+        critical_issues=callback_heads,
+        callback_blockers=callback_out,
         risk_summary=insights.risk_summary,
         improvement_tips=insights.improvement_tips,
     )
@@ -2223,6 +2238,49 @@ def _build_recommendations(
     ]
 
 
+def _critical_headlines_from_insights(insights: AnalysisInsights) -> list[str]:
+    return [b.headline for b in insights.callback_blockers if (b.headline or "").strip()]
+
+
+def _recommendations_from_insights(
+    insights: AnalysisInsights,
+    *,
+    ats_score: int,
+    keyword_score: float,
+    keyword_threshold: float,
+    missing_keywords: list[str],
+    job_keywords: list[str],
+    requirements: list[str],
+    has_requirements: bool,
+) -> list[RecommendationItem]:
+    """Prefer LLM category lines (1-3 each); fall back to heuristic _build_recommendations per category."""
+    issues = _critical_headlines_from_insights(insights)
+    fallback = _build_recommendations(
+        ats_score=ats_score,
+        keyword_score=keyword_score,
+        keyword_threshold=keyword_threshold,
+        missing_keywords=missing_keywords,
+        job_keywords=job_keywords,
+        requirements=requirements,
+        critical_issues=issues,
+        has_requirements=has_requirements,
+    )
+    by_cat = {r.category: r.labels for r in fallback}
+
+    def labels_for(llm_list: list[str], fb_key: str) -> list[str]:
+        if llm_list:
+            return llm_list[:3]
+        return by_cat.get(fb_key, ["OK"])
+
+    return [
+        RecommendationItem(category="Keywords", labels=labels_for(insights.improvement_keywords, "Keywords")),
+        RecommendationItem(category="Structure", labels=labels_for(insights.improvement_structure, "Structure")),
+        RecommendationItem(
+            category="Requirements", labels=labels_for(insights.improvement_requirements, "Requirements")
+        ),
+    ]
+
+
 def _normalize_rejection_risk(
     model_risk: int,
     critical_issues: list[str],
@@ -2326,23 +2384,27 @@ async def api_analyze(req: AnalyzeRequest, user: dict | None = Depends(get_optio
         keywords=job.keywords,
         description=job.description,
     )
-    recommendations = _build_recommendations(
+    recommendations = _recommendations_from_insights(
+        insights,
         ats_score=ats_score,
         keyword_score=kw_result.score,
         keyword_threshold=settings.filter_keyword_threshold,
         missing_keywords=kw_result.missing_keywords,
         job_keywords=job.keywords or [],
         requirements=job.requirements or [],
-        critical_issues=insights.critical_issues,
         has_requirements=bool(job.requirements),
     )
+    callback_heads = _critical_headlines_from_insights(insights)
+    callback_out = [
+        CallbackBlockerOut(headline=b.headline, impact=b.impact, action=b.action) for b in insights.callback_blockers
+    ]
     if user:
         pool = await get_pool()
         if pool:
             await user_increment_readiness(pool, str(user["id"]), delta=READINESS_DELTA_ANALYSIS)
     risk_score = _normalize_rejection_risk(
         model_risk=insights.rejection_risk_score,
-        critical_issues=insights.critical_issues,
+        critical_issues=callback_heads,
         ats_score=ats_score,
         keyword_score=kw_result.score,
         keyword_threshold=settings.filter_keyword_threshold,
@@ -2354,7 +2416,8 @@ async def api_analyze(req: AnalyzeRequest, user: dict | None = Depends(get_optio
         job=job_out,
         recommendations=recommendations,
         rejection_risk_score=risk_score,
-        critical_issues=insights.critical_issues,
+        critical_issues=callback_heads,
+        callback_blockers=callback_out,
         risk_summary=insights.risk_summary,
         improvement_tips=insights.improvement_tips,
     )
