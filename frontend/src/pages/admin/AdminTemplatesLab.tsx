@@ -67,6 +67,17 @@ function cleanText(value: string | null | undefined): string | null {
   return t ? t : null;
 }
 
+function schemaSignature(schema: UnifiedResumeSchema): string {
+  return JSON.stringify(schema);
+}
+
+type PreviewCacheEntry = {
+  bytes: Uint8Array;
+  pageCount: number;
+  warnings: string[];
+  sig: string;
+};
+
 function normalizeSchemaForRender(schema: UnifiedResumeSchema): UnifiedResumeSchema {
   return {
     ...schema,
@@ -166,18 +177,25 @@ export default function AdminTemplatesLab() {
   const [openWork, setOpenWork] = useState<Record<number, boolean>>({});
   const [openEdu, setOpenEdu] = useState<Record<number, boolean>>({});
   const [templateMenuOpen, setTemplateMenuOpen] = useState(false);
-  const [commitPreviewTick, setCommitPreviewTick] = useState(0);
+  const [prefetchingAllTemplates, setPrefetchingAllTemplates] = useState(false);
   const previewReqIdRef = useRef(0);
-  const previewAbortRef = useRef<AbortController | null>(null);
+  const bulkWaveRef = useRef(0);
+  const bulkAbortRef = useRef<AbortController | null>(null);
+  const singleAbortRef = useRef<AbortController | null>(null);
   const previewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Outer tick from commitPreviewRefresh (setTimeout 0) — must be cleared when picking a template or bulk would schedule after applyTemplatePreview. */
+  const commitPreviewOuterRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const renderSchemaRef = useRef<UnifiedResumeSchema>(EMPTY_SCHEMA);
   const templateIdRef = useRef("");
+  const templatesRef = useRef<AdminTemplateListItem[]>([]);
+  const previewCacheRef = useRef<Map<string, PreviewCacheEntry>>(new Map());
   const previewCanvasHostRef = useRef<HTMLDivElement>(null);
   const templateMenuRef = useRef<HTMLDivElement>(null);
   const renderSchema = useMemo(() => normalizeSchemaForRender(schema), [schema]);
 
   renderSchemaRef.current = renderSchema;
   templateIdRef.current = templateId;
+  templatesRef.current = templates;
 
   const isEditableField = useCallback((el: EventTarget | null): boolean => {
     if (!(el instanceof HTMLElement)) return false;
@@ -185,12 +203,155 @@ export default function AdminTemplatesLab() {
     return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
   }, []);
 
-  const commitPreviewRefresh = useCallback(() => {
-    // Next tick: ensure the latest onChange value is already in React state.
-    window.setTimeout(() => {
-      setCommitPreviewTick((v) => v + 1);
-    }, 0);
+  const runBulkPrefetchTemplates = useCallback(async () => {
+    const wave = ++bulkWaveRef.current;
+    const ids = templatesRef.current.map((x) => x.id);
+    const tid = templateIdRef.current;
+    if (ids.length === 0 || !tid) return;
+
+    bulkAbortRef.current?.abort();
+    const ac = new AbortController();
+    bulkAbortRef.current = ac;
+    singleAbortRef.current?.abort();
+    singleAbortRef.current = null;
+
+    const schema = renderSchemaRef.current;
+    const sig = schemaSignature(schema);
+
+    setPrefetchingAllTemplates(true);
+    setLoadingPreview(true);
+    setError(null);
+
+    try {
+      const batchSize = 3;
+      for (let i = 0; i < ids.length; i += batchSize) {
+        if (ac.signal.aborted) return;
+        const slice = ids.slice(i, i + batchSize);
+        await Promise.all(
+          slice.map(async (id) => {
+            const res = await adminRenderTemplatePdf({
+              template_id: id,
+              schema,
+              signal: ac.signal,
+            });
+            if (wave !== bulkWaveRef.current || ac.signal.aborted) return;
+            previewCacheRef.current.set(id, {
+              bytes: b64ToUint8Array(res.pdf_base64),
+              pageCount: res.page_count,
+              warnings: res.warnings,
+              sig,
+            });
+          })
+        );
+      }
+      if (wave !== bulkWaveRef.current || ac.signal.aborted) return;
+      const currentId = templateIdRef.current;
+      const hit = previewCacheRef.current.get(currentId);
+      const liveSig = schemaSignature(renderSchemaRef.current);
+      if (hit && hit.sig === liveSig) {
+        setPreviewPdfBytes(new Uint8Array(hit.bytes));
+        setPdfPageCount(hit.pageCount);
+        setPdfWarnings(hit.warnings);
+      }
+    } catch (e) {
+      if (e instanceof DOMException && e.name === "AbortError") return;
+      if (e instanceof Error && e.name === "AbortError") return;
+      setError(String(e));
+    } finally {
+      if (wave === bulkWaveRef.current) {
+        setPrefetchingAllTemplates(false);
+        // Do not clear loading if a single-template fetch started (e.g. user switched template mid-prefetch).
+        if (singleAbortRef.current === null) {
+          setLoadingPreview(false);
+        }
+      }
+    }
   }, []);
+
+  /** Dropdown: instant switch from cache after bulk prefetch; otherwise one targeted fetch (aborts bulk). */
+  const applyTemplatePreview = useCallback((nextTemplateId: string) => {
+    if (!nextTemplateId) return;
+    if (commitPreviewOuterRef.current !== null) {
+      clearTimeout(commitPreviewOuterRef.current);
+      commitPreviewOuterRef.current = null;
+    }
+    if (previewTimerRef.current !== null) {
+      clearTimeout(previewTimerRef.current);
+      previewTimerRef.current = null;
+    }
+    const sig = schemaSignature(renderSchemaRef.current);
+    const hit = previewCacheRef.current.get(nextTemplateId);
+    if (hit && hit.sig === sig) {
+      singleAbortRef.current?.abort();
+      previewReqIdRef.current += 1;
+      setLoadingPreview(false);
+      // Copy so React always sees a new reference (avoids skipped re-renders / stale pdf.js).
+      setPreviewPdfBytes(new Uint8Array(hit.bytes));
+      setPdfPageCount(hit.pageCount);
+      setPdfWarnings(hit.warnings);
+      return;
+    }
+    bulkAbortRef.current?.abort();
+    bulkAbortRef.current = null;
+    setPrefetchingAllTemplates(false);
+
+    singleAbortRef.current?.abort();
+    const ac = new AbortController();
+    singleAbortRef.current = ac;
+    const reqId = ++previewReqIdRef.current;
+    setLoadingPreview(true);
+    setError(null);
+    adminRenderTemplatePdf({
+      template_id: nextTemplateId,
+      schema: renderSchemaRef.current,
+      signal: ac.signal,
+    })
+      .then((res) => {
+        if (reqId !== previewReqIdRef.current) return;
+        const bytes = b64ToUint8Array(res.pdf_base64);
+        previewCacheRef.current.set(nextTemplateId, {
+          bytes,
+          pageCount: res.page_count,
+          warnings: res.warnings,
+          sig,
+        });
+        setPdfPageCount(res.page_count);
+        setPdfWarnings(res.warnings);
+        setPreviewPdfBytes(new Uint8Array(bytes));
+      })
+      .catch((e) => {
+        if (e instanceof DOMException && e.name === "AbortError") return;
+        if (e instanceof Error && e.name === "AbortError") return;
+        if (reqId === previewReqIdRef.current) setError(String(e));
+      })
+      .finally(() => {
+        if (reqId === previewReqIdRef.current) setLoadingPreview(false);
+      });
+  }, []);
+
+  /**
+   * Blur/Enter: restart debounce only (no immediate bulk).
+   * Skip when focus moves into the template dropdown — otherwise blur from the left form schedules bulk
+   * ~380ms later and runBulkPrefetchTemplates aborts the PDF fetch started by applyTemplatePreview.
+   */
+  const commitPreviewRefresh = useCallback(() => {
+    if (commitPreviewOuterRef.current !== null) {
+      clearTimeout(commitPreviewOuterRef.current);
+      commitPreviewOuterRef.current = null;
+    }
+    commitPreviewOuterRef.current = setTimeout(() => {
+      commitPreviewOuterRef.current = null;
+      if (previewTimerRef.current !== null) {
+        clearTimeout(previewTimerRef.current);
+        previewTimerRef.current = null;
+      }
+      if (templatesRef.current.length === 0 || !templateIdRef.current) return;
+      previewTimerRef.current = setTimeout(() => {
+        previewTimerRef.current = null;
+        void runBulkPrefetchTemplates();
+      }, 380);
+    }, 0);
+  }, [runBulkPrefetchTemplates]);
 
   useEffect(() => {
     getAdminTemplates()
@@ -202,74 +363,38 @@ export default function AdminTemplatesLab() {
       .catch((e) => setError(String(e)));
   }, []);
 
-  /** Single queue: cancels prior timer and in-flight fetch. Refs = no stale schema/template. */
-  const schedulePreview = useCallback((delayMs: number) => {
-    if (previewTimerRef.current !== null) {
-      clearTimeout(previewTimerRef.current);
-      previewTimerRef.current = null;
-    }
-    previewTimerRef.current = setTimeout(() => {
-      previewTimerRef.current = null;
-      const tid = templateIdRef.current;
-      if (!tid) return;
-
-      previewAbortRef.current?.abort();
-      const ac = new AbortController();
-      previewAbortRef.current = ac;
-
-      const reqId = ++previewReqIdRef.current;
-      setLoadingPreview(true);
-      setError(null);
-      adminRenderTemplatePdf({
-        template_id: tid,
-        schema: renderSchemaRef.current,
-        signal: ac.signal,
-      })
-        .then((res) => {
-          if (reqId !== previewReqIdRef.current) return;
-          setPdfPageCount(res.page_count);
-          setPdfWarnings(res.warnings);
-          setPreviewPdfBytes(b64ToUint8Array(res.pdf_base64));
-        })
-        .catch((e) => {
-          if (e instanceof DOMException && e.name === "AbortError") return;
-          if (e instanceof Error && e.name === "AbortError") return;
-          if (reqId === previewReqIdRef.current) setError(String(e));
-        })
-        .finally(() => {
-          if (reqId === previewReqIdRef.current) setLoadingPreview(false);
-        });
-    }, delayMs);
-  }, []);
-
   useEffect(
     () => () => {
+      if (commitPreviewOuterRef.current !== null) {
+        clearTimeout(commitPreviewOuterRef.current);
+        commitPreviewOuterRef.current = null;
+      }
       if (previewTimerRef.current !== null) {
         clearTimeout(previewTimerRef.current);
         previewTimerRef.current = null;
       }
-      previewAbortRef.current?.abort();
+      bulkAbortRef.current?.abort();
+      singleAbortRef.current?.abort();
     },
     []
   );
 
-  // Typing / structured edits: debounced server render; abort stale in-flight PDF when schema moves again.
+  // Edits: debounced bulk prefetch for all templates (fills cache → dropdown switches are instant).
+  // templateId omitted from deps so changing the menu does not reset the debounce timer.
   useEffect(() => {
-    schedulePreview(380);
+    if (templates.length === 0 || !templateIdRef.current) return;
+    previewTimerRef.current = setTimeout(() => {
+      previewTimerRef.current = null;
+      void runBulkPrefetchTemplates();
+    }, 380);
     return () => {
       if (previewTimerRef.current !== null) {
         clearTimeout(previewTimerRef.current);
         previewTimerRef.current = null;
       }
-      previewAbortRef.current?.abort();
+      bulkAbortRef.current?.abort();
     };
-  }, [renderSchema, schedulePreview]);
-
-  // Template menu or blur/enter commit: flush immediately and cancel pending debounce.
-  useEffect(() => {
-    if (!templateId) return;
-    schedulePreview(0);
-  }, [templateId, commitPreviewTick, schedulePreview]);
+  }, [renderSchema, templates, runBulkPrefetchTemplates]);
 
   useEffect(() => {
     if (!templateMenuOpen) return;
@@ -344,7 +469,7 @@ export default function AdminTemplatesLab() {
       if (resizeDebounce !== null) clearTimeout(resizeDebounce);
       ro.disconnect();
     };
-  }, [previewPdfBytes]);
+  }, [previewPdfBytes, templateId]);
 
   const stepIndex = STEPS.indexOf(step);
   const nextStep = STEPS[stepIndex + 1];
@@ -367,7 +492,12 @@ export default function AdminTemplatesLab() {
         <div
           className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-sm"
           onBlurCapture={(e) => {
-            if (isEditableField(e.target)) commitPreviewRefresh();
+            if (!isEditableField(e.target)) return;
+            const rt = e.relatedTarget;
+            if (rt instanceof Node && templateMenuRef.current?.contains(rt)) {
+              return;
+            }
+            commitPreviewRefresh();
           }}
           onKeyDownCapture={(e) => {
             if (e.key !== "Enter" || e.nativeEvent.isComposing) return;
@@ -1077,7 +1207,12 @@ export default function AdminTemplatesLab() {
                   </span>
                   <span className="truncate">Your resume score</span>
                 </p>
-                {loadingPreview && <p className="mt-0.5 text-xs text-slate-400">Updating preview...</p>}
+                {prefetchingAllTemplates && (
+                  <p className="mt-0.5 text-xs text-slate-500">Preparing previews for all templates…</p>
+                )}
+                {loadingPreview && !prefetchingAllTemplates && (
+                  <p className="mt-0.5 text-xs text-slate-400">Updating preview…</p>
+                )}
               </div>
               <div ref={templateMenuRef} className="relative shrink-0">
                 <button
@@ -1094,11 +1229,13 @@ export default function AdminTemplatesLab() {
                       <button
                         key={t.id}
                         type="button"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                        }}
                         onClick={() => {
                           setTemplateId(t.id);
-                          // Force immediate refresh even when selecting the same template id.
-                          setCommitPreviewTick((v) => v + 1);
                           setTemplateMenuOpen(false);
+                          applyTemplatePreview(t.id);
                         }}
                         className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition ${
                           templateId === t.id ? "bg-[#eef1ff] text-[#1e2a7c]" : "text-slate-700 hover:bg-slate-50"

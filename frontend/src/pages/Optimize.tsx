@@ -747,10 +747,12 @@ function groupRecommendations(
     });
 
     const fallback = fallbackLabelsByCategory(categoryKey, categoryScore);
-    const limited = cleaned.slice(0, 5);
+    const maxLabels = categoryKey === "keywords" ? 16 : 5;
+    const limited = cleaned.slice(0, maxLabels);
     // Do not force a fixed amount of issues.
     // If model/backend provided concrete items, keep their natural count.
-    if (limited.length === 0) {
+    // Keywords: backend sends missing terms as chips — do not inject generic instructional fallback text.
+    if (limited.length === 0 && categoryKey !== "keywords") {
       for (const fb of fallback) {
         if (limited.length >= 1) break;
         if (!limited.some((x) => x.toLowerCase() === fb.toLowerCase())) limited.push(fb);
@@ -1920,7 +1922,11 @@ export default function Optimize() {
     problems: group.labels.filter((label) => !isPositiveRecommendationLabel(label)),
   }));
   const problemLabelsSorted = recommendationGroups
-    .flatMap((g) => g.labels.filter((l) => !isPositiveRecommendationLabel(l)))
+    .flatMap((g) =>
+      normalizeCategoryKey(g.category) === "keywords"
+        ? []
+        : g.labels.filter((l) => !isPositiveRecommendationLabel(l)),
+    )
     .sort((a, b) => recommendationPriorityScore(b) - recommendationPriorityScore(a));
   const callbackBlockersOptimize = (preScores?.callback_blockers || [])
     .filter((b) => (b.headline || "").trim())
@@ -2260,18 +2266,39 @@ export default function Optimize() {
                             <ChevronDownIcon className={`w-4 h-4 text-[#6B7280] transition-transform shrink-0 ${open ? "rotate-180" : ""}`} />
                           </DisclosureButton>
                           <DisclosurePanel className="px-3.5 pb-3.5 pt-0">
-                            <ul className="space-y-1.5 pl-0">
-                              {group.problems.map((label) => (
-                                <li key={`${group.category}-${label}`} className="px-0.5 py-1">
-                                  <p className="text-[12px] font-medium text-[#181819] leading-snug">{cleanRecommendationReason(label)}</p>
-                                  {!recommendationLabelIsSelfContained(label) ? (
-                                    <p className="mt-0.5 text-[11px] text-[#6B7280] leading-relaxed">
-                                      {fixFromRecommendationLabel(label, group.category)}
+                            {normalizeCategoryKey(group.category) === "keywords" ? (
+                              <div
+                                className="flex flex-wrap gap-1.5 pt-2 border-t border-[#EDF1F7] mt-1"
+                                role="list"
+                                aria-label={t("optimize.keywordsMissingTerms")}
+                              >
+                                {group.problems.map((label) => (
+                                  <span
+                                    key={`${group.category}-${label}`}
+                                    role="listitem"
+                                    className="inline-flex max-w-full items-center truncate rounded-md border border-[#E8ECF3] bg-[#F4F6FA] px-2 py-0.5 text-[11px] font-medium leading-tight text-[#4B5563]"
+                                    title={cleanRecommendationReason(label)}
+                                  >
+                                    {cleanRecommendationReason(label)}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <ul className="space-y-1.5 pl-0">
+                                {group.problems.map((label) => (
+                                  <li key={`${group.category}-${label}`} className="px-0.5 py-1">
+                                    <p className="text-[12px] font-medium text-[#181819] leading-snug">
+                                      {cleanRecommendationReason(label)}
                                     </p>
-                                  ) : null}
-                                </li>
-                              ))}
-                            </ul>
+                                    {!recommendationLabelIsSelfContained(label) ? (
+                                      <p className="mt-0.5 text-[11px] text-[#6B7280] leading-relaxed">
+                                        {fixFromRecommendationLabel(label, group.category)}
+                                      </p>
+                                    ) : null}
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
                           </DisclosurePanel>
                         </div>
                       )}

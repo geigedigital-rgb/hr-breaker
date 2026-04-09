@@ -1,3 +1,10 @@
+import {
+  appendAdminPipelineLog,
+  appendAdminPipelineLogs,
+  isAdminPipelineCaptureEnabled,
+} from "./adminPipelineLogStore";
+import type { AdminPipelineLogEntry } from "./adminPipelineLogStore";
+
 const API = "/api";
 const AUTH_TOKEN_KEY = "hr_breaker_token";
 
@@ -223,6 +230,8 @@ export type AnalyzeResponse = {
   risk_summary?: string | null;
   /** LLM-generated tips with headers for recommendations block */
   improvement_tips?: string | null;
+  /** Admin-only: server pipeline steps */
+  admin_pipeline_log?: AdminPipelineLogEntry[] | null;
 };
 
 const OUTPUT_LANGUAGE_KEY = "app_output_language";
@@ -244,6 +253,19 @@ export async function analyze(params: {
   job_url?: string;
   output_language?: string;
 }): Promise<AnalyzeResponse> {
+  if (isAdminPipelineCaptureEnabled()) {
+    appendAdminPipelineLog({
+      phase: "client",
+      step: "request",
+      message: "POST /analyze",
+      data: {
+        resume_chars: params.resume_content.length,
+        job_url: Boolean(params.job_url),
+        job_text_chars: params.job_text?.length ?? 0,
+        output_language: params.output_language ?? getOutputLanguage(),
+      },
+    });
+  }
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 90_000);
   try {
@@ -255,6 +277,22 @@ export async function analyze(params: {
     });
     const data = await parseJsonOrThrow<AnalyzeResponse & { detail?: string }>(r);
     if (!r.ok) throw new Error(data.detail || r.statusText);
+    if (isAdminPipelineCaptureEnabled() && data.admin_pipeline_log?.length) {
+      appendAdminPipelineLogs(data.admin_pipeline_log as AdminPipelineLogEntry[]);
+    }
+    if (isAdminPipelineCaptureEnabled()) {
+      appendAdminPipelineLog({
+        phase: "client",
+        step: "response",
+        message: `/analyze OK`,
+        data: {
+          ats_score: data.ats_score,
+          keyword_score: data.keyword_score,
+          job_title: data.job?.title ?? null,
+          company: data.job?.company ?? null,
+        },
+      });
+    }
     return data;
   } catch (e) {
     if (e instanceof DOMException && e.name === "AbortError") {
@@ -304,6 +342,18 @@ export async function optimize(params: {
   source_was_pdf?: boolean;
   output_language?: string;
 }): Promise<OptimizeResponse> {
+  if (isAdminPipelineCaptureEnabled()) {
+    appendAdminPipelineLog({
+      phase: "client",
+      step: "request",
+      message: "POST /optimize (non-SSE fallback)",
+      data: {
+        resume_chars: params.resume_content.length,
+        job_url: Boolean(params.job_url),
+        parallel: params.parallel,
+      },
+    });
+  }
   const r = await fetch(`${API}/optimize`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
@@ -311,6 +361,19 @@ export async function optimize(params: {
   });
   const data = await parseJsonOrThrow<OptimizeResponse & { detail?: string }>(r);
   if (!r.ok) throw new Error(data.detail || "Optimize failed");
+  if (isAdminPipelineCaptureEnabled()) {
+    appendAdminPipelineLog({
+      phase: "client",
+      step: "response",
+      message: "/optimize response",
+      data: {
+        success: data.success,
+        validation_passed: data.validation?.passed,
+        error: data.error,
+        has_pdf: Boolean(data.pdf_base64),
+      },
+    });
+  }
   return data;
 }
 
@@ -354,6 +417,18 @@ export async function optimizeStream(
   },
   onProgress: (percent: number, message: string) => void
 ): Promise<OptimizeResponse> {
+  if (isAdminPipelineCaptureEnabled()) {
+    appendAdminPipelineLog({
+      phase: "client",
+      step: "request",
+      message: "POST /optimize/stream (SSE)",
+      data: {
+        resume_chars: params.resume_content.length,
+        job_url: Boolean(params.job_url),
+        parallel: params.parallel,
+      },
+    });
+  }
   const r = await fetch(`${API}/optimize/stream`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
@@ -388,14 +463,51 @@ export async function optimizeStream(
             message?: string;
             result?: OptimizeResponse;
             error?: string;
+            log?: AdminPipelineLogEntry;
           };
+          if (isAdminPipelineCaptureEnabled() && payload.log && typeof payload.log.message === "string") {
+            appendAdminPipelineLogs([payload.log as AdminPipelineLogEntry]);
+          }
           if (payload.percent != null && payload.message != null) {
             onProgress(payload.percent, payload.message);
+            if (isAdminPipelineCaptureEnabled()) {
+              appendAdminPipelineLog({
+                phase: "optimize",
+                step: "sse_progress",
+                message: `${payload.percent}% — ${payload.message}`,
+              });
+            }
           }
           if (payload.result != null) {
+            if (isAdminPipelineCaptureEnabled()) {
+              appendAdminPipelineLog({
+                phase: "client",
+                step: "sse_done",
+                message: "SSE stream finished with result",
+                data: {
+                  success: payload.result.success,
+                  validation_passed: payload.result.validation?.passed,
+                  has_pdf: Boolean(payload.result.pdf_base64),
+                  error: payload.result.error,
+                  filters:
+                    payload.result.validation?.results?.map((x) => ({
+                      name: x.filter_name,
+                      pass: x.passed,
+                      score: x.score,
+                    })) ?? [],
+                },
+              });
+            }
             return payload.result;
           }
           if (payload.error != null) {
+            if (isAdminPipelineCaptureEnabled()) {
+              appendAdminPipelineLog({
+                phase: "optimize",
+                step: "sse_error",
+                message: payload.error,
+              });
+            }
             throw new Error(payload.error);
           }
         } catch (e) {
@@ -768,6 +880,27 @@ export type AdminTemplateListItem = {
 
 export type AdminTemplateListResponse = { items: AdminTemplateListItem[] };
 
+function logTemplatesLabStep(step: string, message: string, data?: Record<string, unknown>): void {
+  if (!isAdminPipelineCaptureEnabled()) return;
+  appendAdminPipelineLog({
+    phase: "templates_lab",
+    step,
+    message,
+    ...(data !== undefined ? { data } : {}),
+  });
+}
+
+function unifiedSchemaQuickStats(schema: UnifiedResumeSchema): Record<string, unknown> {
+  return {
+    name_chars: (schema.basics?.name || "").length,
+    work_n: schema.work?.length ?? 0,
+    education_n: schema.education?.length ?? 0,
+    skills_n: schema.skills?.length ?? 0,
+    projects_n: schema.projects?.length ?? 0,
+    certs_n: schema.certificates?.length ?? 0,
+  };
+}
+
 export type AdminTemplateRenderHtmlResponse = {
   html_body: string;
   full_html: string;
@@ -791,14 +924,24 @@ export async function adminExtractResumeSchema(params: {
   target_role?: string;
   target_locale?: string;
 }): Promise<UnifiedResumeSchema> {
+  logTemplatesLabStep("request", "POST /admin/resume-schema/extract", {
+    resume_chars: params.resume_content.length,
+    target_role: params.target_role ?? null,
+    target_locale: params.target_locale ?? null,
+  });
   const r = await fetch(`${API}/admin/resume-schema/extract`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify(params),
   });
   const data = await parseJsonOrThrow<UnifiedResumeSchema & { detail?: string }>(r);
-  if (!r.ok) throw new Error(data.detail || r.statusText);
-  return data as UnifiedResumeSchema;
+  if (!r.ok) {
+    logTemplatesLabStep("error", String(data.detail || r.statusText), { status: r.status });
+    throw new Error(data.detail || r.statusText);
+  }
+  const out = data as UnifiedResumeSchema;
+  logTemplatesLabStep("response", "Resume text → UnifiedResumeSchema (LLM) OK", unifiedSchemaQuickStats(out));
+  return out;
 }
 
 export async function adminExtractResumeSchemaFromFile(params: {
@@ -806,6 +949,12 @@ export async function adminExtractResumeSchemaFromFile(params: {
   target_role?: string;
   target_locale?: string;
 }): Promise<UnifiedResumeSchema> {
+  logTemplatesLabStep("request", "POST /admin/resume-schema/extract-file", {
+    filename: params.file.name,
+    file_bytes: params.file.size,
+    target_role: params.target_role ?? null,
+    target_locale: params.target_locale ?? null,
+  });
   const form = new FormData();
   form.append("file", params.file);
   if (params.target_role) form.append("target_role", params.target_role);
@@ -816,14 +965,27 @@ export async function adminExtractResumeSchemaFromFile(params: {
     body: form,
   });
   const data = await parseJsonOrThrow<UnifiedResumeSchema & { detail?: string }>(r);
-  if (!r.ok) throw new Error(data.detail || r.statusText);
-  return data as UnifiedResumeSchema;
+  if (!r.ok) {
+    logTemplatesLabStep("error", String(data.detail || r.statusText), { status: r.status });
+    throw new Error(data.detail || r.statusText);
+  }
+  const out = data as UnifiedResumeSchema;
+  logTemplatesLabStep("response", "Resume file → text → UnifiedResumeSchema (LLM) OK", unifiedSchemaQuickStats(out));
+  return out;
 }
 
 export async function getAdminTemplates(): Promise<AdminTemplateListResponse> {
+  logTemplatesLabStep("request", "GET /admin/templates");
   const r = await fetch(`${API}/admin/templates`, { headers: authHeaders() });
   const data = await parseJsonOrThrow<AdminTemplateListResponse & { detail?: string }>(r);
-  if (!r.ok) throw new Error(data.detail || r.statusText);
+  if (!r.ok) {
+    logTemplatesLabStep("error", String(data.detail || r.statusText), { status: r.status });
+    throw new Error(data.detail || r.statusText);
+  }
+  logTemplatesLabStep("response", "Templates list OK", {
+    count: data.items.length,
+    sample_ids: data.items.slice(0, 12).map((x) => x.id),
+  });
   return data;
 }
 
@@ -831,13 +993,25 @@ export async function adminRenderTemplateHtml(params: {
   template_id: string;
   schema: UnifiedResumeSchema;
 }): Promise<AdminTemplateRenderHtmlResponse> {
+  logTemplatesLabStep("request", "POST /admin/templates/render-html", {
+    template_id: params.template_id,
+    ...unifiedSchemaQuickStats(params.schema),
+  });
   const r = await fetch(`${API}/admin/templates/render-html`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify(params),
   });
   const data = await parseJsonOrThrow<AdminTemplateRenderHtmlResponse & { detail?: string }>(r);
-  if (!r.ok) throw new Error(data.detail || r.statusText);
+  if (!r.ok) {
+    logTemplatesLabStep("error", String(data.detail || r.statusText), { status: r.status, template_id: params.template_id });
+    throw new Error(data.detail || r.statusText);
+  }
+  logTemplatesLabStep("response", "Template HTML render OK", {
+    template_id: params.template_id,
+    html_body_chars: data.html_body.length,
+    full_html_chars: data.full_html.length,
+  });
   return data;
 }
 
@@ -847,14 +1021,40 @@ export async function adminRenderTemplatePdf(params: {
   signal?: AbortSignal;
 }): Promise<AdminTemplateRenderPdfResponse> {
   const { signal, ...body } = params;
-  const r = await fetch(`${API}/admin/templates/render-pdf`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...authHeaders() },
-    body: JSON.stringify(body),
-    signal,
+  logTemplatesLabStep("request", "POST /admin/templates/render-pdf", {
+    template_id: body.template_id,
+    ...unifiedSchemaQuickStats(body.schema),
   });
+  let r: Response;
+  try {
+    r = await fetch(`${API}/admin/templates/render-pdf`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify(body),
+      signal,
+    });
+  } catch (e) {
+    if (e instanceof DOMException && e.name === "AbortError") {
+      logTemplatesLabStep("aborted", "render-pdf aborted (client)", { template_id: body.template_id });
+    } else if (isAdminPipelineCaptureEnabled()) {
+      logTemplatesLabStep("error", e instanceof Error ? e.message : String(e), { template_id: body.template_id });
+    }
+    throw e;
+  }
   const data = await parseJsonOrThrow<AdminTemplateRenderPdfResponse & { detail?: string }>(r);
-  if (!r.ok) throw new Error(data.detail || r.statusText);
+  if (!r.ok) {
+    logTemplatesLabStep("error", String(data.detail || r.statusText), {
+      status: r.status,
+      template_id: body.template_id,
+    });
+    throw new Error(data.detail || r.statusText);
+  }
+  logTemplatesLabStep("response", "Template PDF render OK (WeasyPrint)", {
+    template_id: body.template_id,
+    page_count: data.page_count,
+    warnings_n: data.warnings?.length ?? 0,
+    pdf_b64_len: data.pdf_base64.length,
+  });
   return data;
 }
 

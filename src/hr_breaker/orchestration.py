@@ -4,6 +4,7 @@ import asyncio
 import tempfile
 import time
 from collections.abc import Callable
+from typing import Any
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -113,6 +114,7 @@ async def optimize_for_job(
     max_iterations: int | None = None,
     on_iteration: Callable | None = None,
     on_progress: Callable[[int, str], None] | None = None,
+    on_admin_log: Callable[[dict[str, Any]], None] | None = None,
     job: JobPosting | None = None,
     parallel: bool = False,
     no_shame: bool = False,
@@ -143,17 +145,36 @@ async def optimize_for_job(
     # Product policy: one strict strong iteration only.
     max_iterations = 1
 
+    def alog(step: str, message: str, data: dict[str, Any] | None = None) -> None:
+        if not on_admin_log:
+            return
+        entry: dict[str, Any] = {"phase": "optimize", "step": step, "message": message}
+        if data is not None:
+            entry["data"] = data
+        on_admin_log(entry)
+
     renderer = HTMLRenderer()
 
     if job is None:
         if job_text is None:
             raise ValueError("Either job_text or job must be provided")
+        alog("parse_job", "Parsing job posting (LLM)", {"job_text_chars": len(job_text)})
         if on_progress:
             on_progress(12, "Parsing job…")
         with log_time("parse_job_posting"):
             job = await parse_job_posting(job_text, audit_user_id=audit_user_id)
         if on_progress:
             on_progress(15, "Job parsed")
+        alog(
+            "parse_job",
+            "Job posting structured",
+            {
+                "title": job.title,
+                "company": job.company,
+                "keywords_n": len(job.keywords or []),
+                "requirements_n": len(job.requirements or []),
+            },
+        )
     optimized = None
     validation = None
     last_attempt: str | None = None
@@ -162,6 +183,16 @@ async def optimize_for_job(
         logger.debug(f"Iteration {i + 1}/{max_iterations}")
         progress_pct = max(15, _progress_percent_iteration(i, max_iterations, "generate") - 8)
         progress_msg = f"Iteration {i + 1}: generating resume (LLM)…"
+        alog(
+            "llm_resume",
+            progress_msg,
+            {
+                "iteration": i + 1,
+                "no_shame": no_shame,
+                "pre_ats_score": pre_ats_score,
+                "pre_keyword_score": pre_keyword_score,
+            },
+        )
         if on_progress:
             on_progress(progress_pct, progress_msg)
 
@@ -200,6 +231,10 @@ async def optimize_for_job(
                     pass
         if on_progress:
             on_progress(_progress_percent_iteration(i, max_iterations, "generate"), "Resume generated")
+        if optimized.html is not None:
+            alog("llm_resume", "Optimizer returned HTML resume", {"html_chars": len(optimized.html)})
+        elif optimized.data is not None:
+            alog("llm_resume", "Optimizer returned structured resume data", {"json_chars": len(optimized.data.model_dump_json())})
         logger.debug(f"Optimizer changes: {optimized.changes}")
         # Store last attempt for feedback (html or data depending on mode)
         last_attempt = optimized.html if optimized.html else (
@@ -211,6 +246,11 @@ async def optimize_for_job(
                 _progress_percent_iteration(i, max_iterations, "render") - 2,
                 "Rendering PDF…",
             )
+        alog(
+            "render",
+            "WeasyPrint: HTML/data → PDF, then extract text",
+            {"has_html": optimized.html is not None, "has_data": optimized.data is not None},
+        )
         # Render PDF and extract text for filters (like real ATS)
         optimized = _render_and_extract(optimized, renderer)
         if on_progress:
@@ -234,8 +274,28 @@ async def optimize_for_job(
                     )
                 ]
             )
+            alog("render", "PDF render or text extraction failed", {})
         else:
+            alog(
+                "render",
+                "PDF ready for filters",
+                {
+                    "pdf_bytes": len(optimized.pdf_bytes or b""),
+                    "pdf_text_chars": len(optimized.pdf_text or ""),
+                },
+            )
             validation = await run_filters(optimized, job, source, parallel=parallel)
+            for r in validation.results:
+                alog(
+                    "filter",
+                    r.filter_name,
+                    {
+                        "passed": r.passed,
+                        "score": round(float(r.score), 4),
+                        "threshold": round(float(r.threshold), 4),
+                        "issues_n": len(r.issues),
+                    },
+                )
 
         if on_progress:
             on_progress(_progress_percent_iteration(i, max_iterations, "filters"), "Iteration complete")

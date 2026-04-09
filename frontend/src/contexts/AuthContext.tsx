@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import * as api from "../api";
 import { setStoredToken } from "../api";
+import { clearAdminPipelineLogOnLogout, setAdminPipelineCapture } from "../adminPipelineLogStore";
 
 type AuthContextValue = {
   user: api.AuthUser | null;
@@ -75,6 +76,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(() => {
+    clearAdminPipelineLogOnLogout();
     setStoredToken(null);
     setUser(null);
   }, []);
@@ -97,6 +99,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // keep current user on error
     }
   }, []);
+
+  useEffect(() => {
+    setAdminPipelineCapture(!!user && api.isAdminUser(user));
+  }, [user]);
 
   return (
     <AuthContext.Provider

@@ -1,33 +1,39 @@
-import { Component, type ReactNode } from "react";
+import { Component, lazy, Suspense, type ReactNode } from "react";
 import { BrowserRouter, Navigate, Routes, Route } from "react-router-dom";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { isAdminUser } from "./api";
 import Layout from "./Layout";
 import AdminLayout from "./AdminLayout";
-import Home from "./pages/Home";
-import Optimize from "./pages/Optimize";
-import History from "./pages/History";
-import Progress from "./pages/Progress";
-import Vacancies from "./pages/Vacancies";
-import Settings from "./pages/Settings";
-import Upgrade from "./pages/Upgrade";
-import DownloadCheckout from "./pages/DownloadCheckout";
-import Partner from "./pages/Partner";
-import Login from "./pages/Login";
-import AuthCallback from "./pages/AuthCallback";
-import SignupSuccess from "./pages/SignupSuccess";
-import AdminDashboard from "./pages/admin/AdminDashboard";
-import AdminUsers from "./pages/admin/AdminUsers";
-import AdminUserDetail from "./pages/admin/AdminUserDetail";
-import AdminApp from "./pages/admin/AdminApp";
-import AdminConfig from "./pages/admin/AdminConfig";
-import AdminActivity from "./pages/admin/AdminActivity";
-import AdminUsage from "./pages/admin/AdminUsage";
-import AdminReferrals from "./pages/admin/AdminReferrals";
-import AdminReviews from "./pages/admin/AdminReviews";
-import AdminVisualTest from "./pages/admin/AdminVisualTest";
-import AdminTemplatesLab from "./pages/admin/AdminTemplatesLab";
+import RouteFallback from "./components/RouteFallback";
 import { t } from "./i18n";
+
+const Home = lazy(() => import("./pages/Home"));
+const Optimize = lazy(() => import("./pages/Optimize"));
+const History = lazy(() => import("./pages/History"));
+const Progress = lazy(() => import("./pages/Progress"));
+const Vacancies = lazy(() => import("./pages/Vacancies"));
+const Settings = lazy(() => import("./pages/Settings"));
+const Upgrade = lazy(() => import("./pages/Upgrade"));
+const DownloadCheckout = lazy(() => import("./pages/DownloadCheckout"));
+const Partner = lazy(() => import("./pages/Partner"));
+const Login = lazy(() => import("./pages/Login"));
+const AuthCallback = lazy(() => import("./pages/AuthCallback"));
+const SignupSuccess = lazy(() => import("./pages/SignupSuccess"));
+const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
+const AdminUsers = lazy(() => import("./pages/admin/AdminUsers"));
+const AdminUserDetail = lazy(() => import("./pages/admin/AdminUserDetail"));
+const AdminApp = lazy(() => import("./pages/admin/AdminApp"));
+const AdminConfig = lazy(() => import("./pages/admin/AdminConfig"));
+const AdminActivity = lazy(() => import("./pages/admin/AdminActivity"));
+const AdminUsage = lazy(() => import("./pages/admin/AdminUsage"));
+const AdminReferrals = lazy(() => import("./pages/admin/AdminReferrals"));
+const AdminReviews = lazy(() => import("./pages/admin/AdminReviews"));
+const AdminVisualTest = lazy(() => import("./pages/admin/AdminVisualTest"));
+const AdminTemplatesLab = lazy(() => import("./pages/admin/AdminTemplatesLab"));
+
+function LazyShell({ children }: { children: ReactNode }) {
+  return <Suspense fallback={<RouteFallback />}>{children}</Suspense>;
+}
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -79,8 +85,8 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boole
     if (this.state.hasError) {
       return (
         <div style={{ padding: 24, fontFamily: "system-ui", color: "#181819" }}>
-        <h1>{t("app.errorTitle")}</h1>
-        <p>{t("app.errorHint")}</p>
+          <h1>{t("app.errorTitle")}</h1>
+          <p>{t("app.errorHint")}</p>
         </div>
       );
     }
@@ -94,10 +100,40 @@ function App() {
       <BrowserRouter>
         <AuthProvider>
           <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route path="/signup-success" element={<SignupSuccess />} />
-            <Route path="/auth/callback" element={<AuthCallback />} />
-            <Route path="/checkout/download-resume" element={<RequireAuth><DownloadCheckout /></RequireAuth>} />
+            <Route
+              path="/login"
+              element={
+                <LazyShell>
+                  <Login />
+                </LazyShell>
+              }
+            />
+            <Route
+              path="/signup-success"
+              element={
+                <LazyShell>
+                  <SignupSuccess />
+                </LazyShell>
+              }
+            />
+            <Route
+              path="/auth/callback"
+              element={
+                <LazyShell>
+                  <AuthCallback />
+                </LazyShell>
+              }
+            />
+            <Route
+              path="/checkout/download-resume"
+              element={
+                <RequireAuth>
+                  <LazyShell>
+                    <DownloadCheckout />
+                  </LazyShell>
+                </RequireAuth>
+              }
+            />
             <Route path="/" element={<RequireAuth><Layout /></RequireAuth>}>
               <Route index element={<Home />} />
               <Route path="optimize" element={<Optimize />} />
@@ -106,7 +142,14 @@ function App() {
               <Route path="vacancies" element={<Vacancies />} />
               <Route path="settings" element={<Settings />} />
               <Route path="upgrade" element={<Upgrade />} />
-              <Route path="partner" element={<RequirePartnerAccess><Partner /></RequirePartnerAccess>} />
+              <Route
+                path="partner"
+                element={
+                  <RequirePartnerAccess>
+                    <Partner />
+                  </RequirePartnerAccess>
+                }
+              />
             </Route>
             <Route path="/admin" element={<RequireAuth><RequireAdmin><AdminLayout /></RequireAdmin></RequireAuth>}>
               <Route index element={<AdminDashboard />} />

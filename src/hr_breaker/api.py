@@ -117,9 +117,48 @@ def _put_progress(queue: asyncio.Queue | None, percent: int, message: str) -> No
         except asyncio.QueueFull:
             pass
 
+
+def _put_admin_log(queue: asyncio.Queue | None, user: dict | None, entry: dict[str, Any]) -> None:
+    """Stream structured pipeline events to admin clients (SSE); no-op if not admin or no queue."""
+    if queue is None or not user or not _is_admin_user(user):
+        return
+    e = {**entry, "ts": datetime.now(timezone.utc).isoformat()}
+    if "phase" not in e:
+        e["phase"] = "optimize"
+    try:
+        queue.put_nowait(("admin_log", e))
+    except asyncio.QueueFull:
+        pass
+
 logger = logging.getLogger(__name__)
 
 FREE_ANALYSES_PER_MONTH = 10
+
+# --------------------------------------------------------------------------
+# Simple in-memory TTL cache for LLM results shared between /analyze and /optimize
+# --------------------------------------------------------------------------
+_PIPELINE_CACHE_TTL = 600  # 10 minutes
+_pipeline_cache: dict[str, tuple[Any, float]] = {}
+
+
+def _cache_key(prefix: str, text: str) -> str:
+    return prefix + hashlib.sha256(text.encode()).hexdigest()
+
+
+def _cache_get(key: str) -> Any | None:
+    entry = _pipeline_cache.get(key)
+    if entry is None:
+        return None
+    value, ts = entry
+    if time.monotonic() - ts > _PIPELINE_CACHE_TTL:
+        _pipeline_cache.pop(key, None)
+        return None
+    return value
+
+
+def _cache_set(key: str, value: Any) -> None:
+    _pipeline_cache[key] = (value, time.monotonic())
+# --------------------------------------------------------------------------
 FREE_OPTIMIZE_PER_MONTH = 10
 PENDING_EXPORT_TTL_SECONDS = 15 * 60
 PENDING_EXPORT_DIRNAME = "pending_optimize_exports"
@@ -385,6 +424,8 @@ class AnalyzeResponse(BaseModel):
     callback_blockers: list[CallbackBlockerOut] = Field(default_factory=list)
     risk_summary: str | None = None
     improvement_tips: str | None = None  # LLM-generated tips with headers for "recommendations" block
+    # Admin-only: ordered pipeline steps (scraping, parsing, scoring, LLM); omitted for non-admins
+    admin_pipeline_log: list[dict[str, Any]] | None = None
 
 
 class FilterResultOut(BaseModel):
@@ -2109,13 +2150,18 @@ async def api_parse_job(req: JobParseRequest) -> JobPostingOut:
 _KEYWORD_NOISE = frozenset({"m", "w", "d", "m w", "w d", "m d", "m w d", "w m", "d m", "d w"})
 _MIN_KEYWORD_LEN = 3
 _MAX_KEYWORDS_DISPLAY = 7
+# UI chips in Optimize "Keywords" — show more concrete terms than legacy short lists
+_RECOMMENDATION_KEYWORD_CHIPS_MAX = 14
 
 
 def _filter_meaningful_keywords(
     missing_keywords: list[str],
     job_keywords: list[str],
+    *,
+    max_count: int | None = None,
 ) -> list[str]:
     """Оставляем только осмысленные термины; приоритет — недостающие ключевые слова из вакансии (job.keywords)."""
+    cap = max_count if max_count is not None else _MAX_KEYWORDS_DISPLAY
     job_lower = {k.strip().lower() for k in job_keywords if k and len(k.strip()) >= _MIN_KEYWORD_LEN}
     seen: set[str] = set()
     result: list[str] = []
@@ -2136,7 +2182,7 @@ def _filter_meaningful_keywords(
             continue
         seen.add(k)
         result.append(kw.strip())
-        if len(result) >= _MAX_KEYWORDS_DISPLAY:
+        if len(result) >= cap:
             return result
     # Затем — остальные из missing (TF-IDF), без шума
     for kw in missing_keywords:
@@ -2145,7 +2191,7 @@ def _filter_meaningful_keywords(
             continue
         seen.add(k)
         result.append(kw.strip())
-        if len(result) >= _MAX_KEYWORDS_DISPLAY:
+        if len(result) >= cap:
             break
     return result
 
@@ -2161,7 +2207,7 @@ def _build_recommendations(
     has_requirements: bool,
 ) -> list[RecommendationItem]:
     """Return three categories in a stable order."""
-    meaningful = _filter_meaningful_keywords(missing_keywords, job_keywords or [])
+    meaningful = _filter_meaningful_keywords(missing_keywords, job_keywords or [], max_count=_MAX_KEYWORDS_DISPLAY)
     need_kw = keyword_score < keyword_threshold
     need_structure = ats_score < 70
     need_requirements = has_requirements and (ats_score < 80 or keyword_score < keyword_threshold)
@@ -2253,7 +2299,7 @@ def _recommendations_from_insights(
     requirements: list[str],
     has_requirements: bool,
 ) -> list[RecommendationItem]:
-    """Prefer LLM category lines (1-3 each); fall back to heuristic _build_recommendations per category."""
+    """Structure/Requirements: prefer LLM lines; Keywords: concrete missing terms (TF-IDF), not LLM prose."""
     issues = _critical_headlines_from_insights(insights)
     fallback = _build_recommendations(
         ats_score=ats_score,
@@ -2266,6 +2312,29 @@ def _recommendations_from_insights(
         has_requirements=has_requirements,
     )
     by_cat = {r.category: r.labels for r in fallback}
+    need_kw = keyword_score < keyword_threshold
+    meaningful_kw = _filter_meaningful_keywords(
+        missing_keywords,
+        job_keywords or [],
+        max_count=_RECOMMENDATION_KEYWORD_CHIPS_MAX,
+    )
+
+    def _clean_keyword_chip(text: str) -> str:
+        t = " ".join((text or "").strip().split())
+        t = t.rstrip(" .,:;")
+        return t[:48] if t else ""
+
+    def keyword_labels() -> list[str]:
+        chips = [_clean_keyword_chip(w) for w in meaningful_kw]
+        chips = [c for c in chips if c]
+        if chips:
+            return chips
+        if not need_kw:
+            return ["OK"]
+        return by_cat.get(
+            "Keywords",
+            ["Mirror exact vacancy terminology", "Add role-specific hard skills"],
+        )
 
     def labels_for(llm_list: list[str], fb_key: str) -> list[str]:
         if llm_list:
@@ -2273,7 +2342,7 @@ def _recommendations_from_insights(
         return by_cat.get(fb_key, ["OK"])
 
     return [
-        RecommendationItem(category="Keywords", labels=labels_for(insights.improvement_keywords, "Keywords")),
+        RecommendationItem(category="Keywords", labels=keyword_labels()),
         RecommendationItem(category="Structure", labels=labels_for(insights.improvement_structure, "Structure")),
         RecommendationItem(
             category="Requirements", labels=labels_for(insights.improvement_requirements, "Requirements")
@@ -2336,6 +2405,33 @@ async def api_analyze(req: AnalyzeRequest, user: dict | None = Depends(get_optio
     if user and user.get("id") and str(user["id"]) != "local":
         audit_uid = str(user["id"])
 
+    is_admin = bool(user and _is_admin_user(user))
+    pipe: list[dict[str, Any]] = []
+
+    def alog(step: str, message: str, data: dict[str, Any] | None = None) -> None:
+        if not is_admin:
+            return
+        entry: dict[str, Any] = {
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "phase": "analyze",
+            "step": step,
+            "message": message,
+        }
+        if data is not None:
+            entry["data"] = data
+        pipe.append(entry)
+
+    alog(
+        "request",
+        "Analyze pipeline start",
+        {
+            "resume_chars": len(req.resume_content),
+            "job_url": bool(req.job_url),
+            "job_text_chars": len((req.job_text or "").strip()),
+            "output_language": (req.output_language or "en").strip().lower() or "en",
+        },
+    )
+
     job_text = req.job_text
     if req.job_url and not job_text:
         url = _sanitize_url(req.job_url)
@@ -2345,7 +2441,12 @@ async def api_analyze(req: AnalyzeRequest, user: dict | None = Depends(get_optio
                 "This is a job search page link. Use a link to a single job posting (e.g. indeed.com/viewjob?jk=...).",
             )
         try:
+            from urllib.parse import urlparse
+
+            host = urlparse(url).netloc or url[:64]
+            alog("scrape", "Fetching job URL", {"host": host})
             job_text = await asyncio.to_thread(scrape_job_posting, url)
+            alog("scrape", "Job page scraped to plain text", {"job_text_chars": len(job_text)})
         except CloudflareBlockedError:
             pool = await get_pool()
             await log_usage_event(
@@ -2361,21 +2462,54 @@ async def api_analyze(req: AnalyzeRequest, user: dict | None = Depends(get_optio
     if not job_text:
         raise HTTPException(400, "Provide job_text or job_url")
 
-    try:
-        job = await parse_job_posting(job_text, audit_user_id=audit_uid)
-    except Exception as e:
-        logger.exception("analyze job parse failed: %s", e)
-        if _is_api_key_invalid(e):
-            raise HTTPException(401, _API_KEY_INVALID_MSG)
-        raise HTTPException(500, f"Job parse failed: {e!s}")
+    if not req.job_url:
+        alog("job_input", "Using pasted job description (no URL)", {"job_text_chars": len(job_text)})
+
+    _job_cache_key = _cache_key("job:", job_text)
+    job = _cache_get(_job_cache_key)
+    if job is None:
+        try:
+            job = await parse_job_posting(job_text, audit_user_id=audit_uid)
+        except Exception as e:
+            logger.exception("analyze job parse failed: %s", e)
+            if _is_api_key_invalid(e):
+                raise HTTPException(401, _API_KEY_INVALID_MSG)
+            raise HTTPException(500, f"Job parse failed: {e!s}")
+        _cache_set(_job_cache_key, job)
+
+    alog(
+        "parse_job",
+        "Job posting structured (LLM)",
+        {
+            "title": job.title,
+            "company": job.company,
+            "keywords_n": len(job.keywords or []),
+            "requirements_n": len(job.requirements or []),
+            "description_chars": len(job.description or ""),
+        },
+    )
 
     resume_stripped = req.resume_content.strip()
     out_lang = (req.output_language or "en").strip().lower() or "en"
     kw_result = await asyncio.to_thread(check_keywords, resume_stripped, job)
+    alog(
+        "keywords",
+        "Keyword match (TF-IDF vs job)",
+        {"score": kw_result.score, "missing_keywords_n": len(kw_result.missing_keywords)},
+    )
     # Run ATS and breakdown (Skills/Experience/Portfolio) in parallel
     ats_score, insights = await asyncio.gather(
         score_resume_vs_job(resume_stripped, job, audit_user_id=audit_uid),
         get_analysis_insights(resume_stripped, job, output_language=out_lang, audit_user_id=audit_uid),
+    )
+    alog(
+        "parallel_llm",
+        "ATS score + resume insights (LLM)",
+        {
+            "ats_score": ats_score,
+            "rejection_risk_model": insights.rejection_risk_score,
+            "callback_blockers_n": len(insights.callback_blockers),
+        },
     )
     job_out = JobPostingOut(
         title=job.title,
@@ -2420,6 +2554,7 @@ async def api_analyze(req: AnalyzeRequest, user: dict | None = Depends(get_optio
         callback_blockers=callback_out,
         risk_summary=insights.risk_summary,
         improvement_tips=insights.improvement_tips,
+        admin_pipeline_log=pipe if is_admin else None,
     )
 
 
@@ -2454,6 +2589,22 @@ async def _run_optimize(
         raise HTTPException(503, "GOOGLE_API_KEY not set. Add it to .env and restart the backend.")
 
     _put_progress(progress_queue, 0, "Starting…")
+    _put_admin_log(
+        progress_queue,
+        user,
+        {
+            "step": "request",
+            "message": "Optimize pipeline start",
+            "data": {
+                "resume_chars": len(req.resume_content or ""),
+                "job_url": bool(req.job_url),
+                "job_text_chars": len((req.job_text or "").strip()),
+                "parallel": req.parallel,
+                "aggressive_tailoring": req.aggressive_tailoring,
+                "output_language": (req.output_language or "en").strip().lower() or "en",
+            },
+        },
+    )
     job_text = req.job_text
     if req.job_url and not job_text:
         url = _sanitize_url(req.job_url)
@@ -2468,6 +2619,11 @@ async def _run_optimize(
         try:
             job_text = await asyncio.to_thread(scrape_job_posting, url)
             _put_progress(progress_queue, 5, "Job loaded")
+            _put_admin_log(
+                progress_queue,
+                user,
+                {"step": "scrape", "message": "Job URL scraped to text", "data": {"job_text_chars": len(job_text)}},
+            )
         except CloudflareBlockedError:
             pool = await get_pool()
             await log_usage_event(
@@ -2493,44 +2649,80 @@ async def _run_optimize(
     if not job_text:
         raise HTTPException(400, "Provide job_text or job_url")
 
+    _put_admin_log(
+        progress_queue,
+        user,
+        {
+            "step": "job_text",
+            "message": "Job description text ready for pipeline",
+            "data": {"chars": len(job_text), "from_scrape": bool(req.job_url and req.job_text is None)},
+        },
+    )
+
     source = ResumeSource(content=req.resume_content)
     _put_progress(progress_queue, 7, "Extracting name from resume…")
-    try:
-        first_name, last_name = await extract_name(req.resume_content, audit_user_id=audit_uid)
-        source.first_name = first_name
-        source.last_name = last_name
+    _name_cache_key = _cache_key("name:", req.resume_content)
+    _cached_name = _cache_get(_name_cache_key)
+    if _cached_name is not None:
+        source.first_name, source.last_name = _cached_name
         _put_progress(progress_queue, 10, "Name extracted")
-    except Exception as e:
-        logger.exception("Optimize failed")
-        err_msg = _API_KEY_INVALID_MSG if _is_api_key_invalid(e) else str(e)
-        pool = await get_pool()
-        await log_usage_event(
-            pool, audit_uid, "optimize_extract_name", None, success=False, error_message=err_msg[:2000]
-        )
-        return OptimizeResponse(
-            success=False,
-            validation=ValidationResultOut(passed=False, results=[]),
-            job=JobPostingOut(title="", company="", requirements=[], keywords=[], description=""),
-            error=err_msg,
-        )
+    else:
+        try:
+            first_name, last_name = await extract_name(req.resume_content, audit_user_id=audit_uid)
+            source.first_name = first_name
+            source.last_name = last_name
+            _cache_set(_name_cache_key, (first_name, last_name))
+            _put_progress(progress_queue, 10, "Name extracted")
+            _put_admin_log(
+                progress_queue,
+                user,
+                {
+                    "step": "name",
+                    "message": "Name extracted from resume (LLM)",
+                    "data": {"first_name": source.first_name, "last_name": source.last_name},
+                },
+            )
+        except Exception as e:
+            logger.exception("Optimize failed")
+            err_msg = _API_KEY_INVALID_MSG if _is_api_key_invalid(e) else str(e)
+            pool = await get_pool()
+            await log_usage_event(
+                pool, audit_uid, "optimize_extract_name", None, success=False, error_message=err_msg[:2000]
+            )
+            return OptimizeResponse(
+                success=False,
+                validation=ValidationResultOut(passed=False, results=[]),
+                job=JobPostingOut(title="", company="", requirements=[], keywords=[], description=""),
+                error=err_msg,
+            )
 
     def on_progress(percent: int, message: str) -> None:
         _put_progress(progress_queue, percent, message)
 
+    def push_admin_log(entry: dict[str, Any]) -> None:
+        _put_admin_log(progress_queue, user, entry)
+
     out_lang = (req.output_language or "en").strip().lower() or "en"
+    _job_cache_key = _cache_key("job:", job_text)
+    _cached_job = _cache_get(_job_cache_key)
     try:
         optimized, validation, job = await optimize_for_job(
             source,
-            job_text=job_text,
+            job_text=job_text if _cached_job is None else None,
+            job=_cached_job,
             max_iterations=1,
             parallel=req.parallel,
             on_progress=on_progress if progress_queue is not None else None,
+            on_admin_log=push_admin_log if _is_admin_user(user) else None,
             no_shame=req.aggressive_tailoring,
             output_language=out_lang,
             audit_user_id=audit_uid,
             pre_ats_score=req.pre_ats_score,
             pre_keyword_score=req.pre_keyword_score,
         )
+        # Store result for future reuse if it wasn't cached already
+        if _cached_job is None:
+            _cache_set(_job_cache_key, job)
     except Exception as e:
         logger.exception("Optimize failed")
         err_msg = _API_KEY_INVALID_MSG if _is_api_key_invalid(e) else str(e)
@@ -2575,6 +2767,35 @@ async def _run_optimize(
             for c in optimized.changes
         ]
 
+    _put_admin_log(
+        progress_queue,
+        user,
+        {
+            "step": "pipeline_job",
+            "message": "Job posting after optimize loop",
+            "data": {
+                "title": job.title,
+                "company": job.company,
+                "keywords_n": len(job.keywords or []),
+            },
+        },
+    )
+    _put_admin_log(
+        progress_queue,
+        user,
+        {
+            "step": "validation_summary",
+            "message": "Validation filters summary",
+            "data": {
+                "passed": validation.passed,
+                "filters": [
+                    {"name": r.filter_name, "passed": r.passed, "score": round(float(r.score), 4)}
+                    for r in validation.results
+                ],
+            },
+        },
+    )
+
     opt_uid = str(user["id"]) if user and user.get("id") else None
 
     pdf_filename = None
@@ -2614,6 +2835,21 @@ async def _run_optimize(
             if r.filter_name == "KeywordMatcher":
                 post_kw = r.score
                 break
+        _put_admin_log(
+            progress_queue,
+            user,
+            {
+                "step": "pdf_export",
+                "message": "PDF written to disk; extracted text for post-ATS score",
+                "data": {
+                    "path": pdf_path.name,
+                    "pdf_bytes": len(optimized.pdf_bytes),
+                    "extracted_text_chars": len(optimized_resume_text or ""),
+                    "post_ats_score": post_ats,
+                    "post_keyword_score": post_kw,
+                },
+            },
+        )
         pdf_storage.save_source_content(source.checksum, source.content)
         company_logo_url: str | None = None
         if req.job_url:
@@ -2667,6 +2903,15 @@ async def _run_optimize(
                 },
             )
             pending_export_expires_at = datetime.fromtimestamp(pending_exp_ts, tz=timezone.utc).isoformat()
+            _put_admin_log(
+                progress_queue,
+                user,
+                {
+                    "step": "pending_export",
+                    "message": "PDF generated but held for upgrade (no direct download on free)",
+                    "data": {"pdf_bytes": len(optimized.pdf_bytes), "has_text_fallback": bool(txt)},
+                },
+            )
     _put_progress(progress_queue, 100, "Done")
 
     if opt_uid:
@@ -2757,6 +3002,9 @@ async def api_optimize_stream(req: OptimizeRequest, user: dict | None = Depends(
                 if item[0] == "progress":
                     _, percent, message = item
                     yield f"data: {json.dumps({'percent': percent, 'message': message}, ensure_ascii=False)}\n\n"
+                elif item[0] == "admin_log":
+                    _, log_entry = item
+                    yield f"data: {json.dumps({'log': log_entry}, ensure_ascii=False)}\n\n"
                 elif item[0] == "done":
                     _, result = item
                     payload = {"percent": 100, "message": "Done", "result": result.model_dump(mode="json")}

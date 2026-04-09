@@ -65,7 +65,8 @@ TOOLS:
   - Returns actual page_count from rendered PDF (authoritative)
   - Also returns character/word estimates (rough guidance only)
   - If page_count > 1, trim content and call again until fits_one_page=true
-- OPTIONAL: check_keywords_tool(html) - Returns missing job keywords ranked by TF-IDF importance. Use if unsure about keyword coverage.
+- REQUIRED: call check_keywords_tool(html) with your final HTML before returning — check keyword coverage
+  - If score < 0.40 — add the returned missing_keywords into the Skills section where truthful, then call again
 - OPTIONAL: validate_structure(html) - Check HTML has proper headers/sections. Use after major structural changes.
 - OPTIONAL: preview_resume(html) - Renders PDF preview image. Use to visually check layout.
 
@@ -293,6 +294,12 @@ LANGUAGE OVERRIDE: Write ALL output (HTML body text, key changes categories, des
 """
     else:
         lang_override = f"\n\nLANGUAGE: Write ALL output in this language only: {out_lang}. Do not use the job posting language for output.\n"
+    _pre_kw = check_keywords(context.original_resume, job)
+    _missing_kw_hint = (
+        f"- Top missing keywords (vs original resume): {', '.join(_pre_kw.missing_keywords[:8])}\n"
+        if _pre_kw.missing_keywords
+        else ""
+    )
     prompt = f"""## Original Resume:
 {context.original_resume}
 
@@ -303,7 +310,7 @@ Requirements: {', '.join(job.requirements)}
 Keywords: {', '.join(job.keywords)}
 Description: {job.description}
 {lang_override}
-
+{_missing_kw_hint}
 ## One-pass optimization objective:
 - Treat this as the main and usually only iteration.
 - Build a requirement-to-resume mapping internally before writing final HTML:
@@ -373,7 +380,7 @@ KEY CHANGES — TONE (critical):
 
 FINAL SELF-CHECK BEFORE RETURN:
 - check_content_length says fits_one_page=true.
-- At least one check_keywords_tool pass is used and top missing relevant terms were addressed where truthful.
+- check_keywords_tool score must be >= 0.40. If below — add missing_keywords into Skills section where truthful, then call check_keywords_tool again.
 - Key changes reflect real matching improvements against requirements and keywords.
 
 Output ONLY valid JSON. The html field should contain the raw HTML string.

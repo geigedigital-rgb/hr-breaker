@@ -164,6 +164,8 @@ const en = {
     experience: "Experience",
     portfolio: "Portfolio",
     keywords: "Keywords",
+    /** ARIA label for keyword gap chips under Improvement recommendations */
+    keywordsMissingTerms: "Missing or weak keywords from the job posting",
     leftColumn: "Assessment + breakdown",
     rightColumn: "Job readiness + improve",
     uploadResumeFirst: "Complete Step 1 first: upload your resume",

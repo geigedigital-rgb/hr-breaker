@@ -13,4 +13,20 @@ export default defineConfig({
       },
     },
   },
+  optimizeDeps: {
+    include: ['react', 'react-dom', 'react-router-dom', 'pdfjs-dist'],
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('pdfjs-dist')) return 'pdfjs'
+          if (id.includes('node_modules/react-dom') || id.includes('node_modules/react/')) return 'react-vendor'
+          if (id.includes('node_modules/react-router')) return 'router'
+          if (id.includes('@headlessui')) return 'headlessui'
+        },
+      },
+    },
+    chunkSizeWarningLimit: 650,
+  },
 })

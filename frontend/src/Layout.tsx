@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import {
   DocumentTextIcon,
@@ -21,6 +21,8 @@ import {
 } from "./readiness";
 import { t } from "./i18n";
 import { NotificationMenu } from "./components/NotificationMenu";
+import RouteFallback from "./components/RouteFallback";
+import AdminPipelineConsole from "./components/AdminPipelineConsole";
 
 const nav = [
   { to: "/", label: t("nav.home"), icon: HomeIcon },
@@ -48,7 +50,7 @@ export default function Layout() {
   const closeMobileMenu = () => setMobileMenuOpen(false);
 
   const sidebarContent = (
-    <>
+    <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex items-center gap-2.5 mb-8 px-2">
         <img src="/logo-white.svg" alt="" className="w-8 h-8 object-contain shrink-0" />
         <div className="font-bold text-2xl tracking-tight drop-shadow-sm">PitchCV</div>
@@ -87,6 +89,8 @@ export default function Layout() {
           </Link>
         )}
       </nav>
+
+      {user && isAdminUser(user) && <AdminPipelineConsole />}
 
       <div className="mt-auto pt-4 border-t border-white/15 space-y-1">
         {user?.partner_program_access && (
@@ -204,13 +208,13 @@ export default function Layout() {
           </Link>
         </div>
       )}
-    </>
+    </div>
   );
 
   return (
     <div className="h-screen bg-[#F2F3F9] flex overflow-hidden">
       <aside
-        className="hidden md:flex w-64 shrink-0 flex-col py-6 px-4 overflow-hidden text-white shadow-xl z-20"
+        className="hidden md:flex w-64 shrink-0 flex-col min-h-0 py-6 px-4 overflow-hidden text-white shadow-xl z-20"
         style={{ background: "linear-gradient(160deg, #4558ff 0%, #2f40df 100%)" }}
       >
         {sidebarContent}
@@ -319,7 +323,9 @@ export default function Layout() {
         </header>
 
         <main className="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden overscroll-y-contain pt-2 px-3 md:px-6 pb-[max(1.25rem,env(safe-area-inset-bottom,0px)+0.75rem)] md:pb-6">
-          <Outlet />
+          <Suspense fallback={<RouteFallback />}>
+            <Outlet />
+          </Suspense>
         </main>
       </div>
     </div>

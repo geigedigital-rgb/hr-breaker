@@ -75,7 +75,7 @@ class Settings(BaseModel):
     frontend_url: str = "http://localhost:5173"  # for OAuth redirect
 
     # Filter thresholds
-    filter_hallucination_threshold: float = 0.9
+    filter_hallucination_threshold: float = 0.82
     filter_keyword_threshold: float = 0.25
     filter_llm_threshold: float = 0.7
     filter_vector_threshold: float = 0.4
@@ -161,7 +161,7 @@ def get_settings() -> Settings:
         google_oauth_client_secret=os.getenv("GOOGLE_OAUTH_CLIENT_SECRET", ""),
         frontend_url=os.getenv("FRONTEND_URL", "http://localhost:5173"),
         # Filter thresholds
-        filter_hallucination_threshold=float(os.getenv("FILTER_HALLUCINATION_THRESHOLD", "0.9")),
+        filter_hallucination_threshold=float(os.getenv("FILTER_HALLUCINATION_THRESHOLD", "0.82")),
         filter_keyword_threshold=float(os.getenv("FILTER_KEYWORD_THRESHOLD", "0.25")),
         filter_llm_threshold=float(os.getenv("FILTER_LLM_THRESHOLD", "0.7")),
         filter_vector_threshold=float(os.getenv("FILTER_VECTOR_THRESHOLD", "0.4")),

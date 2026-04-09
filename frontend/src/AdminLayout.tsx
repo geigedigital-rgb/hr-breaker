@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   ChartBarIcon,
@@ -19,6 +19,8 @@ import {
 } from "@heroicons/react/24/outline";
 import { useAuth } from "./contexts/AuthContext";
 import { t } from "./i18n";
+import RouteFallback from "./components/RouteFallback";
+import AdminPipelineConsole from "./components/AdminPipelineConsole";
 
 const adminNav = [
   { to: "/admin", end: true, label: t("admin.nav.dashboard"), icon: ChartBarIcon },
@@ -62,7 +64,7 @@ export default function AdminLayout() {
   const compactSidebar = sidebarCollapsed && !mobileMenuOpen;
 
   const sidebarContent = (
-    <>
+    <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex items-center gap-2 mb-8 px-2">
         <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/15" aria-hidden>
           <ShieldCheckIcon className="w-5 h-5" />
@@ -97,6 +99,8 @@ export default function AdminLayout() {
         ))}
       </nav>
 
+      {user && <AdminPipelineConsole compact={compactSidebar} />}
+
       <div className="mt-auto pt-4 border-t border-white/15">
         <button
           type="button"
@@ -120,13 +124,13 @@ export default function AdminLayout() {
           </p>
         </div>
       )}
-    </>
+    </div>
   );
 
   return (
     <div className="h-screen bg-[var(--bg-page)] flex overflow-hidden" role="application" aria-label={t("admin.panelLabel")}>
       <aside
-        className={`hidden md:flex ${sidebarCollapsed ? "w-20 px-2" : "w-64 px-4"} shrink-0 flex-col py-6 min-h-0 overflow-y-auto text-white shadow-xl z-20 transition-all`}
+        className={`hidden md:flex ${sidebarCollapsed ? "w-20 px-2" : "w-64 px-4"} shrink-0 flex-col min-h-0 py-6 overflow-y-auto text-white shadow-xl z-20 transition-all`}
         style={{ background: "linear-gradient(160deg, #2f40df 0%, #1a28a8 100%)" }}
         role="navigation"
         aria-label={t("admin.navLabel")}
@@ -200,7 +204,9 @@ export default function AdminLayout() {
           className="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden pt-3 md:pt-4 pb-6 md:pb-8 px-3 md:px-6 overscroll-y-contain"
           role="main"
         >
-          <Outlet />
+          <Suspense fallback={<RouteFallback />}>
+            <Outlet />
+          </Suspense>
         </main>
       </div>
     </div>

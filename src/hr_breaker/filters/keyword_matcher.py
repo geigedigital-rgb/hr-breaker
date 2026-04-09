@@ -7,6 +7,7 @@ from hr_breaker.config import get_settings
 from hr_breaker.filters.base import BaseFilter
 from hr_breaker.filters.registry import FilterRegistry
 from hr_breaker.models import FilterResult, JobPosting, OptimizedResume, ResumeSource
+from hr_breaker.utils import extract_text_from_html
 
 
 @dataclass
@@ -104,17 +105,23 @@ class KeywordMatcher(BaseFilter):
         job: JobPosting,
         source: ResumeSource,
     ) -> FilterResult:
-        if optimized.pdf_text is None:
+        # Use HTML extraction to match the same text source used in check_keywords_tool
+        # during agent optimization, so the agent's feedback matches filter scoring.
+        if optimized.html is not None:
+            resume_text = extract_text_from_html(optimized.html)
+        elif optimized.pdf_text is not None:
+            resume_text = optimized.pdf_text
+        else:
             return FilterResult(
                 filter_name=self.name,
                 passed=False,
                 score=0.0,
                 threshold=self.threshold,
-                issues=["No PDF text available"],
-                suggestions=["Ensure PDF compilation succeeds"],
+                issues=["No resume text available"],
+                suggestions=["Ensure resume HTML or PDF is present"],
             )
 
-        result = check_keywords(optimized.pdf_text, job, self.threshold)
+        result = check_keywords(resume_text, job, self.threshold)
 
         issues = []
         suggestions = []
