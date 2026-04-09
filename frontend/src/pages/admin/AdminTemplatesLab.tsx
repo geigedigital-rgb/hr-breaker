@@ -14,8 +14,9 @@ import {
   type AdminTemplateListItem,
   type UnifiedResumeSchema,
 } from "../../api";
-import { getDocument, GlobalWorkerOptions } from "pdfjs-dist";
-import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+// Standard pdfjs-dist 5.x uses Map.getOrInsertComputed (Chrome ~145+). Legacy build works in older browsers.
+import { getDocument, GlobalWorkerOptions } from "pdfjs-dist/legacy/build/pdf.mjs";
+import pdfWorker from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
 
 GlobalWorkerOptions.workerSrc = pdfWorker;
 
@@ -172,6 +173,7 @@ export default function AdminTemplatesLab() {
   const [pdfPageCount, setPdfPageCount] = useState<number | null>(null);
   const [pdfWarnings, setPdfWarnings] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [renderError, setRenderError] = useState<string | null>(null);
   const [extracting, setExtracting] = useState(false);
   const [resumeFile, setResumeFile] = useState<File | null>(null);
   const [openWork, setOpenWork] = useState<Record<number, boolean>>({});
@@ -235,23 +237,25 @@ export default function AdminTemplatesLab() {
               signal: ac.signal,
             });
             if (wave !== bulkWaveRef.current || ac.signal.aborted) return;
-            previewCacheRef.current.set(id, {
+            const entry: PreviewCacheEntry = {
               bytes: b64ToUint8Array(res.pdf_base64),
               pageCount: res.page_count,
               warnings: res.warnings,
               sig,
-            });
+            };
+            previewCacheRef.current.set(id, entry);
+            // Show preview as soon as the current template is ready — don't wait for all batches.
+            if (id === templateIdRef.current) {
+              const liveSig = schemaSignature(renderSchemaRef.current);
+              if (entry.sig === liveSig) {
+                setPreviewPdfBytes(new Uint8Array(entry.bytes));
+                setPdfPageCount(entry.pageCount);
+                setPdfWarnings(entry.warnings);
+                setLoadingPreview(false);
+              }
+            }
           })
         );
-      }
-      if (wave !== bulkWaveRef.current || ac.signal.aborted) return;
-      const currentId = templateIdRef.current;
-      const hit = previewCacheRef.current.get(currentId);
-      const liveSig = schemaSignature(renderSchemaRef.current);
-      if (hit && hit.sig === liveSig) {
-        setPreviewPdfBytes(new Uint8Array(hit.bytes));
-        setPdfPageCount(hit.pageCount);
-        setPdfWarnings(hit.warnings);
       }
     } catch (e) {
       if (e instanceof DOMException && e.name === "AbortError") return;
@@ -260,7 +264,7 @@ export default function AdminTemplatesLab() {
     } finally {
       if (wave === bulkWaveRef.current) {
         setPrefetchingAllTemplates(false);
-        // Do not clear loading if a single-template fetch started (e.g. user switched template mid-prefetch).
+        // Only clear loading if no single-template fetch is in flight.
         if (singleAbortRef.current === null) {
           setLoadingPreview(false);
         }
@@ -284,6 +288,7 @@ export default function AdminTemplatesLab() {
     if (hit && hit.sig === sig) {
       singleAbortRef.current?.abort();
       previewReqIdRef.current += 1;
+      setError(null);
       setLoadingPreview(false);
       // Copy so React always sees a new reference (avoids skipped re-renders / stale pdf.js).
       setPreviewPdfBytes(new Uint8Array(hit.bytes));
@@ -325,7 +330,11 @@ export default function AdminTemplatesLab() {
         if (reqId === previewReqIdRef.current) setError(String(e));
       })
       .finally(() => {
-        if (reqId === previewReqIdRef.current) setLoadingPreview(false);
+        if (reqId === previewReqIdRef.current) {
+          setLoadingPreview(false);
+          // Release the ref so bulk-prefetch finally can properly clear loadingPreview later.
+          if (singleAbortRef.current === ac) singleAbortRef.current = null;
+        }
       });
   }, []);
 
@@ -419,7 +428,10 @@ export default function AdminTemplatesLab() {
 
     const renderPages = async () => {
       const seq = ++renderSeq;
-      const loadingTask = getDocument({ data: previewPdfBytes });
+      // pdfjs transfers the TypedArray buffer to its worker via postMessage (detaches the original).
+      // Always pass a fresh copy so the state value stays alive for subsequent effect re-runs
+      // (React StrictMode double-invokes effects, and resize re-renders reuse the same bytes).
+      const loadingTask = getDocument({ data: previewPdfBytes.slice() });
       try {
         const pdf = await loadingTask.promise;
         const hostWidth = Math.max(1, host.clientWidth);
@@ -446,10 +458,13 @@ export default function AdminTemplatesLab() {
           nextPages.push({ page: pageNo, src: canvas.toDataURL("image/png") });
         }
         if (!cancelled && seq === renderSeq) {
+          setRenderError(null);
           setPreviewPages(nextPages);
         }
-      } catch {
-        // Keep previous frame on render failure.
+      } catch (e) {
+        if (!cancelled && seq === renderSeq) {
+          setRenderError(e instanceof Error ? e.message : String(e));
+        }
       } finally {
         loadingTask.destroy();
       }
@@ -1261,7 +1276,12 @@ export default function AdminTemplatesLab() {
                     className="mt-0 block w-full border border-slate-200 bg-white shadow-[0_14px_30px_-12px_rgba(15,23,42,0.24)]"
                   />
                 ))}
-                {!loadingPreview && previewPages.length === 0 && (
+                {renderError && (
+                  <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                    Preview render failed: {renderError}
+                  </div>
+                )}
+                {!loadingPreview && previewPages.length === 0 && !renderError && (
                   <div className="rounded-lg border border-dashed border-slate-300 p-5 text-center text-sm text-slate-500">
                     Preview will appear here.
                   </div>

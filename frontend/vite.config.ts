@@ -14,7 +14,12 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
-    include: ['react', 'react-dom', 'react-router-dom', 'pdfjs-dist'],
+    include: [
+      'react',
+      'react-dom',
+      'react-router-dom',
+      'pdfjs-dist/legacy/build/pdf.mjs',
+    ],
   },
   build: {
     rollupOptions: {

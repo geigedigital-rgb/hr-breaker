@@ -71,6 +71,7 @@ export type OptimizeResponse = {
   key_changes?: ChangeDetailOut[] | null;
   error: string | null;
   optimized_resume_text?: string | null;
+  schema_json?: string | null;
 };
 
 export type DownloadPendingOptimizePdfResponse = {
@@ -972,6 +973,30 @@ export async function adminExtractResumeSchemaFromFile(params: {
   const out = data as UnifiedResumeSchema;
   logTemplatesLabStep("response", "Resume file → text → UnifiedResumeSchema (LLM) OK", unifiedSchemaQuickStats(out));
   return out;
+}
+
+export async function getTemplates(): Promise<AdminTemplateListResponse> {
+  const r = await fetch(`${API}/templates`, { headers: authHeaders() });
+  const data = await parseJsonOrThrow<AdminTemplateListResponse & { detail?: string }>(r);
+  if (!r.ok) throw new Error(data.detail || r.statusText);
+  return data;
+}
+
+export async function renderTemplatePdf(params: {
+  template_id: string;
+  schema: UnifiedResumeSchema;
+  signal?: AbortSignal;
+}): Promise<AdminTemplateRenderPdfResponse> {
+  const { signal, ...body } = params;
+  const r = await fetch(`${API}/templates/render-pdf`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(body),
+    signal,
+  });
+  const data = await parseJsonOrThrow<AdminTemplateRenderPdfResponse & { detail?: string }>(r);
+  if (!r.ok) throw new Error(data.detail || r.statusText);
+  return data;
 }
 
 export async function getAdminTemplates(): Promise<AdminTemplateListResponse> {

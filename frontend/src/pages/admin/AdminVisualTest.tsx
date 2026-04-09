@@ -498,29 +498,6 @@ export default function AdminVisualTest() {
         </div>
       </section>
 
-      <section className="w-full rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-4 sm:p-5">
-        <Disclosure>
-          <DisclosureButton className="text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider hover:text-[#181819]">
-            {t("optimize.filterDetails")}
-          </DisclosureButton>
-          <DisclosurePanel className="mt-2 space-y-1.5">
-            <p className="text-[11px] text-[#6B7280] leading-relaxed mb-2">{t("optimize.filterDetailsDesc")}</p>
-            <ul className="space-y-2" role="list">
-              {MOCK.resultFilters.map((r) => (
-                <li key={r.filter_name} className="flex flex-wrap items-center gap-2 text-[13px] min-w-0">
-                  <span className={r.passed ? "text-[#166534] font-medium" : "text-[#B91C1C] font-medium"}>
-                    {r.passed ? "✓" : "✗"} {r.filter_name}
-                  </span>
-                  <span className="text-[#6B7280] tabular-nums">
-                    {r.score.toFixed(2)} / {r.threshold.toFixed(2)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </DisclosurePanel>
-        </Disclosure>
-      </section>
-
       {/* Prod-aligned post-result export band */}
       <section className="mt-4 mb-6 w-full max-w-3xl mx-auto rounded-2xl border border-[#E8ECF4] bg-[#FAFAFC] p-5 sm:p-8">
         <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between lg:gap-10">

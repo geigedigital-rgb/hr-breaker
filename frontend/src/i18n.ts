@@ -316,6 +316,19 @@ const en = {
     ifIgnored: "If ignored:",
     whatToChange: "What to change:",
     noBlockingInCategory: "No blocking issues in this category.",
+    /** Post-result: template + photo + full preview (Visual Sandbox / future Optimize) */
+    chooseTemplate: "Resume template",
+    templatesScrollHint: "Swipe or use arrows to see all layouts.",
+    addPhoto: "Add photo",
+    uploadPhoto: "Upload",
+    changePhoto: "Change",
+    removePhoto: "Remove",
+    photoCropHint:
+      "Optional. We crop to a square center. Used on templates that show a portrait (when available).",
+    readyToSubmit: "Ваше резюме готово к подаче прямо сейчас!",
+    templatesLoading: "Loading template previews…",
+    templatesUnavailable: "Sign in as admin to load real template previews, or use placeholders below.",
+    templatePreviewError: "Preview failed for this template.",
   },
   app: {
     errorTitle: "Something went wrong",

@@ -5,6 +5,7 @@ import { SparklesIcon, ArrowUpTrayIcon, ArrowDownTrayIcon, ArrowPathIcon, ArrowL
 import * as api from "../api";
 import { useAuth } from "../contexts/AuthContext";
 import { t, tFormat } from "../i18n";
+import { PostResultResumeStudio } from "../components/PostResultResumeStudio";
 
 const RESUME_FILE_ACCEPT = ".txt,.md,.html,.htm,.tex,.pdf,.doc,.docx";
 const RESUME_TEXT_EXTS = ["txt", "md", "html", "htm", "tex", "pdf", "doc", "docx"];
@@ -1029,6 +1030,8 @@ export default function Optimize() {
   const [postImproveDiagramScore, setPostImproveDiagramScore] = useState<number | null>(null);
   const lastImproveActionRef = useRef<"base" | "stronger" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
+  const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [parsedJob, setParsedJob] = useState<api.JobPostingOut | null>(null);
   const [_isParsingJob, _setIsParsingJob] = useState(false);
@@ -1039,7 +1042,7 @@ export default function Optimize() {
   const loadProgressRef = useRef(0);
   loadProgressRef.current = loadProgress;
   const [displayLoadProgress, setDisplayLoadProgress] = useState(0);
-  const [isImprovingMore, setIsImprovingMore] = useState(false);
+  const [_isImprovingMore, setIsImprovingMore] = useState(false);
   /** After result: full-screen step before clearing session for another vacancy (not a modal). */
   const [postResultFlow, setPostResultFlow] = useState<"main" | "newJobWarning">("main");
   const [optimizePaywallOpen, setOptimizePaywallOpen] = useState(false);
@@ -1139,6 +1142,8 @@ export default function Optimize() {
         resumeSummaryFromApi?: api.ExtractResumeSummaryResponse | null;
         result?: api.OptimizeResponse | null;
         stage?: Stage;
+        selectedTemplateId?: string;
+        photoDataUrl?: string | null;
       };
       if (p.v !== 1) return;
       setResumeContent(p.resumeContent ?? "");
@@ -1150,6 +1155,8 @@ export default function Optimize() {
       setUploadedFileName(p.uploadedFileName ?? null);
       setResumeSummaryFromApi(p.resumeSummaryFromApi ?? null);
       setResult(p.result ?? null);
+      setSelectedTemplateId(p.selectedTemplateId ?? "");
+      setPhotoDataUrl(p.photoDataUrl ?? null);
       setError(null);
       const hasResultToResume = !!(p.result && !p.result.error);
       setStage(hasResultToResume ? "result" : (p.stage === "result" ? "assessment" : (p.stage ?? "assessment")));
@@ -1545,6 +1552,8 @@ export default function Optimize() {
         resumeSummaryFromApi,
         result,
         stage,
+        selectedTemplateId,
+        photoDataUrl,
       };
       sessionStorage.setItem(OPTIMIZE_CHECKOUT_SNAPSHOT_KEY, JSON.stringify(payload));
       sessionStorage.setItem(OPTIMIZE_PENDING_AUTO_IMPROVE_KEY, "1");
@@ -1650,30 +1659,53 @@ export default function Optimize() {
     }
   }
 
-  async function handleDownloadPendingPdf() {
-    if (!result?.pending_export_token || pendingPdfDownloadLoading) return;
+  async function handleDownloadCustomPdf() {
+    if (!result?.schema_json || pendingPdfDownloadLoading) return;
     setPendingPdfDownloadLoading(true);
     setError(null);
     try {
-      const { blob, filename } = await api.downloadPendingOptimizePdf(result.pending_export_token);
+      let baseSchema: any = {};
+      try {
+        baseSchema = JSON.parse(result.schema_json);
+      } catch {
+        /* ignore */
+      }
+      const schemaWithPhoto = {
+        ...baseSchema,
+        basics: {
+          ...(baseSchema.basics || {}),
+          image: photoDataUrl || undefined,
+        },
+      };
+      
+      const res = await api.renderTemplatePdf({
+        template_id: selectedTemplateId || "jsonresume-even-inspired", // Fallback to a default if empty
+        schema: schemaWithPhoto as any,
+      });
+      
+      const u8 = b64ToUint8ArraySandbox(res.pdf_base64);
+      const blob = new Blob([u8.buffer as ArrayBuffer], { type: "application/pdf" });
       const url = URL.createObjectURL(blob);
       try {
         const a = document.createElement("a");
         a.href = url;
-        a.download = filename;
+        a.download = result.pdf_filename || "Optimized_Resume.pdf";
         document.body.appendChild(a);
         a.click();
         a.remove();
       } finally {
         URL.revokeObjectURL(url);
       }
-      setResult((prev) => (prev ? { ...prev, pending_export_token: null } : prev));
-      await refreshUser();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not download PDF");
+      setError(e instanceof Error ? e.message : "Could not render custom PDF");
     } finally {
       setPendingPdfDownloadLoading(false);
     }
+  }
+
+  // Used only for b64 conversion
+  function b64ToUint8ArraySandbox(base64: string): Uint8Array {
+    return Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
   }
 
   async function handleImprove() {
@@ -1946,7 +1978,6 @@ export default function Optimize() {
         })()
       : t("optimize.vacancyUntitled"));
 
-  const resultResumeFileLabel = uploadedFileName?.trim() || t("home.resume");
 
   if (postResultFlow === "newJobWarning" && stage === "result" && result && !result.error) {
     const ctaPrimaryCls =
@@ -1977,28 +2008,16 @@ export default function Optimize() {
             </div>
             <div className="flex w-full flex-col gap-3 lg:max-w-md lg:shrink-0">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch">
-                {result.pdf_filename && result.pdf_base64 ? (
-                  <a href={`data:application/pdf;base64,${result.pdf_base64}`} download={result.pdf_filename} className={ctaPrimaryCls} style={{ background: "linear-gradient(160deg, #5e8afc 0%, #4578FC 45%, #3d6ae6 100%)" }}>
-                    <ArrowDownTrayIcon className="w-5 h-5 shrink-0" aria-hidden />
-                    {t("optimize.downloadPdf")}
-                  </a>
-                ) : hasPaidPlan && result.pending_export_token ? (
-                  <button
-                    type="button"
-                    onClick={() => void handleDownloadPendingPdf()}
-                    className={ctaPrimaryCls}
-                    style={{ background: "linear-gradient(160deg, #5e8afc 0%, #4578FC 45%, #3d6ae6 100%)" }}
-                    disabled={pendingPdfDownloadLoading}
-                  >
-                    <ArrowDownTrayIcon className="w-5 h-5 shrink-0" aria-hidden />
-                    {pendingPdfDownloadLoading ? "Downloading..." : t("optimize.downloadPdf")}
-                  </button>
-                ) : (
-                  <button type="button" onClick={openDownloadCheckoutFlow} className={ctaPrimaryCls} style={{ background: "linear-gradient(160deg, #5e8afc 0%, #4578FC 45%, #3d6ae6 100%)" }} disabled={optimizePaywallCheckoutLoading}>
-                    <ArrowDownTrayIcon className="w-5 h-5 shrink-0" aria-hidden />
-                    {t("optimize.downloadPdf")}
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={hasPaidPlan ? handleDownloadCustomPdf : openDownloadCheckoutFlow}
+                  className={ctaPrimaryCls}
+                  style={{ background: "linear-gradient(160deg, #5e8afc 0%, #4578FC 45%, #3d6ae6 100%)" }}
+                  disabled={pendingPdfDownloadLoading || optimizePaywallCheckoutLoading}
+                >
+                  <ArrowDownTrayIcon className="w-5 h-5 shrink-0" aria-hidden />
+                  {pendingPdfDownloadLoading ? "Downloading..." : t("optimize.downloadPdf")}
+                </button>
                 <button type="button" onClick={applyNewJobSameResume} className={ctaSecondaryCls}>
                   {t("optimize.newJobWarningContinue")}
                 </button>
@@ -2377,80 +2396,28 @@ export default function Optimize() {
                       </div>
                     </section>
                   )}
-                  <section className="mt-8 sm:mt-10 mb-6 w-full max-w-3xl mx-auto rounded-2xl border border-[#E8ECF4] bg-[#FAFAFC] p-5 sm:p-8">
-                    <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between lg:gap-10">
-                      <div className="min-w-0 flex-1 space-y-1.5">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#4578FC]">{t("optimize.resultExportKicker")}</p>
-                        <p className="text-xl sm:text-2xl font-semibold text-[#181819] tracking-tight leading-snug">
-                          {tFormat(t("optimize.resultReadyForRole"), { jobTitle: resultJobTitleLabel })}
-                        </p>
-                        <p className="text-[13px] sm:text-[14px] text-[#6B7280] truncate" title={resultResumeFileLabel}>
-                          {tFormat(t("optimize.resultReadySourceFile"), { file: resultResumeFileLabel })}
-                        </p>
-                      </div>
-                      <div className="flex w-full flex-col gap-3 lg:max-w-lg lg:shrink-0">
-                        <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch">
-                          {result.pdf_filename && result.pdf_base64 ? (
-                            <a
-                              href={`data:application/pdf;base64,${result.pdf_base64}`}
-                              download={result.pdf_filename}
-                              className="inline-flex min-h-[3rem] w-full flex-1 items-center justify-center gap-2 rounded-xl px-5 text-[15px] font-semibold text-white shadow-[0_4px_20px_-8px_rgba(69,120,252,0.45)] transition-[transform,opacity] hover:opacity-[0.96] active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4578FC]/40 focus-visible:ring-offset-2 whitespace-nowrap"
-                              style={{ background: "linear-gradient(160deg, #5e8afc 0%, #4578FC 45%, #3d6ae6 100%)" }}
-                            >
-                              <ArrowDownTrayIcon className="w-5 h-5 shrink-0" aria-hidden />
-                              {t("optimize.downloadPdf")}
-                            </a>
-                          ) : hasPaidPlan && result.pending_export_token ? (
-                            <button
-                              type="button"
-                              onClick={() => void handleDownloadPendingPdf()}
-                              className="inline-flex min-h-[3rem] w-full flex-1 items-center justify-center gap-2 rounded-xl px-5 text-[15px] font-semibold text-white shadow-[0_4px_20px_-8px_rgba(69,120,252,0.45)] transition-[transform,opacity] hover:opacity-[0.96] active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4578FC]/40 focus-visible:ring-offset-2 disabled:opacity-50 whitespace-nowrap"
-                              style={{ background: "linear-gradient(160deg, #5e8afc 0%, #4578FC 45%, #3d6ae6 100%)" }}
-                              disabled={pendingPdfDownloadLoading}
-                            >
-                              <ArrowDownTrayIcon className="w-5 h-5 shrink-0" aria-hidden />
-                              {pendingPdfDownloadLoading ? "Downloading..." : t("optimize.downloadPdf")}
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={openDownloadCheckoutFlow}
-                              className="inline-flex min-h-[3rem] w-full flex-1 items-center justify-center gap-2 rounded-xl px-5 text-[15px] font-semibold text-white shadow-[0_4px_20px_-8px_rgba(69,120,252,0.45)] transition-[transform,opacity] hover:opacity-[0.96] active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4578FC]/40 focus-visible:ring-offset-2 disabled:opacity-50 whitespace-nowrap"
-                              style={{ background: "linear-gradient(160deg, #5e8afc 0%, #4578FC 45%, #3d6ae6 100%)" }}
-                              disabled={optimizePaywallCheckoutLoading}
-                            >
-                              <ArrowDownTrayIcon className="w-5 h-5 shrink-0" aria-hidden />
-                              {t("optimize.downloadPdf")}
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => setPostResultFlow("newJobWarning")}
-                            className="inline-flex min-h-[3rem] w-full flex-1 items-center justify-center rounded-xl border-2 border-[#4578FC] bg-white px-5 text-[15px] font-semibold text-[#4578FC] transition-colors hover:bg-[#4578FC]/[0.05] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4578FC]/30 focus-visible:ring-offset-2 whitespace-nowrap"
-                          >
-                            {t("optimize.tailorAnotherVacancy")}
-                          </button>
-                        </div>
-                        {showOptimizeAgainForAts && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (user?.id !== "local" && !hasPaidPlan) {
-                                setOptimizePaywallOpen(true);
-                                return;
-                              }
-                              void handleImproveMore();
-                            }}
-                            disabled={isImprovingMore}
-                            className="inline-flex min-h-[3rem] w-full items-center justify-center rounded-xl border border-[#E5E7EB] bg-white px-5 text-[15px] font-medium text-[#374151] shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-colors hover:bg-[#F9FAFB] disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4578FC]/20 focus-visible:ring-offset-2"
-                          >
-                            {isImprovingMore ? t("optimize.improving") : "Improve even stronger"}
-                          </button>
-                        )}
-                        <p className="text-[11px] text-[#9CA3AF] leading-snug text-center sm:text-left">{t("optimize.downloadPdfPaidHint")}</p>
-                      </div>
-                    </div>
-                  </section>
+
+                  <PostResultResumeStudio
+                    qualityPct={Math.max(atsValue ?? 0, keywordsValue?.score ?? 0)}
+                    jobTitle={resultJobTitleLabel}
+                    pdfFileName={result.pdf_filename || "Optimized_Resume.pdf"}
+                    fallbackPreviewUrl={resumeThumbnailUrlRef.current}
+                    schemaJson={result.schema_json || "{}"}
+                    initialTemplateId={selectedTemplateId}
+                    initialPhotoDataUrl={photoDataUrl}
+                    onTemplateChange={setSelectedTemplateId}
+                    onPhotoChange={setPhotoDataUrl}
+                    onDownload={hasPaidPlan ? handleDownloadCustomPdf : openDownloadCheckoutFlow}
+                    onTailorAnother={() => setPostResultFlow("newJobWarning")}
+                    onImproveEvenStronger={() => {
+                      if (user?.id !== "local" && !hasPaidPlan) {
+                        setOptimizePaywallOpen(true);
+                        return;
+                      }
+                      void handleImproveMore();
+                    }}
+                    showImproveEvenStronger={showOptimizeAgainForAts}
+                  />
                 </>
               )}
             </>
