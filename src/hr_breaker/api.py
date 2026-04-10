@@ -10,6 +10,7 @@ import hashlib
 import io
 import json
 import logging
+import re
 import secrets
 import tempfile
 import time
@@ -51,6 +52,7 @@ from hr_breaker.services import (
 from hr_breaker.services.job_scraper import extract_company_logo_url
 from hr_breaker.services.auth import create_access_token, decode_token, hash_password, verify_password
 from hr_breaker.services.usage_audit import log_usage_event
+from hr_breaker.utils import extract_text_from_html
 from hr_breaker.services.db import (
     get_pool,
     user_create,
@@ -162,6 +164,63 @@ def _cache_set(key: str, value: Any) -> None:
 FREE_OPTIMIZE_PER_MONTH = 10
 PENDING_EXPORT_TTL_SECONDS = 15 * 60
 PENDING_EXPORT_DIRNAME = "pending_optimize_exports"
+_SCHEMA_NAME_PLACEHOLDERS = {"candidate", "кандидат"}
+
+
+def _compose_person_name(first_name: str | None, last_name: str | None) -> str:
+    """Build a display name from extracted first/last parts."""
+    out = " ".join(p.strip() for p in [first_name or "", last_name or ""] if p and p.strip()).strip()
+    return "" if _is_placeholder_person_name(out) else out
+
+
+def _is_placeholder_person_name(name: str | None) -> bool:
+    raw = (name or "").strip().lower()
+    if not raw:
+        return True
+    return raw in _SCHEMA_NAME_PLACEHOLDERS
+
+
+def _guess_name_from_resume_text(content: str) -> str:
+    """Heuristic fallback for name when LLM extractor returns empty/placeholder."""
+    lines = [ln.strip() for ln in (content or "").splitlines() if ln.strip()][:8]
+    section_like = {
+        "summary",
+        "experience",
+        "education",
+        "skills",
+        "work experience",
+        "profile",
+        "контакты",
+        "опыт",
+        "образование",
+        "навыки",
+    }
+    token_re = r"^[A-Za-zА-Яа-яЁё][A-Za-zА-Яа-яЁё'’.-]*$"
+    for line in lines:
+        if len(line) > 60:
+            continue
+        low = line.lower()
+        if low in section_like:
+            continue
+        if any(ch in line for ch in ("@", "http://", "https://", "/", "(", ")", ":", "|")):
+            continue
+        parts = [p for p in line.split() if p]
+        if len(parts) < 2 or len(parts) > 4:
+            continue
+        if not all(re.match(token_re, p) for p in parts):
+            continue
+        return line
+    return ""
+
+
+def _split_full_name(full_name: str) -> tuple[str | None, str | None]:
+    """Split full name into first/last parts for storage fields."""
+    parts = [p.strip() for p in (full_name or "").split() if p.strip()]
+    if not parts:
+        return None, None
+    if len(parts) == 1:
+        return parts[0], None
+    return parts[0], " ".join(parts[1:])
 
 
 def _normalized_landing_cors_origins(raw: str) -> list[str]:
@@ -2696,6 +2755,14 @@ async def _run_optimize(
                 job=JobPostingOut(title="", company="", requirements=[], keywords=[], description=""),
                 error=err_msg,
             )
+    extracted_full_name = _compose_person_name(source.first_name, source.last_name)
+    if not extracted_full_name:
+        guessed_full_name = _guess_name_from_resume_text(extract_text_from_html(req.resume_content))
+        if guessed_full_name:
+            guessed_first, guessed_last = _split_full_name(guessed_full_name)
+            source.first_name = guessed_first
+            source.last_name = guessed_last
+            extracted_full_name = guessed_full_name
 
     def on_progress(percent: int, message: str) -> None:
         _put_progress(progress_queue, percent, message)
@@ -2824,6 +2891,9 @@ async def _run_optimize(
                 target_locale=out_lang,
                 source_checksum=source.checksum,
             )
+            extracted_full_name = _compose_person_name(source.first_name, source.last_name)
+            if extracted_full_name and _is_placeholder_person_name(schema_obj.basics.name):
+                schema_obj.basics.name = extracted_full_name
             schema_json = schema_obj.model_dump_json()
         except Exception as e:
             logger.warning("Failed to extract schema for templates: %s", e)
