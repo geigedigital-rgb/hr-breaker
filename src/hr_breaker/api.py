@@ -2207,7 +2207,74 @@ async def api_parse_job(req: JobParseRequest) -> JobPostingOut:
 
 
 # Шум из TF-IDF: обрезки типа m/w/d, однобуквенные, слишком короткие
-_KEYWORD_NOISE = frozenset({"m", "w", "d", "m w", "w d", "m d", "m w d", "w m", "d m", "d w"})
+_KEYWORD_NOISE = frozenset(
+    {
+        "m",
+        "w",
+        "d",
+        "m w",
+        "w d",
+        "m d",
+        "m w d",
+        "w m",
+        "d m",
+        "d w",
+        "z b",
+        "z.b",
+        "zb",
+    }
+)
+_KEYWORD_STOPWORDS = frozenset(
+    {
+        # English
+        "a",
+        "an",
+        "and",
+        "or",
+        "the",
+        "to",
+        "of",
+        "for",
+        "in",
+        "on",
+        "with",
+        "by",
+        "from",
+        "at",
+        "as",
+        # German
+        "der",
+        "die",
+        "das",
+        "den",
+        "dem",
+        "des",
+        "ein",
+        "eine",
+        "einer",
+        "einem",
+        "einen",
+        "und",
+        "oder",
+        "mit",
+        "im",
+        "in",
+        "am",
+        "an",
+        "zu",
+        "zur",
+        "zum",
+        "für",
+        "von",
+        "bei",
+        "als",
+        "auch",
+        # Common abbreviations/particles producing noisy chips
+        "z",
+        "b",
+        "zb",
+    }
+)
 _MIN_KEYWORD_LEN = 3
 _MAX_KEYWORDS_DISPLAY = 7
 # UI chips in Optimize "Keywords" — show more concrete terms than legacy short lists
@@ -2227,11 +2294,20 @@ def _filter_meaningful_keywords(
     result: list[str] = []
 
     def _ok(k: str) -> bool:
-        return (
-            len(k) >= _MIN_KEYWORD_LEN
-            and k not in _KEYWORD_NOISE
-            and not k.isdigit()
-        )
+        if len(k) < _MIN_KEYWORD_LEN or k in _KEYWORD_NOISE or k.isdigit():
+            return False
+        if "http://" in k or "https://" in k or "@" in k:
+            return False
+        tokens = [t for t in re.split(r"\s+", k) if t]
+        if not tokens or len(tokens) > 4:
+            return False
+        if any(len(t) == 1 for t in tokens):
+            return False
+        if all(t in _KEYWORD_STOPWORDS or t.isdigit() for t in tokens):
+            return False
+        if len(tokens) == 1 and tokens[0] in _KEYWORD_STOPWORDS:
+            return False
+        return True
 
     # Сначала — недостающие термины, которые явно указаны в вакансии (job.keywords)
     for kw in missing_keywords:
@@ -2244,10 +2320,14 @@ def _filter_meaningful_keywords(
         result.append(kw.strip())
         if len(result) >= cap:
             return result
-    # Затем — остальные из missing (TF-IDF), без шума
+    # Затем — остальные из missing (TF-IDF), без шума.
+    # Здесь требования строже: односложные и служебные фразы часто попадают как артефакты.
     for kw in missing_keywords:
         k = (kw or "").strip().lower()
         if not k or k in seen or not _ok(k):
+            continue
+        tokens = [t for t in re.split(r"\s+", k) if t]
+        if len(tokens) == 1 and len(tokens[0]) < 4:
             continue
         seen.add(k)
         result.append(kw.strip())
