@@ -76,7 +76,6 @@ type ThumbState = "loading" | "error" | string;
 export function PostResultResumeStudio({
   qualityPct,
   jobTitle,
-  pdfFileName,
   fallbackPreviewUrl,
   schemaJson,
   initialTemplateId,
@@ -90,7 +89,6 @@ export function PostResultResumeStudio({
 }: {
   qualityPct: number;
   jobTitle: string;
-  pdfFileName: string;
   fallbackPreviewUrl: string | null;
   schemaJson: string;
   initialTemplateId?: string;
@@ -441,12 +439,8 @@ export function PostResultResumeStudio({
             className="absolute bottom-0 left-0 right-0 border-t border-white/60 bg-white/60 px-5 pt-10 pb-8 sm:px-8 sm:pt-12 sm:pb-10 shadow-[0_-12px_40px_-12px_rgba(0,0,0,0.08)] flex flex-col items-center text-center"
             style={{ WebkitBackdropFilter: "blur(24px) saturate(1.8)", backdropFilter: "blur(24px) saturate(1.8)" }}
           >
-            <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-[#4578FC] mb-1.5">{t("optimize.resultExportKicker")}</p>
             <p className="w-full text-xl font-semibold tracking-tight text-[#181819] sm:text-2xl break-words whitespace-normal">
               {tFormat(t("optimize.resultReadyForRole"), { jobTitle })}
-            </p>
-            <p className="mt-1.5 w-full max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[13px] text-[#6B7280]" title={pdfFileName}>
-              {tFormat(t("optimize.resultReadySourceFile"), { file: pdfFileName })}
             </p>
             <div className="mt-6 flex w-full max-w-[280px] sm:max-w-[320px] flex-col gap-3">
               <button
