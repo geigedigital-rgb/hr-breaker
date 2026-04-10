@@ -1894,6 +1894,16 @@ export default function Optimize() {
     };
   }, [stage]);
 
+  useEffect(() => {
+    if (stage !== "loading" && stage !== "scanning") return;
+    if (typeof document === "undefined") return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [stage]);
+
   const summaryData = showSummaryBlocks
     ? (() => {
         const resumeSummary = getResumeSummary(resumeContent, resumeName);
@@ -2020,29 +2030,6 @@ export default function Optimize() {
 
   return (
     <div className="relative flex flex-col gap-4 sm:gap-5 w-full min-w-0 min-h-0 overflow-x-hidden pb-28 sm:pb-12">
-        {stage === "loading" && (
-          <div
-            className="fixed z-[5] flex flex-col items-center justify-center gap-2 pointer-events-none px-4"
-            style={{
-              left: "var(--app-sidebar-width, 0px)",
-              top: "var(--app-header-height, 3.5rem)",
-              right: 0,
-              bottom: 0,
-            }}
-          >
-            <div
-              className="max-w-lg text-center select-none bg-white/85 px-5 py-3.5 rounded-xl backdrop-blur-sm shadow-sm ring-1 ring-black/5"
-              aria-live="polite"
-            >
-              <p className="text-[16px] sm:text-[18px] font-semibold text-[#374151]">
-                {t("optimize.doNotClosePage")}
-              </p>
-              <p className="mt-1 text-[13px] sm:text-[14px] font-medium text-[#6B7280]">
-                {t("optimize.doNotClosePageHint")}
-              </p>
-            </div>
-          </div>
-        )}
         {error && !isOfferPasteAsTextError(error) && (
           <div className="flex gap-2 text-sm text-[var(--text-muted)]/90 rounded-xl border border-[#EBEDF5] bg-[#FAFAFC] px-4 py-3 shrink-0" role="alert">
             <ExclamationTriangleIcon className="w-5 h-5 shrink-0 text-amber-500 mt-0.5" aria-hidden />
@@ -2828,7 +2815,7 @@ export default function Optimize() {
           (hasResume && hasJob || awaitingLandingClaim) && (
           <>
             {(stage === "scanning" || (stage === "assessment" && preScores == null)) && (
-              <div className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-8 flex flex-col items-center justify-center gap-5">
+              <div className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-8 flex flex-col items-center justify-center gap-4">
                 <div className="w-14 h-14 rounded-2xl bg-[#EBEDF5] flex items-center justify-center" aria-hidden>
                   {stage === "scanning" || awaitingLandingClaim ? (
                     <SparklesIcon className="w-7 h-7 text-[#4578FC]" />
@@ -2854,9 +2841,7 @@ export default function Optimize() {
                       : t("optimize.analysisSubLabel")}
                 </p>
                 {!awaitingLandingClaim && (
-                  <p className="text-xs text-[var(--text-muted)] text-center max-w-sm">
-                    {activeLoadingHint}
-                  </p>
+                  <p className="text-[12px] text-[#9CA3AF] text-center max-w-sm">{t("optimize.doNotClosePage")}</p>
                 )}
                 {awaitingLandingClaim ? (
                   <div className="w-full max-w-xs h-2 rounded-full bg-[#EBEDF5] overflow-hidden" aria-hidden>
@@ -2882,9 +2867,15 @@ export default function Optimize() {
                 )}
               </div>
             )}
+            {(stage === "scanning" || (stage === "assessment" && preScores == null)) && !awaitingLandingClaim && (
+              <p className="mt-1 text-[12px] text-[#9CA3AF] text-center px-2">
+                {activeLoadingHint}
+              </p>
+            )}
 
             {stage === "loading" && (
-              <div className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-8 flex flex-col items-center justify-center gap-5">
+              <>
+              <div className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-8 flex flex-col items-center justify-center gap-4">
                 <div className="w-14 h-14 rounded-2xl bg-[#EBEDF5] flex items-center justify-center" aria-hidden>
                   <span
                     className="inline-block w-8 h-8 border-2 border-[#4578FC] border-t-transparent rounded-full animate-spin"
@@ -2892,8 +2883,8 @@ export default function Optimize() {
                   />
                 </div>
                 <p className="text-[#181819] font-medium">{t("optimize.improvingResume")}</p>
-                <p className="text-sm text-[var(--text-muted)] text-center max-w-sm">
-                  {activeImproveLoadingHint}
+                <p className="text-[12px] text-[#9CA3AF] text-center max-w-sm">
+                  {t("optimize.doNotClosePage")} {t("optimize.doNotClosePageHint")}
                 </p>
                 <div className="w-full max-w-xs space-y-2">
                   <div className="h-2 rounded-full bg-[#EBEDF5] overflow-hidden">
@@ -2910,6 +2901,10 @@ export default function Optimize() {
                   <p className="text-center text-sm font-medium text-[#181819]">{Math.round(visibleLoadProgress)}%</p>
                 </div>
               </div>
+              <p className="mt-1 text-[12px] text-[#9CA3AF] text-center px-2">
+                {activeImproveLoadingHint}
+              </p>
+              </>
             )}
 
             {/* При showSummaryBlocks контент (Режим улучшения + результат) рендерится в сетке выше */}
