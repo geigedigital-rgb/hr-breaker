@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, type ChangeEvent, type CSSProperties } from "react";
+import { useState, useEffect, useRef, useCallback, type ChangeEvent } from "react";
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
