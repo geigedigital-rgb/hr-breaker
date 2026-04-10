@@ -277,7 +277,7 @@ const en = {
       "Fact: Using this flow for every serious application turns tailoring into a habit — consistency compounds.",
     analysisSubLabel: "Getting ATS and keyword scores",
     scanProgressAria: "Scan progress",
-    doNotClosePage: "Do not close this page",
+    doNotClosePage: "Пожалуйста не закрывайте страницу, улучшение может занять 60 сек.",
     improveProgressAria: "Improvement progress",
     jobScrapeError: "We couldn't process the link from this source. Copy the full job description from the page and paste it below.",
     jobUrlInvalid: "Enter a valid job URL (http:// or https://).",

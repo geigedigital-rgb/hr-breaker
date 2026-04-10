@@ -2034,7 +2034,7 @@ export default function Optimize() {
     <div className="relative flex flex-col gap-4 sm:gap-5 w-full min-w-0 min-h-0 overflow-x-hidden pb-28 sm:pb-12">
         {stage === "loading" && (
           <div
-            className="fixed z-[5] flex items-center justify-center pointer-events-none px-4"
+            className="fixed z-[5] flex flex-col items-center justify-center gap-2 pointer-events-none px-4"
             style={{
               left: "var(--app-sidebar-width, 0px)",
               top: "var(--app-header-height, 3.5rem)",
@@ -2043,7 +2043,7 @@ export default function Optimize() {
             }}
           >
             <p
-              className="max-w-md text-center text-[10px] sm:text-[11px] text-[var(--text-tertiary)]/70 select-none"
+              className="max-w-md text-center text-[13px] font-medium text-[#6B7280] select-none bg-white/80 px-4 py-2 rounded-xl backdrop-blur-sm shadow-sm ring-1 ring-black/5"
               aria-live="polite"
             >
               {t("optimize.doNotClosePage")}

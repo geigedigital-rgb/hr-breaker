@@ -439,20 +439,20 @@ export function PostResultResumeStudio({
           </div>
           <div
             className="absolute bottom-0 left-0 right-0 border-t border-white/60 bg-white/60 px-5 pt-10 pb-8 sm:px-8 sm:pt-12 sm:pb-10 shadow-[0_-12px_40px_-12px_rgba(0,0,0,0.08)] flex flex-col items-center text-center"
-            style={{ WebkitBackdropFilter: "blur(24px) saturate(1.8)", backdropFilter: "blur(24px) saturate(1.8)" } as CSSProperties}
+            style={{ WebkitBackdropFilter: "blur(24px) saturate(1.8)", backdropFilter: "blur(24px) saturate(1.8)" }}
           >
             <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-[#4578FC] mb-1.5">{t("optimize.resultExportKicker")}</p>
-            <p className="text-xl font-semibold tracking-tight text-[#181819] sm:text-2xl">
+            <p className="text-xl font-semibold tracking-tight text-[#181819] sm:text-2xl break-words whitespace-normal">
               {tFormat(t("optimize.resultReadyForRole"), { jobTitle })}
             </p>
-            <p className="mt-1.5 truncate text-[13px] text-[#6B7280]" title={pdfFileName}>
+            <p className="mt-1.5 truncate text-[13px] text-[#6B7280] w-full" title={pdfFileName}>
               {tFormat(t("optimize.resultReadySourceFile"), { file: pdfFileName })}
             </p>
             <div className="mt-6 flex w-full max-w-[280px] sm:max-w-[320px] flex-col gap-3">
               <button
                 type="button"
                 onClick={onDownload}
-                className="inline-flex min-h-[3rem] w-full items-center justify-center gap-2 rounded-xl text-[15px] font-semibold text-white shadow-[0_4px_20px_-8px_rgba(69,120,252,0.45)] transition-all hover:-translate-y-0.5 hover:shadow-[0_6px_24px_-8px_rgba(69,120,252,0.55)]"
+                className="inline-flex min-h-[3rem] w-full items-center justify-center gap-2 rounded-xl text-[15px] font-semibold text-white shadow-[0_0_24px_rgba(69,120,252,0.45)] transition-all hover:-translate-y-0.5 hover:shadow-[0_0_32px_rgba(69,120,252,0.6)]"
                 style={{ background: "linear-gradient(160deg, #5e8afc 0%, #4578FC 45%, #3d6ae6 100%)" }}
               >
                 <ArrowDownTrayIcon className="h-5 w-5 shrink-0" />
