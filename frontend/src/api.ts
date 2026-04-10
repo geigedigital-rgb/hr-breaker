@@ -826,6 +826,10 @@ export type AdminActivityItem = {
   created_at: string;
   user_email: string | null;
   pdf_on_disk?: boolean;
+  /** uploaded = user upload (uploaded_*); generated = tailored PDF */
+  file_kind?: "uploaded" | "generated";
+  source_was_pdf?: boolean;
+  has_stored_source?: boolean;
 };
 
 export type AdminActivityResponse = { items: AdminActivityItem[]; total: number };
@@ -1104,6 +1108,44 @@ export async function getAdminActivity(limit: number, offset: number): Promise<A
   const data = await parseJsonOrThrow<AdminActivityResponse & { detail?: string }>(r);
   if (!r.ok) throw new Error(data.detail || r.statusText);
   return data;
+}
+
+/** Open PDF in a new tab (admin auth). */
+export async function openAdminPdfInNewTab(filename: string): Promise<void> {
+  const r = await fetch(`${API}/admin/pdf/${encodeURIComponent(filename)}`, { headers: authHeaders() });
+  if (!r.ok) {
+    const t = await r.text();
+    throw new Error(t || r.statusText);
+  }
+  const blob = await r.blob();
+  const url = URL.createObjectURL(blob);
+  const w = window.open(url, "_blank", "noopener,noreferrer");
+  if (!w) {
+    URL.revokeObjectURL(url);
+    throw new Error("Popup blocked");
+  }
+  window.setTimeout(() => URL.revokeObjectURL(url), 120_000);
+}
+
+/** Download stored resume source text (.txt) for a history filename (admin). */
+export async function downloadAdminResumeSource(filename: string): Promise<void> {
+  const r = await fetch(`${API}/admin/resume-source/${encodeURIComponent(filename)}`, { headers: authHeaders() });
+  if (!r.ok) {
+    const t = await r.text();
+    throw new Error(t || r.statusText);
+  }
+  const blob = await r.blob();
+  const url = URL.createObjectURL(blob);
+  try {
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `source_${filename.replace(/\.pdf$/i, "")}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  } finally {
+    URL.revokeObjectURL(url);
+  }
 }
 
 export type AdminUsageAuditItem = {

@@ -805,7 +805,8 @@ async def db_recent_resumes_with_user(
         total = int(count_row["c"]) if count_row else 0
         rows = await conn.fetch(
             f"""
-            SELECT r.filename, r.company, r.job_title, r.created_at, r.user_id, u.email as user_email
+            SELECT r.filename, r.company, r.job_title, r.created_at, r.user_id, r.source_checksum,
+                   r.source_was_pdf, u.email AS user_email
             FROM {TABLE} r
             LEFT JOIN {USERS_TABLE} u ON r.user_id = u.id
             ORDER BY r.created_at DESC
@@ -825,6 +826,8 @@ async def db_recent_resumes_with_user(
             "created_at": rec["created_at"],
             "user_email": rec.get("user_email") or None,
             "pdf_on_disk": path.is_file(),
+            "source_checksum": (rec.get("source_checksum") or "") or "",
+            "source_was_pdf": bool(rec.get("source_was_pdf")),
         })
     return result, total
 

@@ -1,9 +1,98 @@
 import { useEffect, useState } from "react";
-import { getAdminActivity, type AdminActivityItem } from "../../api";
+import {
+  getAdminActivity,
+  openAdminPdfInNewTab,
+  downloadAdminResumeSource,
+  type AdminActivityItem,
+} from "../../api";
 import AdminPaginationBar from "../../components/admin/AdminPaginationBar";
 import { t } from "../../i18n";
+import { ArrowTopRightOnSquareIcon, DocumentTextIcon } from "@heroicons/react/24/outline";
 
 const DEFAULT_PAGE_SIZE = 50;
+
+function ActivityRow({
+  row,
+  onActionError,
+}: {
+  row: AdminActivityItem;
+  onActionError: (msg: string | null) => void;
+}) {
+  const kind =
+    row.file_kind === "uploaded"
+      ? t("admin.activity.kindUploaded")
+      : t("admin.activity.kindGenerated");
+  const canOpen = row.pdf_on_disk !== false;
+
+  async function handleOpenPdf() {
+    onActionError(null);
+    try {
+      await openAdminPdfInNewTab(row.filename);
+    } catch (e) {
+      onActionError(e instanceof Error ? e.message : t("admin.activity.openError"));
+    }
+  }
+
+  async function handleSource() {
+    onActionError(null);
+    try {
+      await downloadAdminResumeSource(row.filename);
+    } catch (e) {
+      onActionError(e instanceof Error ? e.message : t("admin.activity.openError"));
+    }
+  }
+
+  return (
+    <tr className="hover:bg-[#F5F6FA]/50">
+      <td className="px-4 py-3 text-[var(--text-tertiary)] tabular-nums whitespace-nowrap align-top">
+        {row.created_at ? new Date(row.created_at).toLocaleString() : "—"}
+      </td>
+      <td className="px-4 py-3 text-[var(--text-muted)] truncate max-w-[200px] align-top" title={row.user_email ?? undefined}>
+        {row.user_email ?? "—"}
+      </td>
+      <td className="px-4 py-3 text-[var(--text)] truncate max-w-[160px] align-top" title={row.company}>
+        {row.company || "—"}
+      </td>
+      <td className="px-4 py-3 text-[var(--text)] truncate max-w-[200px] align-top" title={row.job_title}>
+        {row.job_title || "—"}
+      </td>
+      <td className="px-4 py-3 text-[var(--text-tertiary)] truncate max-w-[220px] font-mono text-xs align-top" title={row.filename}>
+        {row.filename}
+      </td>
+      <td className="px-4 py-3 text-[var(--text-muted)] text-xs align-top whitespace-nowrap">{kind}</td>
+      <td className="px-4 py-3 align-top whitespace-nowrap">
+        {row.pdf_on_disk === false ? (
+          <span className="text-amber-600 text-xs font-medium">{t("admin.activity.pdfNo")}</span>
+        ) : (
+          <span className="text-emerald-600 text-xs font-medium">{t("admin.activity.pdfYes")}</span>
+        )}
+      </td>
+      <td className="px-4 py-3 align-top">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            disabled={!canOpen}
+            onClick={() => void handleOpenPdf()}
+            className="inline-flex items-center gap-1 rounded-lg border border-[#E8ECF4] bg-white px-2.5 py-1.5 text-xs font-medium text-[#4578FC] hover:bg-[#F5F8FF] disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <ArrowTopRightOnSquareIcon className="h-4 w-4 shrink-0" aria-hidden />
+            {t("admin.activity.openPdf")}
+          </button>
+          {row.has_stored_source ? (
+            <button
+              type="button"
+              onClick={() => void handleSource()}
+              className="inline-flex items-center gap-1 rounded-lg border border-[#E8ECF4] bg-white px-2.5 py-1.5 text-xs font-medium text-[var(--text-muted)] hover:bg-[#F5F6FA]"
+            >
+              <DocumentTextIcon className="h-4 w-4 shrink-0" aria-hidden />
+              {t("admin.activity.downloadSource")}
+            </button>
+          ) : null}
+        </div>
+      </td>
+    </tr>
+  );
+}
 
 export default function AdminActivity() {
   const [items, setItems] = useState<AdminActivityItem[]>([]);
@@ -12,6 +101,7 @@ export default function AdminActivity() {
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -57,6 +147,11 @@ export default function AdminActivity() {
       <header className="shrink-0 space-y-1 mb-3">
         <h2 className="text-xl font-bold text-[var(--text)] tracking-tight">{t("admin.activity.title")}</h2>
         <p className="text-sm text-[var(--text-muted)]">{t("admin.activity.subtitle")}</p>
+        {actionError && (
+          <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2" role="status">
+            {actionError}
+          </p>
+        )}
         {error && (
           <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2" role="alert">
             {error}
@@ -94,36 +189,23 @@ export default function AdminActivity() {
                     {t("admin.activity.filename")}
                   </th>
                   <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] whitespace-nowrap">
+                    {t("admin.activity.kind")}
+                  </th>
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] whitespace-nowrap">
                     {t("admin.activity.pdf")}
+                  </th>
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] whitespace-nowrap">
+                    {t("admin.activity.actions")}
                   </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#EBEDF5]">
                 {items.map((row) => (
-                  <tr key={`${row.filename}-${row.created_at}`} className="hover:bg-[#F5F6FA]/50">
-                    <td className="px-4 py-3 text-[var(--text-tertiary)] tabular-nums whitespace-nowrap align-top">
-                      {row.created_at ? new Date(row.created_at).toLocaleString() : "—"}
-                    </td>
-                    <td className="px-4 py-3 text-[var(--text-muted)] truncate max-w-[200px] align-top" title={row.user_email ?? undefined}>
-                      {row.user_email ?? "—"}
-                    </td>
-                    <td className="px-4 py-3 text-[var(--text)] truncate max-w-[160px] align-top" title={row.company}>
-                      {row.company || "—"}
-                    </td>
-                    <td className="px-4 py-3 text-[var(--text)] truncate max-w-[200px] align-top" title={row.job_title}>
-                      {row.job_title || "—"}
-                    </td>
-                    <td className="px-4 py-3 text-[var(--text-tertiary)] truncate max-w-[220px] font-mono text-xs align-top" title={row.filename}>
-                      {row.filename}
-                    </td>
-                    <td className="px-4 py-3 align-top whitespace-nowrap">
-                      {row.pdf_on_disk === false ? (
-                        <span className="text-amber-600 text-xs font-medium">{t("admin.activity.pdfNo")}</span>
-                      ) : (
-                        <span className="text-emerald-600 text-xs font-medium">{t("admin.activity.pdfYes")}</span>
-                      )}
-                    </td>
-                  </tr>
+                  <ActivityRow
+                    key={`${row.filename}-${row.created_at}`}
+                    row={row}
+                    onActionError={setActionError}
+                  />
                 ))}
               </tbody>
             </table>

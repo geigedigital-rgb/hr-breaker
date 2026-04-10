@@ -81,6 +81,7 @@ from hr_breaker.services.db import (
     referral_attribution_detail_for_invited,
     db_list_all,
     db_recent_resumes_with_user,
+    db_get_by_filename,
     user_increment_free_analyses,
     user_increment_free_optimize,
     READINESS_DELTA_ANALYSIS,
@@ -1095,6 +1096,10 @@ class AdminActivityItem(BaseModel):
     created_at: str
     user_email: str | None = None
     pdf_on_disk: bool = True
+    # uploaded = user upload (filename uploaded_*); generated = tailored PDF
+    file_kind: str = "generated"
+    source_was_pdf: bool = False
+    has_stored_source: bool = False
 
 
 class AdminActivityResponse(BaseModel):
@@ -3586,6 +3591,18 @@ async def api_admin_config(
     )
 
 
+def _admin_activity_file_kind(filename: str) -> str:
+    return "uploaded" if (filename or "").lower().startswith("uploaded_") else "generated"
+
+
+def _admin_has_stored_source(checksum: str) -> bool:
+    cs = (checksum or "").strip()
+    if not cs:
+        return False
+    p = pdf_storage.get_source_path(cs)
+    return p is not None and p.is_file()
+
+
 @router.get("/admin/activity", response_model=AdminActivityResponse)
 async def api_admin_activity(
     _admin: dict = Depends(get_admin_user),
@@ -3603,13 +3620,17 @@ async def api_admin_activity(
                 pool, settings.output_dir, limit=limit, offset=offset
             )
             for r in rows:
+                fn = r["filename"]
                 items.append(AdminActivityItem(
-                    filename=r["filename"],
+                    filename=fn,
                     company=r["company"],
                     job_title=r["job_title"],
                     created_at=r["created_at"].isoformat() if r.get("created_at") else "",
                     user_email=r.get("user_email"),
                     pdf_on_disk=bool(r.get("pdf_on_disk", True)),
+                    file_kind=_admin_activity_file_kind(fn),
+                    source_was_pdf=bool(r.get("source_was_pdf")),
+                    has_stored_source=_admin_has_stored_source(r.get("source_checksum") or ""),
                 ))
         except Exception as e:
             logger.exception("Admin activity failed: %s", e)
@@ -3623,15 +3644,67 @@ async def api_admin_activity(
         total = len(records)
         for r in records[offset : offset + limit]:
             path = settings.output_dir / r.path.name
+            fn = r.path.name
             items.append(AdminActivityItem(
-                filename=r.path.name,
+                filename=fn,
                 company=r.company,
                 job_title=r.job_title or "",
                 created_at=r.timestamp.isoformat() if r.timestamp else "",
                 user_email=None,
                 pdf_on_disk=path.is_file(),
+                file_kind=_admin_activity_file_kind(fn),
+                source_was_pdf=bool(r.source_was_pdf),
+                has_stored_source=_admin_has_stored_source(r.source_checksum or ""),
             ))
     return AdminActivityResponse(items=items, total=total)
+
+
+def _safe_admin_pdf_filename(filename: str) -> str:
+    if not filename or "/" in filename or "\\" in filename or ".." in filename:
+        raise HTTPException(400, "Invalid filename")
+    if not filename.lower().endswith(".pdf"):
+        raise HTTPException(400, "Expected a PDF filename")
+    return filename
+
+
+@router.get("/admin/pdf/{filename}")
+async def api_admin_pdf_open(filename: str, _admin: dict = Depends(get_admin_user)):
+    """Serve a PDF from the output directory for inline viewing (admin only)."""
+    fn = _safe_admin_pdf_filename(filename)
+    settings = get_settings()
+    path = settings.output_dir / fn
+    if not path.is_file():
+        raise HTTPException(404, "File not found")
+    return FileResponse(
+        path,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{fn}"'},
+    )
+
+
+@router.get("/admin/resume-source/{filename}")
+async def api_admin_resume_source(filename: str, _admin: dict = Depends(get_admin_user)):
+    """Download stored resume source text for a history filename (admin only)."""
+    if "/" in filename or "\\" in filename or ".." in filename:
+        raise HTTPException(400, "Invalid filename")
+    settings = get_settings()
+    pool = await get_pool()
+    record: GeneratedPDF | None = None
+    if pool:
+        record = await db_get_by_filename(pool, settings.output_dir, filename, user_id=None)
+    else:
+        record = pdf_storage.get_record_by_filename(filename)
+    if not record or not (record.source_checksum or "").strip():
+        raise HTTPException(404, "Record or source checksum not found")
+    src = pdf_storage.get_source_path(record.source_checksum)
+    if not src or not src.is_file():
+        raise HTTPException(404, "Source text not on disk")
+    safe_name = f"source_{filename.replace('.pdf', '')[:80]}.txt"
+    return FileResponse(
+        src,
+        media_type="text/plain; charset=utf-8",
+        filename=safe_name,
+    )
 
 
 @router.get("/admin/usage-audit", response_model=AdminUsageAuditResponse)
