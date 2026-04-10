@@ -700,7 +700,8 @@ async def user_resumes_db_rows(pool, user_id: str, limit: int = 200) -> list[dic
     async with pool.acquire() as conn:
         rows = await conn.fetch(
             f"""
-            SELECT filename, company, job_title, created_at, pre_ats_score, post_ats_score, job_url
+            SELECT filename, company, job_title, created_at, pre_ats_score, post_ats_score, job_url,
+                   source_checksum
             FROM {TABLE}
             WHERE user_id = $1::uuid
             ORDER BY created_at DESC

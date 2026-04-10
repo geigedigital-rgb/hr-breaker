@@ -871,6 +871,9 @@ async def _admin_build_user_detail(pool, user_id: str) -> AdminUserDetailRespons
         fname = r.get("filename") or ""
         pre_s = r.get("pre_ats_score")
         post_s = r.get("post_ats_score")
+        cs = (r.get("source_checksum") or "").strip()
+        src_path = pdf_storage.get_source_path(cs) if cs else None
+        has_src = bool(src_path and src_path.is_file())
         extra: list[str] = []
         if pre_s is not None or post_s is not None:
             extra.append(f"ATS {pre_s if pre_s is not None else '—'}→{post_s if post_s is not None else '—'}")
@@ -880,11 +883,14 @@ async def _admin_build_user_detail(pool, user_id: str) -> AdminUserDetailRespons
         detail_resume = fname
         if extra:
             detail_resume = f"{fname} · " + " · ".join(extra) if fname else " · ".join(extra)
+        pdf_fn = fname if fname.lower().endswith(".pdf") else None
         journey.append(AdminJourneyEntryOut(
             kind="resume",
             at=cr.isoformat() if cr and hasattr(cr, "isoformat") else "",
             title=f'PDF resume: {(r.get("company") or "—")} / {(r.get("job_title") or "—")}',
             detail=detail_resume or fname or None,
+            pdf_filename=pdf_fn,
+            has_stored_source=has_src if pdf_fn else None,
         ))
     for a in audits:
         ts = a.get("created_at")
@@ -1030,6 +1036,8 @@ class AdminJourneyEntryOut(BaseModel):
     model: str | None = None
     input_tokens: int | None = None
     output_tokens: int | None = None
+    pdf_filename: str | None = Field(None, description="When kind is resume: PDF basename for admin open.")
+    has_stored_source: bool | None = Field(None, description="When kind is resume: stored source .txt on disk.")
 
 
 class AdminFunnelStageOut(BaseModel):

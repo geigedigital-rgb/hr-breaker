@@ -763,6 +763,9 @@ export type AdminJourneyEntry = {
   model?: string | null;
   input_tokens?: number | null;
   output_tokens?: number | null;
+  /** Present when kind === "resume": open via admin PDF endpoint */
+  pdf_filename?: string | null;
+  has_stored_source?: boolean | null;
 };
 
 export type AdminFunnelStage = { id: string; label: string; done: boolean };

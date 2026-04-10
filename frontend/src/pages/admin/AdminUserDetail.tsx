@@ -3,12 +3,15 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   deleteAdminUser,
   getAdminUserDetail,
+  openAdminPdfInNewTab,
+  downloadAdminResumeSource,
   patchAdminUserBlocked,
   patchAdminUserPartnerAccess,
   patchAdminUserSubscription,
   type AdminUserDetail,
 } from "../../api";
 import { adminAuditActionLabel, t, tFormat } from "../../i18n";
+import { ArrowTopRightOnSquareIcon, DocumentTextIcon } from "@heroicons/react/24/outline";
 
 function isoDaysFromNow(days: number): string {
   const d = new Date();
@@ -24,6 +27,7 @@ export default function AdminUserDetail() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
+  const [journeyFileError, setJourneyFileError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!userId) return;
@@ -307,6 +311,11 @@ export default function AdminUserDetail() {
         <p className="px-4 pb-1 text-[11px] text-[var(--text-tertiary)] leading-snug">
           {t("admin.userDetail.journeyLogHint")}
         </p>
+        {journeyFileError ? (
+          <p className="px-4 pb-2 text-xs text-amber-800 bg-amber-50 border-y border-amber-100" role="status">
+            {journeyFileError}
+          </p>
+        ) : null}
         <div className="p-4 pt-2">
           <ul className="space-y-3 text-sm border-l-2 border-[#EBEDF5] ml-2 pl-4">
             {detail.journey.map((j, i) => {
@@ -342,6 +351,38 @@ export default function AdminUserDetail() {
                   ) : null}
                   {j.detail ? (
                     <p className="text-[var(--text-muted)] text-xs mt-0.5 break-words whitespace-pre-wrap">{j.detail}</p>
+                  ) : null}
+                  {j.kind === "resume" && j.pdf_filename ? (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setJourneyFileError(null);
+                          void openAdminPdfInNewTab(j.pdf_filename!).catch((e) =>
+                            setJourneyFileError(e instanceof Error ? e.message : t("admin.activity.openError")),
+                          );
+                        }}
+                        className="inline-flex items-center gap-1 rounded-lg border border-[#E8ECF4] bg-white px-2.5 py-1.5 text-xs font-medium text-[#4578FC] hover:bg-[#F5F8FF]"
+                      >
+                        <ArrowTopRightOnSquareIcon className="h-4 w-4 shrink-0" aria-hidden />
+                        {t("admin.activity.openPdf")}
+                      </button>
+                      {j.has_stored_source ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setJourneyFileError(null);
+                            void downloadAdminResumeSource(j.pdf_filename!).catch((e) =>
+                              setJourneyFileError(e instanceof Error ? e.message : t("admin.activity.openError")),
+                            );
+                          }}
+                          className="inline-flex items-center gap-1 rounded-lg border border-[#E8ECF4] bg-white px-2.5 py-1.5 text-xs font-medium text-[var(--text-muted)] hover:bg-[#F5F6FA]"
+                        >
+                          <DocumentTextIcon className="h-4 w-4 shrink-0" aria-hidden />
+                          {t("admin.activity.downloadSource")}
+                        </button>
+                      ) : null}
+                    </div>
                   ) : null}
                 </li>
               );
