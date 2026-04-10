@@ -27,7 +27,7 @@ class TemplateManifest:
 _TEMPLATES: list[TemplateManifest] = [
     TemplateManifest(
         id="jsonresume-even-inspired",
-        name="Even (inspired)",
+        name="Even",
         source="jsonresume",
         supports_photo=False,
         supports_columns=False,
@@ -37,7 +37,7 @@ _TEMPLATES: list[TemplateManifest] = [
     ),
     TemplateManifest(
         id="jsonresume-flat-inspired",
-        name="Flat (inspired)",
+        name="Flat",
         source="jsonresume",
         supports_photo=False,
         supports_columns=True,
@@ -47,7 +47,7 @@ _TEMPLATES: list[TemplateManifest] = [
     ),
     TemplateManifest(
         id="jsonresume-classic-inspired",
-        name="Classic (inspired)",
+        name="Classic",
         source="jsonresume",
         supports_photo=False,
         supports_columns=False,
@@ -58,7 +58,7 @@ _TEMPLATES: list[TemplateManifest] = [
     # Names / structure mirror https://github.com/amruthpillai/reactive-resume (MIT); HTML/CSS is our WeasyPrint port.
     TemplateManifest(
         id="reactive-chikorita",
-        name="Chikorita (Reactive Resume)",
+        name="Chikorita",
         source="reactive-resume",
         supports_photo=False,
         supports_columns=True,
@@ -68,9 +68,9 @@ _TEMPLATES: list[TemplateManifest] = [
     ),
     TemplateManifest(
         id="reactive-ditto",
-        name="Ditto (Reactive Resume)",
+        name="Ditto",
         source="reactive-resume",
-        supports_photo=False,
+        supports_photo=True,
         supports_columns=True,
         pdf_stability_score=0.89,
         default_css_vars={"accent": "#be185d"},
@@ -78,9 +78,9 @@ _TEMPLATES: list[TemplateManifest] = [
     ),
     TemplateManifest(
         id="reactive-gengar",
-        name="Gengar (Reactive Resume)",
+        name="Gengar",
         source="reactive-resume",
-        supports_photo=False,
+        supports_photo=True,
         supports_columns=True,
         pdf_stability_score=0.88,
         default_css_vars={"accent": "#6b21a8"},
@@ -88,7 +88,7 @@ _TEMPLATES: list[TemplateManifest] = [
     ),
     TemplateManifest(
         id="reactive-onyx",
-        name="Onyx (Reactive Resume)",
+        name="Onyx",
         source="reactive-resume",
         supports_photo=False,
         supports_columns=True,
@@ -98,7 +98,7 @@ _TEMPLATES: list[TemplateManifest] = [
     ),
     TemplateManifest(
         id="reactive-lapras",
-        name="Lapras (Reactive Resume)",
+        name="Lapras",
         source="reactive-resume",
         supports_photo=False,
         supports_columns=True,
@@ -108,9 +108,9 @@ _TEMPLATES: list[TemplateManifest] = [
     ),
     TemplateManifest(
         id="reactive-ditgar",
-        name="Ditgar (Reactive Resume)",
+        name="Ditgar",
         source="reactive-resume",
-        supports_photo=False,
+        supports_photo=True,
         supports_columns=True,
         pdf_stability_score=0.87,
         default_css_vars={"accent": "#0f766e"},
@@ -195,11 +195,11 @@ def _render_languages(schema: UnifiedResumeSchema) -> str:
 
 
 def _main_column(schema: UnifiedResumeSchema) -> str:
-    return f"{_render_work(schema)}{_render_projects(schema)}"
+    return f"{_render_work(schema)}{_render_projects(schema)}{_render_education(schema)}"
 
 
 def _side_column(schema: UnifiedResumeSchema) -> str:
-    return f"{_render_skills(schema)}{_render_education(schema)}{_render_languages(schema)}"
+    return f"{_render_skills(schema)}{_render_languages(schema)}"
 
 
 def _contacts_line(schema: UnifiedResumeSchema) -> str:
@@ -262,12 +262,15 @@ def _render_standard(schema: UnifiedResumeSchema, accent: str, two_col: bool) ->
 def _render_rx_chikorita(schema: UnifiedResumeSchema, accent: str) -> str:
     return f"""
 <style>
+@page {{ margin: 0; }}
 {_css_base(accent)}
-  .rx-chikorita .rx-row {{ display: flex; align-items: stretch; width: 100%; }}
-  .rx-chikorita .rx-main {{ flex: 1; padding: 20px 24px; min-width: 0; }}
+  html, body {{ height: 100%; }}
+  .rx-chikorita {{ display: flex; flex-direction: column; min-height: 100vh; background: linear-gradient(to right, var(--paper) 66%, var(--accent) 66%); }}
+  .rx-chikorita .rx-row {{ display: flex; width: 100%; flex: 1; }}
+  .rx-chikorita .rx-main {{ width: 66%; padding: 36px 40px; }}
   .rx-chikorita .rx-side {{
-    width: 34%; max-width: 220px; min-width: 160px;
-    background: var(--accent); color: var(--paper); padding: 20px 18px;
+    width: 34%;
+    background: transparent; color: var(--paper); padding: 36px 24px;
   }}
   .rx-chikorita .rx-side h2 {{
     color: var(--paper); border-bottom: 1px solid rgba(255,255,255,.45); padding-bottom: 4px;
@@ -295,26 +298,34 @@ def _render_rx_ditto(schema: UnifiedResumeSchema, accent: str) -> str:
     label = f'<p class="label">{escape(b.label)}</p>' if b.label else ""
     summary = f'<p class="summary">{escape(b.summary)}</p>' if b.summary else ""
     contacts = _contacts_line(schema)
+    
+    photo_html = ""
+    if getattr(b, "image", None):
+        photo_html = f'<img src="{b.image}" class="rx-photo" alt="Photo" />'
+
     return f"""
 <style>
+@page {{ margin: 0; }}
 {_css_base(accent)}
+  html, body {{ height: 100%; }}
+  .rx-ditto {{ display: flex; flex-direction: column; min-height: 100vh; }}
   .rx-ditto .rx-hero {{ display: flex; background: var(--accent); color: var(--paper); }}
-  .rx-ditto .rx-hero-slot {{ width: 30%; max-width: 140px; min-width: 72px; flex-shrink: 0; }}
-  .rx-ditto .rx-hero-text {{ flex: 1; padding: 18px 24px 16px 12px; }}
+  .rx-ditto .rx-hero-slot {{ width: 30%; max-width: 140px; min-width: 72px; flex-shrink: 0; position: relative; }}
+  .rx-ditto .rx-hero-slot .rx-photo {{ position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; display: block; }}
+  .rx-ditto .rx-hero-text {{ flex: 1; padding: 32px 36px 24px 12px; }}
   .rx-ditto .rx-hero-text h1 {{ color: var(--paper); }}
   .rx-ditto .rx-hero-text .label {{ color: rgba(255,255,255,.9); }}
   .rx-ditto .rx-hero-text .summary {{ color: rgba(255,255,255,.88); }}
-  .rx-ditto .rx-below-contacts {{ padding: 10px 24px 0 24px; }}
-  .rx-ditto .rx-row {{ display: flex; align-items: flex-start; width: 100%; padding: 16px 0 20px 0; }}
-  .rx-ditto .rx-side {{ width: 30%; max-width: 200px; min-width: 140px; padding: 0 16px 0 24px; flex-shrink: 0; }}
-  .rx-ditto .rx-main {{ flex: 1; padding: 0 24px 0 8px; min-width: 0; }}
+  .rx-ditto .rx-hero-text .contacts {{ color: rgba(255,255,255,.88); margin-top: 8px; }}
+  .rx-ditto .rx-row {{ display: flex; align-items: flex-start; width: 100%; padding: 16px 0 36px 0; flex: 1; }}
+  .rx-ditto .rx-side {{ width: 30%; max-width: 200px; min-width: 140px; padding: 0 16px 0 36px; flex-shrink: 0; }}
+  .rx-ditto .rx-main {{ flex: 1; padding: 0 36px 0 8px; min-width: 0; }}
 </style>
 <div class="resume rx-ditto">
   <div class="rx-hero">
-    <div class="rx-hero-slot" aria-hidden="true"></div>
-    <div class="rx-hero-text"><h1>{name}</h1>{label}{summary}</div>
+    <div class="rx-hero-slot" aria-hidden="true">{photo_html}</div>
+    <div class="rx-hero-text"><h1>{name}</h1>{label}{summary}{contacts}</div>
   </div>
-  <div class="rx-below-contacts">{contacts}</div>
   <div class="rx-row">
     <div class="rx-side">{_side_column(schema)}</div>
     <div class="rx-main">{_main_column(schema)}</div>
@@ -331,24 +342,31 @@ def _render_rx_gengar(schema: UnifiedResumeSchema, accent: str) -> str:
     summary_band = (
         f'<div class="rx-sum"><p>{escape(b.summary)}</p></div>' if b.summary else ""
     )
+
+    photo_html = ""
+    if getattr(b, "image", None):
+        photo_html = f'<div class="rx-photo-container"><img src="{b.image}" class="rx-photo" alt="Photo" /></div>'
+
     return f"""
 <style>
 {_css_base(accent)}
-  .rx-gengar .rx-row {{ display: flex; align-items: stretch; width: 100%; position: relative; }}
-  .rx-gengar .rx-strip {{
-    position: absolute; left: 0; top: 0; bottom: 0; width: 32%; max-width: 210px;
-    background: color-mix(in srgb, var(--accent) 18%, var(--paper)); z-index: 0;
-  }}
+  /* flex-start: avoid stretching main to sidebar height (WeasyPrint then paginates badly — main jumps to page 2). */
+  .rx-gengar .rx-row {{ display: flex; align-items: flex-start; width: 100%; }}
   .rx-gengar .rx-side {{
-    width: 32%; max-width: 210px; min-width: 150px; padding: 0 16px 20px 20px; position: relative; z-index: 1;
+    width: 32%; max-width: 210px; min-width: 150px; flex-shrink: 0;
+    padding: 0 16px 20px 20px;
+    background: color-mix(in srgb, var(--accent) 18%, var(--paper));
   }}
   .rx-gengar .rx-sidehead {{
     background: var(--accent); color: var(--paper); padding: 18px 16px; margin: 0 -16px 14px -20px;
+    display: flex; flex-direction: column;
   }}
+  .rx-gengar .rx-photo-container {{ width: 80px; height: 80px; margin-bottom: 12px; border-radius: 4px; overflow: hidden; flex-shrink: 0; align-self: flex-start; }}
+  .rx-gengar .rx-photo {{ width: 100%; height: 100%; object-fit: cover; aspect-ratio: 1/1; }}
   .rx-gengar .rx-sidehead h1 {{ color: var(--paper); font-size: 22px; }}
   .rx-gengar .rx-sidehead .label {{ color: rgba(255,255,255,.9); }}
   .rx-gengar .rx-sidehead .contacts {{ color: rgba(255,255,255,.88); }}
-  .rx-gengar .rx-main {{ flex: 1; min-width: 0; padding: 20px 24px 20px 12px; position: relative; z-index: 1; }}
+  .rx-gengar .rx-main {{ flex: 1; min-width: 0; padding: 20px 24px 20px 12px; }}
   .rx-gengar .rx-sum {{
     background: color-mix(in srgb, var(--accent) 22%, var(--paper));
     padding: 14px 16px; margin-bottom: 14px; border-radius: 4px;
@@ -357,9 +375,8 @@ def _render_rx_gengar(schema: UnifiedResumeSchema, accent: str) -> str:
 </style>
 <div class="resume rx-gengar">
   <div class="rx-row">
-    <div class="rx-strip" aria-hidden="true"></div>
     <div class="rx-side">
-      <div class="rx-sidehead"><h1>{name}</h1>{label}{contacts}</div>
+      <div class="rx-sidehead">{photo_html}<h1>{name}</h1>{label}{contacts}</div>
       {_side_column(schema)}
     </div>
     <div class="rx-main">{summary_band}{_main_column(schema)}</div>
@@ -437,36 +454,38 @@ def _render_rx_ditgar(schema: UnifiedResumeSchema, accent: str) -> str:
     label = f'<p class="label">{escape(b.label)}</p>' if b.label else ""
     contacts = _contacts_line(schema)
     summary = f'<p class="summary">{escape(b.summary)}</p>' if b.summary else ""
+    
+    photo_html = ""
+    if getattr(b, "image", None):
+        photo_html = f'<div class="rx-photo-container"><img src="{b.image}" class="rx-photo" alt="Photo" /></div>'
+
     return f"""
 <style>
 {_css_base(accent)}
-  .rx-ditgar .rx-row {{ display: flex; align-items: stretch; width: 100%; position: relative; }}
-  .rx-ditgar .rx-strip {{
-    position: absolute; left: 0; top: 0; bottom: 0; width: 34%; max-width: 220px;
-    background: color-mix(in srgb, var(--accent) 20%, var(--paper)); z-index: 0;
-  }}
+  .rx-ditgar .rx-row {{ display: flex; align-items: flex-start; width: 100%; }}
   .rx-ditgar .rx-side {{
-    width: 34%; max-width: 220px; min-width: 150px; position: relative; z-index: 1;
+    width: 34%; max-width: 220px; min-width: 150px; flex-shrink: 0;
+    background: color-mix(in srgb, var(--accent) 20%, var(--paper));
   }}
   .rx-ditgar .rx-sidehead {{
     background: var(--accent); color: var(--paper); padding: 18px 16px;
+    display: flex; flex-direction: column;
   }}
+  .rx-ditgar .rx-photo-container {{ width: 80px; height: 80px; margin-bottom: 12px; border-radius: 4px; overflow: hidden; flex-shrink: 0; align-self: flex-start; }}
+  .rx-ditgar .rx-photo {{ width: 100%; height: 100%; object-fit: cover; aspect-ratio: 1/1; }}
   .rx-ditgar .rx-sidehead h1 {{ color: var(--paper); font-size: 22px; }}
   .rx-ditgar .rx-sidehead .label {{ color: rgba(255,255,255,.9); }}
   .rx-ditgar .rx-sidehead .contacts {{ color: rgba(255,255,255,.88); }}
   .rx-ditgar .rx-sidebody {{ padding: 14px 16px 20px 16px; }}
-  .rx-ditgar .rx-main {{
-    flex: 1; min-width: 0; padding: 20px 20px 20px 16px; position: relative; z-index: 1;
-  }}
+  .rx-ditgar .rx-main {{ flex: 1; min-width: 0; padding: 20px 20px 20px 16px; }}
   .rx-ditgar .rx-main article {{
     border-left: 3px solid var(--accent); padding-left: 10px; margin-left: 2px;
   }}
 </style>
 <div class="resume rx-ditgar">
   <div class="rx-row">
-    <div class="rx-strip" aria-hidden="true"></div>
     <div class="rx-side">
-      <div class="rx-sidehead"><h1>{name}</h1>{label}{contacts}</div>
+      <div class="rx-sidehead">{photo_html}<h1>{name}</h1>{label}{contacts}</div>
       <div class="rx-sidebody">{_side_column(schema)}</div>
     </div>
     <div class="rx-main">{summary}{_main_column(schema)}</div>

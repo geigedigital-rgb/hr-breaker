@@ -2398,7 +2398,7 @@ export default function Optimize() {
                   )}
 
                   <PostResultResumeStudio
-                    qualityPct={Math.max(atsValue ?? 0, keywordsValue?.score ?? 0)}
+                    qualityPct={summaryData.qualityPct}
                     jobTitle={resultJobTitleLabel}
                     pdfFileName={result.pdf_filename || "Optimized_Resume.pdf"}
                     fallbackPreviewUrl={resumeThumbnailUrlRef.current}

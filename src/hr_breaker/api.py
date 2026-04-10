@@ -467,6 +467,7 @@ class OptimizeResponse(BaseModel):
     key_changes: list[ChangeDetailOut] | None = None
     error: str | None = None
     optimized_resume_text: str | None = None  # for "improve more" — next round uses this as resume_content
+    schema_json: str | None = None
 
 
 class HistoryItem(BaseModel):
@@ -2803,6 +2804,7 @@ async def _run_optimize(
     pending_export_token: str | None = None
     pending_export_expires_at: str | None = None
     optimized_resume_text: str | None = None
+    schema_json: str | None = None
     _put_progress(progress_queue, 85, "Saving PDF…")
     can_export_pdf = True
     if user and not _is_admin_user(user):
@@ -2811,6 +2813,21 @@ async def _run_optimize(
             sub = await user_get_subscription(pool_for_sub, str(user["id"]))
             if (sub.get("plan") or "free") == "free":
                 can_export_pdf = False
+                
+    if optimized and optimized.html:
+        try:
+            from hr_breaker.agents.resume_schema_extractor import extract_resume_schema_strict
+            _put_progress(progress_queue, 90, "Extracting structured data for templates…")
+            schema_obj = await extract_resume_schema_strict(
+                optimized.html,
+                target_role=job.title,
+                target_locale=out_lang,
+                source_checksum=source.checksum,
+            )
+            schema_json = schema_obj.model_dump_json()
+        except Exception as e:
+            logger.warning("Failed to extract schema for templates: %s", e)
+            
     if optimized and optimized.pdf_bytes and can_export_pdf:
         unique_suffix = datetime.now().strftime("%Y%m%d_%H%M%S")
         pdf_path = pdf_storage.generate_path(
@@ -2971,6 +2988,7 @@ async def _run_optimize(
         job=job_out,
         key_changes=key_changes_out,
         optimized_resume_text=optimized_resume_text,
+        schema_json=schema_json,
     )
 
 
@@ -3170,6 +3188,45 @@ async def api_admin_extract_resume_schema_file(
         target_role=target_role,
         target_locale=target_locale,
         source_checksum=checksum,
+    )
+
+
+@router.get("/templates", response_model=AdminTemplateListResponse)
+async def api_templates(
+    _user: dict | None = Depends(get_current_user),
+) -> AdminTemplateListResponse:
+    items = [
+        AdminTemplateListItem(
+            id=t.id,
+            name=t.name,
+            source=t.source,
+            supports_photo=t.supports_photo,
+            supports_columns=t.supports_columns,
+            pdf_stability_score=t.pdf_stability_score,
+            default_css_vars=t.default_css_vars,
+            recommended=t.recommended,
+        )
+        for t in list_templates()
+    ]
+    return AdminTemplateListResponse(items=items)
+
+
+@router.post("/templates/render-pdf", response_model=AdminTemplateRenderPdfResponse)
+async def api_templates_render_pdf(
+    req: AdminTemplateRenderRequest,
+    _user: dict | None = Depends(get_current_user),
+) -> AdminTemplateRenderPdfResponse:
+    try:
+        html_body = render_template_html(req.resume_schema, req.template_id)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    renderer = HTMLRenderer()
+    result = renderer.render(html_body)
+    pdf_b64 = base64.b64encode(result.pdf_bytes).decode("utf-8")
+    return AdminTemplateRenderPdfResponse(
+        pdf_base64=pdf_b64,
+        page_count=result.page_count,
+        warnings=result.warnings,
     )
 
 

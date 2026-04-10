@@ -327,7 +327,7 @@ const en = {
       "Optional. We crop to a square center. Used on templates that show a portrait (when available).",
     readyToSubmit: "Ваше резюме готово к подаче прямо сейчас!",
     templatesLoading: "Loading template previews…",
-    templatesUnavailable: "Sign in as admin to load real template previews, or use placeholders below.",
+    templatesUnavailable: "Could not load template previews, using placeholders below.",
     templatePreviewError: "Preview failed for this template.",
   },
   app: {
