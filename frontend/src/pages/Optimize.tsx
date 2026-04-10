@@ -2042,12 +2042,17 @@ export default function Optimize() {
               bottom: 0,
             }}
           >
-            <p
-              className="max-w-md text-center text-[13px] font-medium text-[#6B7280] select-none bg-white/80 px-4 py-2 rounded-xl backdrop-blur-sm shadow-sm ring-1 ring-black/5"
+            <div
+              className="max-w-lg text-center select-none bg-white/85 px-5 py-3.5 rounded-xl backdrop-blur-sm shadow-sm ring-1 ring-black/5"
               aria-live="polite"
             >
-              {t("optimize.doNotClosePage")}
-            </p>
+              <p className="text-[16px] sm:text-[18px] font-semibold text-[#374151]">
+                {t("optimize.doNotClosePage")}
+              </p>
+              <p className="mt-1 text-[13px] sm:text-[14px] font-medium text-[#6B7280]">
+                {t("optimize.doNotClosePageHint")}
+              </p>
+            </div>
           </div>
         )}
         {error && !isOfferPasteAsTextError(error) && (
