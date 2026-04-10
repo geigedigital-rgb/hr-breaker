@@ -295,7 +295,7 @@ const en = {
     nextStepImproveTitle: "Next step: improve your resume.",
     nextStepDownloadTitle: "Next step: download your resume.",
     /** Post-optimize export band (compact, full-width card) */
-    resultExportKicker: "Output",
+    resultExportKicker: "",
     resultReadyForRole: "Tailored for {jobTitle}",
     resultReadySourceFile: "{file}",
     tailorAnotherVacancy: "Another role",

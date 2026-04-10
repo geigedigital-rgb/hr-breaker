@@ -463,13 +463,6 @@ function clampPercent(value: number): number {
   return Math.max(0, Math.min(100, Math.round(value)));
 }
 
-function rollPostImproveDiagramScore(): number {
-  // Product rule: after improvement show 100 in ~90% cases,
-  // otherwise show a still-high score between 93 and 99.
-  if (Math.random() < 0.9) return 100;
-  return 93 + Math.floor(Math.random() * 7);
-}
-
 function cleanRecommendationReason(label: string): string {
   return label
     .replace(/\s*-\s*(missing|weak mention|none listed|ok|present)$/i, "")
@@ -1028,7 +1021,6 @@ export default function Optimize() {
   const [stage, setStage] = useState<Stage>(() => (pendingTokenInUrl() ? "scanning" : "landing"));
   const [result, setResult] = useState<api.OptimizeResponse | null>(null);
   const [postImproveDiagramScore, setPostImproveDiagramScore] = useState<number | null>(null);
-  const lastImproveActionRef = useRef<"base" | "stronger" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
@@ -1602,7 +1594,6 @@ export default function Optimize() {
   }
 
   async function runOptimizeResumeMax() {
-    lastImproveActionRef.current = "base";
     setError(null);
     setStage("loading");
     setLoadProgress(0);
@@ -1761,7 +1752,6 @@ export default function Optimize() {
     }
     setError(null);
     setIsImprovingMore(true);
-    lastImproveActionRef.current = "stronger";
     setStage("loading");
     setLoadProgress(0);
     const improvedContent = result.optimized_resume_text?.trim() || resumeContent.trim();
@@ -1800,24 +1790,22 @@ export default function Optimize() {
     }
   }
 
+  const atsValue = result ? getAtsScore(result) : null;
+  const keywordsValue = result ? getKeywordsScore(result) : null;
   useEffect(() => {
     if (result && !result.error) {
-      setPostImproveDiagramScore((prev) => {
-        const action = lastImproveActionRef.current;
-        const rolled = action === "stronger" ? 100 : rollPostImproveDiagramScore();
-        const floor = prev ?? 0;
-        // Never go below already shown post-improve score.
-        return Math.max(floor, rolled);
-      });
-      lastImproveActionRef.current = null;
+      const scoreFromResult = (() => {
+        if (atsValue == null || keywordsValue == null) return null;
+        return Math.round((atsValue + Math.round(keywordsValue.score * 100)) / 2);
+      })();
+      if (scoreFromResult != null) {
+        setPostImproveDiagramScore(scoreFromResult);
+      }
       return;
     }
     setPostImproveDiagramScore(null);
-    lastImproveActionRef.current = null;
-  }, [result]);
+  }, [result, atsValue, keywordsValue]);
 
-  const atsValue = result ? getAtsScore(result) : null;
-  const keywordsValue = result ? getKeywordsScore(result) : null;
   const showOptimizeAgainForAts =
     Boolean(result && !result.error && postImproveDiagramScore != null && postImproveDiagramScore < 100);
 
@@ -2400,7 +2388,6 @@ export default function Optimize() {
                   <PostResultResumeStudio
                     qualityPct={summaryData.qualityPct}
                     jobTitle={resultJobTitleLabel}
-                    pdfFileName={result.pdf_filename || "Optimized_Resume.pdf"}
                     fallbackPreviewUrl={resumeThumbnailUrlRef.current}
                     schemaJson={result.schema_json || "{}"}
                     initialTemplateId={selectedTemplateId}
