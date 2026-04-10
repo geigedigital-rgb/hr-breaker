@@ -442,10 +442,10 @@ export function PostResultResumeStudio({
             style={{ WebkitBackdropFilter: "blur(24px) saturate(1.8)", backdropFilter: "blur(24px) saturate(1.8)" }}
           >
             <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-[#4578FC] mb-1.5">{t("optimize.resultExportKicker")}</p>
-            <p className="text-xl font-semibold tracking-tight text-[#181819] sm:text-2xl break-words whitespace-normal">
+            <p className="w-full text-xl font-semibold tracking-tight text-[#181819] sm:text-2xl break-words whitespace-normal">
               {tFormat(t("optimize.resultReadyForRole"), { jobTitle })}
             </p>
-            <p className="mt-1.5 truncate text-[13px] text-[#6B7280] w-full" title={pdfFileName}>
+            <p className="mt-1.5 w-full max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[13px] text-[#6B7280]" title={pdfFileName}>
               {tFormat(t("optimize.resultReadySourceFile"), { file: pdfFileName })}
             </p>
             <div className="mt-6 flex w-full max-w-[280px] sm:max-w-[320px] flex-col gap-3">
