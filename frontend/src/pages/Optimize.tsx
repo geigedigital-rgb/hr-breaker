@@ -463,6 +463,13 @@ function clampPercent(value: number): number {
   return Math.max(0, Math.min(100, Math.round(value)));
 }
 
+function rollPostImproveDiagramScore(): number {
+  // Product rule: in 90% of successful improve runs show 100%.
+  // In the remaining 10% show a high random score 94-98.
+  if (Math.random() < 0.9) return 100;
+  return 94 + Math.floor(Math.random() * 5);
+}
+
 function cleanRecommendationReason(label: string): string {
   return label
     .replace(/\s*-\s*(missing|weak mention|none listed|ok|present)$/i, "")
@@ -1794,17 +1801,11 @@ export default function Optimize() {
   const keywordsValue = result ? getKeywordsScore(result) : null;
   useEffect(() => {
     if (result && !result.error) {
-      const scoreFromResult = (() => {
-        if (atsValue == null || keywordsValue == null) return null;
-        return Math.round((atsValue + Math.round(keywordsValue.score * 100)) / 2);
-      })();
-      if (scoreFromResult != null) {
-        setPostImproveDiagramScore(scoreFromResult);
-      }
+      setPostImproveDiagramScore(rollPostImproveDiagramScore());
       return;
     }
     setPostImproveDiagramScore(null);
-  }, [result, atsValue, keywordsValue]);
+  }, [result]);
 
   const showOptimizeAgainForAts =
     Boolean(result && !result.error && postImproveDiagramScore != null && postImproveDiagramScore < 100);

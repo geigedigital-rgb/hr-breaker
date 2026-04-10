@@ -326,7 +326,7 @@ const en = {
     removePhoto: "Remove",
     photoCropHint:
       "Optional. We crop to a square center. Used on templates that show a portrait (when available).",
-    readyToSubmit: "Ваше резюме готово к подаче прямо сейчас!",
+    readyToSubmit: "Your resume is ready to submit right now!",
     templatesLoading: "Loading template previews…",
     templatesUnavailable: "Could not load template previews, using placeholders below.",
     templatePreviewError: "Preview failed for this template.",
