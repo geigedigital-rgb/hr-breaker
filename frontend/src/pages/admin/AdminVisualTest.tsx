@@ -7,7 +7,7 @@ import {
   ChevronDownIcon,
   CheckIcon,
 } from "@heroicons/react/24/outline";
-import { t, tFormat } from "../../i18n";
+import { t } from "../../i18n";
 import * as api from "../../api";
 import { PostResultResumeStudio } from "../../components/PostResultResumeStudio";
 
