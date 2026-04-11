@@ -1105,6 +1105,102 @@ export async function getAdminConfig(): Promise<AdminConfigResponse> {
   return data;
 }
 
+/** Server segment id: successful optimize in window, still no paid/trial subscription. */
+export const ADMIN_EMAIL_SEGMENT_OPTIMIZED_UNPAID = "optimized_unpaid_recent";
+
+export type AdminEmailControl = {
+  winback_auto_enabled: boolean;
+  winback_delay_min_minutes: number;
+  winback_delay_max_minutes: number;
+  resend_configured: boolean;
+  resend_from_configured: boolean;
+  pending_queue_count: number;
+  resend_template_reminder_configured: boolean;
+  resend_template_short_nudge_configured: boolean;
+};
+
+export async function getAdminEmailControl(): Promise<AdminEmailControl> {
+  const r = await fetch(`${API}/admin/email/control`, { headers: authHeaders() });
+  const data = await parseJsonOrThrow<AdminEmailControl & { detail?: string }>(r);
+  if (!r.ok) throw new Error(data.detail || r.statusText);
+  return data;
+}
+
+export async function patchAdminEmailControl(body: {
+  winback_auto_enabled?: boolean;
+  winback_delay_min_minutes?: number;
+  winback_delay_max_minutes?: number;
+}): Promise<AdminEmailControl> {
+  const r = await fetch(`${API}/admin/email/control`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(body),
+  });
+  const data = await parseJsonOrThrow<AdminEmailControl & { detail?: string }>(r);
+  if (!r.ok) throw new Error(data.detail || r.statusText);
+  return data;
+}
+
+export async function postAdminEmailQueueProcess(limit?: number): Promise<Record<string, unknown>> {
+  const sp = limit != null ? `?limit=${limit}` : "";
+  const r = await fetch(`${API}/admin/email/queue/process${sp}`, {
+    method: "POST",
+    headers: authHeaders(),
+  });
+  const data = await parseJsonOrThrow<Record<string, unknown> & { detail?: string }>(r);
+  if (!r.ok) throw new Error(String(data.detail || r.statusText));
+  return data;
+}
+
+export type AdminEmailSegmentPreview = {
+  segment_id: string;
+  days: number;
+  recipients_count: number;
+  sample_emails: string[];
+};
+
+export async function postAdminEmailSegmentPreview(body: {
+  segment_id: string;
+  days?: number;
+  sample_limit?: number;
+}): Promise<AdminEmailSegmentPreview> {
+  const r = await fetch(`${API}/admin/email/segment/preview`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(body),
+  });
+  const data = await parseJsonOrThrow<AdminEmailSegmentPreview & { detail?: string }>(r);
+  if (!r.ok) throw new Error(data.detail || r.statusText);
+  return data;
+}
+
+export type AdminEmailSegmentSendResult = {
+  segment_id: string;
+  template_id: string;
+  dry_run: boolean;
+  attempted: number;
+  sent: number;
+  failed: number;
+  errors_sample: string[];
+};
+
+export async function postAdminEmailSegmentSend(body: {
+  segment_id: string;
+  template_id: string;
+  dry_run: boolean;
+  days?: number;
+  limit?: number;
+}): Promise<AdminEmailSegmentSendResult> {
+  const r = await fetch(`${API}/admin/email/segment/send`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(body),
+  });
+  const data = await parseJsonOrThrow<AdminEmailSegmentSendResult & { detail?: string }>(r);
+  if (!r.ok) throw new Error(data.detail || r.statusText);
+  return data;
+}
+
 export async function getAdminActivity(limit: number, offset: number): Promise<AdminActivityResponse> {
   const sp = new URLSearchParams({ limit: String(limit), offset: String(offset) });
   const r = await fetch(`${API}/admin/activity?${sp}`, { headers: authHeaders() });

@@ -22,6 +22,7 @@ import {
   DocumentTextIcon,
   WrenchScrewdriverIcon,
   ChatBubbleLeftRightIcon,
+  PaperAirplaneIcon,
 } from "@heroicons/react/24/outline";
 import { useAuth } from "./contexts/AuthContext";
 import { t } from "./i18n";
@@ -88,6 +89,7 @@ const ADMIN_NAV: AdminNavEntry[] = [
     labelKey: "admin.nav.folderEmail",
     icon: EnvelopeIcon,
     items: [
+      { to: "/admin/email/send", labelKey: "admin.nav.emailAutomation", icon: PaperAirplaneIcon },
       { to: "/admin/email/groups", labelKey: "admin.nav.emailGroups", icon: FunnelIcon },
       { to: "/admin/email/templates", labelKey: "admin.nav.emailTemplates", icon: DocumentTextIcon },
     ],

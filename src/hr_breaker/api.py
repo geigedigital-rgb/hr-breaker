@@ -93,6 +93,12 @@ from hr_breaker.services.db import (
     referral_mark_processed_event,
     referral_partner_commissions,
     referral_partner_summary,
+    admin_email_settings_get,
+    admin_email_settings_update,
+    admin_email_campaign_log_insert,
+    email_segment_optimized_unpaid_count,
+    email_segment_optimized_unpaid_emails,
+    email_winback_pending_count,
 )
 from hr_breaker.services.reviews_repo import (
     reviews_apply_patch,
@@ -1095,6 +1101,55 @@ class AdminConfigResponse(BaseModel):
     frontend_url: str
     adzuna_configured: bool
     partner_program_enabled: bool
+
+
+class AdminEmailControlOut(BaseModel):
+    winback_auto_enabled: bool
+    winback_delay_min_minutes: int
+    winback_delay_max_minutes: int
+    resend_configured: bool
+    resend_from_configured: bool
+    pending_queue_count: int
+    # If true, Resend published template id is set for that app template (send uses template + variables).
+    resend_template_reminder_configured: bool
+    resend_template_short_nudge_configured: bool
+
+
+class AdminEmailControlPatchBody(BaseModel):
+    winback_auto_enabled: bool | None = None
+    winback_delay_min_minutes: int | None = Field(None, ge=5, le=120)
+    winback_delay_max_minutes: int | None = Field(None, ge=5, le=180)
+
+
+class AdminEmailSegmentPreviewBody(BaseModel):
+    segment_id: str = Field(..., description="e.g. optimized_unpaid_recent")
+    days: int = Field(30, ge=1, le=365)
+    sample_limit: int = Field(15, ge=1, le=50)
+
+
+class AdminEmailSegmentPreviewOut(BaseModel):
+    segment_id: str
+    days: int
+    recipients_count: int
+    sample_emails: list[str]
+
+
+class AdminEmailSegmentSendBody(BaseModel):
+    segment_id: str
+    template_id: str = "reminder-no-download"
+    dry_run: bool = True
+    days: int = Field(30, ge=1, le=365)
+    limit: int = Field(15, ge=1, le=100)
+
+
+class AdminEmailSegmentSendOut(BaseModel):
+    segment_id: str
+    template_id: str
+    dry_run: bool
+    attempted: int
+    sent: int
+    failed: int
+    errors_sample: list[str]
 
 
 class AdminActivityItem(BaseModel):
@@ -3140,6 +3195,15 @@ async def _run_optimize(
             error_message=opt_fail_reason,
             metadata=oc_meta,
         )
+        if ok:
+            from hr_breaker.services.email_winback import maybe_schedule_winback_after_optimize
+
+            try:
+                await maybe_schedule_winback_after_optimize(
+                    pool_done, user, optimize_succeeded=True, is_admin_user_fn=_is_admin_user
+                )
+            except Exception as e:
+                logger.warning("Win-back schedule skipped: %s", e)
 
     return OptimizeResponse(
         success=validation.passed and bool(optimized and optimized.pdf_bytes),
@@ -3596,6 +3660,165 @@ async def api_admin_config(
         frontend_url=settings.frontend_url or "",
         adzuna_configured=bool((settings.adzuna_app_id or "").strip() and (settings.adzuna_app_key or "").strip()),
         partner_program_enabled=bool(settings.partner_program_enabled),
+    )
+
+
+SEGMENT_OPTIMIZED_UNPAID = "optimized_unpaid_recent"
+
+
+@router.get("/admin/email/control", response_model=AdminEmailControlOut)
+async def api_admin_email_control(_admin: dict = Depends(get_admin_user)) -> AdminEmailControlOut:
+    pool = await get_pool()
+    if pool is None:
+        raise HTTPException(503, "Database not configured")
+    settings = get_settings()
+    cfg = await admin_email_settings_get(pool)
+    pending = await email_winback_pending_count(pool)
+    rk = bool((settings.resend_api_key or "").strip())
+    rf = bool((settings.resend_from or "").strip())
+    tr = bool((settings.resend_template_reminder_no_download or "").strip())
+    tn = bool((settings.resend_template_short_nudge or "").strip())
+    return AdminEmailControlOut(
+        winback_auto_enabled=bool(cfg.get("winback_auto_enabled")),
+        winback_delay_min_minutes=int(cfg.get("winback_delay_min_minutes") or 25),
+        winback_delay_max_minutes=int(cfg.get("winback_delay_max_minutes") or 30),
+        resend_configured=rk and rf,
+        resend_from_configured=rf,
+        pending_queue_count=pending,
+        resend_template_reminder_configured=tr,
+        resend_template_short_nudge_configured=tn,
+    )
+
+
+@router.patch("/admin/email/control", response_model=AdminEmailControlOut)
+async def api_admin_email_control_patch(
+    body: AdminEmailControlPatchBody,
+    _admin: dict = Depends(get_admin_user),
+) -> AdminEmailControlOut:
+    pool = await get_pool()
+    if pool is None:
+        raise HTTPException(503, "Database not configured")
+    await admin_email_settings_update(
+        pool,
+        winback_auto_enabled=body.winback_auto_enabled,
+        winback_delay_min_minutes=body.winback_delay_min_minutes,
+        winback_delay_max_minutes=body.winback_delay_max_minutes,
+    )
+    settings = get_settings()
+    cfg = await admin_email_settings_get(pool)
+    pending = await email_winback_pending_count(pool)
+    rk = bool((settings.resend_api_key or "").strip())
+    rf = bool((settings.resend_from or "").strip())
+    tr = bool((settings.resend_template_reminder_no_download or "").strip())
+    tn = bool((settings.resend_template_short_nudge or "").strip())
+    return AdminEmailControlOut(
+        winback_auto_enabled=bool(cfg.get("winback_auto_enabled")),
+        winback_delay_min_minutes=int(cfg.get("winback_delay_min_minutes") or 25),
+        winback_delay_max_minutes=int(cfg.get("winback_delay_max_minutes") or 30),
+        resend_configured=rk and rf,
+        resend_from_configured=rf,
+        pending_queue_count=pending,
+        resend_template_reminder_configured=tr,
+        resend_template_short_nudge_configured=tn,
+    )
+
+
+@router.post("/admin/email/queue/process")
+async def api_admin_email_queue_process(
+    _admin: dict = Depends(get_admin_user),
+    limit: int = Query(25, ge=1, le=100),
+) -> dict[str, Any]:
+    """Process due scheduled win-back rows (call from cron every few minutes or manually)."""
+    pool = await get_pool()
+    if pool is None:
+        raise HTTPException(503, "Database not configured")
+    from hr_breaker.services.email_winback import process_winback_due_batch
+
+    return await process_winback_due_batch(pool, limit=limit)
+
+
+@router.post("/admin/email/segment/preview", response_model=AdminEmailSegmentPreviewOut)
+async def api_admin_email_segment_preview(
+    body: AdminEmailSegmentPreviewBody,
+    _admin: dict = Depends(get_admin_user),
+) -> AdminEmailSegmentPreviewOut:
+    pool = await get_pool()
+    if pool is None:
+        raise HTTPException(503, "Database not configured")
+    if body.segment_id != SEGMENT_OPTIMIZED_UNPAID:
+        raise HTTPException(400, f"Unknown segment_id (supported: {SEGMENT_OPTIMIZED_UNPAID})")
+    cnt = await email_segment_optimized_unpaid_count(pool, body.days)
+    sample = await email_segment_optimized_unpaid_emails(pool, body.days, body.sample_limit)
+    return AdminEmailSegmentPreviewOut(
+        segment_id=body.segment_id,
+        days=body.days,
+        recipients_count=cnt,
+        sample_emails=sample,
+    )
+
+
+@router.post("/admin/email/segment/send", response_model=AdminEmailSegmentSendOut)
+async def api_admin_email_segment_send(
+    body: AdminEmailSegmentSendBody,
+    admin: dict = Depends(get_admin_user),
+) -> AdminEmailSegmentSendOut:
+    pool = await get_pool()
+    if pool is None:
+        raise HTTPException(503, "Database not configured")
+    if body.segment_id != SEGMENT_OPTIMIZED_UNPAID:
+        raise HTTPException(400, f"Unknown segment_id (supported: {SEGMENT_OPTIMIZED_UNPAID})")
+    from hr_breaker.services.email_winback import send_winback_to_email
+
+    emails = await email_segment_optimized_unpaid_emails(pool, body.days, body.limit)
+    admin_email = (admin.get("email") or "").strip() or None
+    errors: list[str] = []
+    sent = 0
+    failed = 0
+    if body.dry_run:
+        await admin_email_campaign_log_insert(
+            pool,
+            segment_id=body.segment_id,
+            template_id=body.template_id,
+            dry_run=True,
+            recipients_planned=len(emails),
+            recipients_sent=0,
+            error=None,
+            created_by_email=admin_email,
+        )
+        return AdminEmailSegmentSendOut(
+            segment_id=body.segment_id,
+            template_id=body.template_id,
+            dry_run=True,
+            attempted=len(emails),
+            sent=0,
+            failed=0,
+            errors_sample=[],
+        )
+    for em in emails:
+        try:
+            await send_winback_to_email(pool, to_email=em, template_id=body.template_id)
+            sent += 1
+        except Exception as e:
+            failed += 1
+            errors.append(f"{em}: {e}"[:500])
+    await admin_email_campaign_log_insert(
+        pool,
+        segment_id=body.segment_id,
+        template_id=body.template_id,
+        dry_run=False,
+        recipients_planned=len(emails),
+        recipients_sent=sent,
+        error=("; ".join(errors[:3]) if errors else None),
+        created_by_email=admin_email,
+    )
+    return AdminEmailSegmentSendOut(
+        segment_id=body.segment_id,
+        template_id=body.template_id,
+        dry_run=False,
+        attempted=len(emails),
+        sent=sent,
+        failed=failed,
+        errors_sample=errors[:5],
     )
 
 

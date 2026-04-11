@@ -32,6 +32,7 @@ const AdminVisualTest = lazy(() => import("./pages/admin/AdminVisualTest"));
 const AdminTemplatesLab = lazy(() => import("./pages/admin/AdminTemplatesLab"));
 const AdminEmailGroups = lazy(() => import("./pages/admin/AdminEmailGroups"));
 const AdminEmailTemplates = lazy(() => import("./pages/admin/AdminEmailTemplates"));
+const AdminEmailSend = lazy(() => import("./pages/admin/AdminEmailSend"));
 
 function LazyShell({ children }: { children: ReactNode }) {
   return <Suspense fallback={<RouteFallback />}>{children}</Suspense>;
@@ -165,7 +166,8 @@ function App() {
               <Route path="app" element={<AdminApp />} />
               <Route path="templates-lab" element={<AdminTemplatesLab />} />
               <Route path="visual" element={<AdminVisualTest />} />
-              <Route path="email" element={<Navigate to="/admin/email/groups" replace />} />
+              <Route path="email" element={<Navigate to="/admin/email/send" replace />} />
+              <Route path="email/send" element={<AdminEmailSend />} />
               <Route path="email/groups" element={<AdminEmailGroups />} />
               <Route path="email/templates" element={<AdminEmailTemplates />} />
             </Route>

@@ -15,6 +15,8 @@ from datetime import datetime, timezone, timedelta
 from hr_breaker.config import get_settings
 from hr_breaker.services.usage_audit import log_usage_event
 
+from hr_breaker.services.db import email_winback_delete_pending_for_user
+
 logger = logging.getLogger(__name__)
 
 # Price key used by frontend/API
@@ -277,6 +279,11 @@ async def handle_checkout_session_completed(
                 "stripe_subscription_id": sub.id,
             },
         )
+        if trial_checkout_ok:
+            try:
+                await email_winback_delete_pending_for_user(pool, str(user_id))
+            except Exception as e:
+                logger.debug("email_winback_delete_pending_for_user: %s", e)
         return
 
     # Active (no trial) — e.g. monthly signup
@@ -303,6 +310,10 @@ async def handle_checkout_session_completed(
                 "stripe_subscription_id": sub.id,
             },
         )
+        try:
+            await email_winback_delete_pending_for_user(pool, str(user_id))
+        except Exception as e:
+            logger.debug("email_winback_delete_pending_for_user: %s", e)
 
 
 async def handle_subscription_updated(
@@ -341,6 +352,11 @@ async def handle_subscription_updated(
         subscription_plan=plan,
         current_period_end=current_period_end,
     )
+    if sub_status in ("trial", "active"):
+        try:
+            await email_winback_delete_pending_for_user(pool, str(user_id))
+        except Exception as e:
+            logger.debug("email_winback_delete_pending_for_user: %s", e)
 
 
 async def handle_subscription_deleted(

@@ -247,6 +247,57 @@ async def init_table(pool) -> None:
             f"CREATE INDEX IF NOT EXISTS idx_usage_audit_user ON {USAGE_AUDIT_TABLE}(user_id)"
         )
         await ensure_reviews_schema(conn)
+        await conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS admin_email_settings (
+                id SMALLINT PRIMARY KEY DEFAULT 1,
+                winback_auto_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+                winback_delay_min_minutes INT NOT NULL DEFAULT 25,
+                winback_delay_max_minutes INT NOT NULL DEFAULT 30,
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                CONSTRAINT admin_email_settings_single CHECK (id = 1)
+            )
+            """
+        )
+        await conn.execute(
+            "INSERT INTO admin_email_settings (id) VALUES (1) ON CONFLICT (id) DO NOTHING"
+        )
+        await conn.execute(
+            f"""
+            CREATE TABLE IF NOT EXISTS email_winback_schedule (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                user_id UUID NOT NULL REFERENCES {USERS_TABLE}(id) ON DELETE CASCADE,
+                run_at TIMESTAMPTZ NOT NULL,
+                template_id TEXT NOT NULL DEFAULT 'reminder-no-download',
+                status TEXT NOT NULL DEFAULT 'pending',
+                error_message TEXT,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                sent_at TIMESTAMPTZ,
+                claimed_at TIMESTAMPTZ
+            )
+            """
+        )
+        await conn.execute(
+            f"ALTER TABLE {EMAIL_WINBACK_SCHEDULE_TABLE} ADD COLUMN IF NOT EXISTS claimed_at TIMESTAMPTZ"
+        )
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_email_winback_due ON email_winback_schedule (status, run_at) WHERE status = 'pending'"
+        )
+        await conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS admin_email_campaign_log (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                segment_id TEXT NOT NULL,
+                template_id TEXT NOT NULL,
+                dry_run BOOLEAN NOT NULL,
+                recipients_planned INT NOT NULL DEFAULT 0,
+                recipients_sent INT NOT NULL DEFAULT 0,
+                error TEXT,
+                created_by_email TEXT,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+            """
+        )
 
 
 async def db_insert(pool, output_dir: Path, pdf: GeneratedPDF, user_id: str) -> None:
@@ -1271,5 +1322,260 @@ async def user_record_visit(pool, user_id: str) -> None:
             today,
             new_streak,
             score_after,
+            user_id,
+        )
+
+
+# --- Admin email automation & segments ---
+
+ADMIN_EMAIL_SETTINGS_TABLE = "admin_email_settings"
+EMAIL_WINBACK_SCHEDULE_TABLE = "email_winback_schedule"
+ADMIN_EMAIL_CAMPAIGN_LOG_TABLE = "admin_email_campaign_log"
+
+
+async def admin_email_settings_get(pool) -> dict[str, Any]:
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(f"SELECT * FROM {ADMIN_EMAIL_SETTINGS_TABLE} WHERE id = 1")
+    if row is None:
+        return {
+            "winback_auto_enabled": False,
+            "winback_delay_min_minutes": 25,
+            "winback_delay_max_minutes": 30,
+        }
+    d = dict(row)
+    return {
+        "winback_auto_enabled": bool(d.get("winback_auto_enabled")),
+        "winback_delay_min_minutes": int(d.get("winback_delay_min_minutes") or 25),
+        "winback_delay_max_minutes": int(d.get("winback_delay_max_minutes") or 30),
+    }
+
+
+async def admin_email_settings_update(
+    pool,
+    *,
+    winback_auto_enabled: bool | None = None,
+    winback_delay_min_minutes: int | None = None,
+    winback_delay_max_minutes: int | None = None,
+) -> dict[str, Any]:
+    cur = await admin_email_settings_get(pool)
+    n_auto = cur["winback_auto_enabled"] if winback_auto_enabled is None else bool(winback_auto_enabled)
+    n_min = cur["winback_delay_min_minutes"] if winback_delay_min_minutes is None else int(winback_delay_min_minutes)
+    n_max = cur["winback_delay_max_minutes"] if winback_delay_max_minutes is None else int(winback_delay_max_minutes)
+    if n_min < 5:
+        n_min = 5
+    if n_min > 120:
+        n_min = 120
+    if n_max < n_min:
+        n_max = n_min
+    if n_max > 180:
+        n_max = 180
+    async with pool.acquire() as conn:
+        await conn.execute(
+            f"""
+            UPDATE {ADMIN_EMAIL_SETTINGS_TABLE}
+            SET winback_auto_enabled = $2,
+                winback_delay_min_minutes = $3,
+                winback_delay_max_minutes = $4,
+                updated_at = NOW()
+            WHERE id = $1
+            """,
+            1,
+            n_auto,
+            n_min,
+            n_max,
+        )
+    return await admin_email_settings_get(pool)
+
+
+async def email_winback_replace_pending(
+    pool, user_id: str, run_at: datetime, template_id: str = "reminder-no-download"
+) -> None:
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            await conn.execute(
+                f"DELETE FROM {EMAIL_WINBACK_SCHEDULE_TABLE} WHERE user_id = $1::uuid AND status = 'pending'",
+                user_id,
+            )
+            await conn.execute(
+                f"""
+                INSERT INTO {EMAIL_WINBACK_SCHEDULE_TABLE} (user_id, run_at, template_id, status)
+                VALUES ($1::uuid, $2, $3, 'pending')
+                """,
+                user_id,
+                run_at,
+                template_id,
+            )
+
+
+async def email_winback_claim_due_batch(pool, limit: int) -> list[dict[str, Any]]:
+    """Mark rows as processing and return them (single worker / admin cron)."""
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            await conn.execute(
+                f"""
+                UPDATE {EMAIL_WINBACK_SCHEDULE_TABLE}
+                SET status = 'pending', claimed_at = NULL
+                WHERE status = 'processing'
+                  AND claimed_at IS NOT NULL
+                  AND claimed_at < NOW() - interval '35 minutes'
+                """
+            )
+            rows = await conn.fetch(
+                f"""
+                SELECT id, user_id, template_id FROM {EMAIL_WINBACK_SCHEDULE_TABLE}
+                WHERE status = 'pending' AND run_at <= NOW()
+                ORDER BY run_at ASC
+                LIMIT $1
+                FOR UPDATE SKIP LOCKED
+                """,
+                limit,
+            )
+            out = [dict(r) for r in rows]
+            for r in out:
+                await conn.execute(
+                    f"""
+                    UPDATE {EMAIL_WINBACK_SCHEDULE_TABLE}
+                    SET status = 'processing', claimed_at = NOW()
+                    WHERE id = $1::uuid
+                    """,
+                    r["id"],
+                )
+    return out
+
+
+async def email_winback_mark_sent(pool, schedule_id: str) -> None:
+    async with pool.acquire() as conn:
+        await conn.execute(
+            f"""
+            UPDATE {EMAIL_WINBACK_SCHEDULE_TABLE}
+            SET status = 'sent', sent_at = NOW(), error_message = NULL
+            WHERE id = $1::uuid
+            """,
+            schedule_id,
+        )
+
+
+async def email_winback_mark_skipped_paid(pool, schedule_id: str) -> None:
+    async with pool.acquire() as conn:
+        await conn.execute(
+            f"""
+            UPDATE {EMAIL_WINBACK_SCHEDULE_TABLE}
+            SET status = 'skipped_paid', sent_at = NOW(), error_message = NULL
+            WHERE id = $1::uuid
+            """,
+            schedule_id,
+        )
+
+
+async def email_winback_mark_failed(pool, schedule_id: str, message: str) -> None:
+    async with pool.acquire() as conn:
+        await conn.execute(
+            f"""
+            UPDATE {EMAIL_WINBACK_SCHEDULE_TABLE}
+            SET status = 'failed', error_message = $2, sent_at = NOW()
+            WHERE id = $1::uuid
+            """,
+            schedule_id,
+            (message or "")[:2000],
+        )
+
+
+async def admin_email_campaign_log_insert(
+    pool,
+    *,
+    segment_id: str,
+    template_id: str,
+    dry_run: bool,
+    recipients_planned: int,
+    recipients_sent: int,
+    error: str | None,
+    created_by_email: str | None,
+) -> None:
+    async with pool.acquire() as conn:
+        await conn.execute(
+            f"""
+            INSERT INTO {ADMIN_EMAIL_CAMPAIGN_LOG_TABLE}
+            (segment_id, template_id, dry_run, recipients_planned, recipients_sent, error, created_by_email)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            """,
+            segment_id,
+            template_id,
+            dry_run,
+            recipients_planned,
+            recipients_sent,
+            error,
+            created_by_email,
+        )
+
+
+def _sql_user_is_unpaid() -> str:
+    return """NOT (
+        LOWER(COALESCE(u.subscription_plan, 'free')) IN ('trial', 'monthly')
+        AND LOWER(COALESCE(u.subscription_status, 'free')) IN ('active', 'trial')
+    )"""
+
+
+async def email_segment_optimized_unpaid_count(pool, days: int) -> int:
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            f"""
+            WITH recent_opt AS (
+                SELECT DISTINCT l.user_id AS uid
+                FROM {USAGE_AUDIT_TABLE} l
+                WHERE l.action = 'optimize_complete'
+                  AND l.success = TRUE
+                  AND l.user_id IS NOT NULL
+                  AND l.created_at >= (NOW() - make_interval(days => $1::int))
+            )
+            SELECT COUNT(*)::int AS c
+            FROM {USERS_TABLE} u
+            INNER JOIN recent_opt ro ON ro.uid = u.id
+            WHERE {_sql_user_is_unpaid()}
+              AND COALESCE(u.admin_blocked, FALSE) = FALSE
+            """,
+            days,
+        )
+    return int(row["c"]) if row else 0
+
+
+async def email_segment_optimized_unpaid_emails(pool, days: int, limit: int) -> list[str]:
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            f"""
+            WITH recent_opt AS (
+                SELECT DISTINCT l.user_id AS uid
+                FROM {USAGE_AUDIT_TABLE} l
+                WHERE l.action = 'optimize_complete'
+                  AND l.success = TRUE
+                  AND l.user_id IS NOT NULL
+                  AND l.created_at >= (NOW() - make_interval(days => $1::int))
+            )
+            SELECT u.email
+            FROM {USERS_TABLE} u
+            INNER JOIN recent_opt ro ON ro.uid = u.id
+            WHERE {_sql_user_is_unpaid()}
+              AND COALESCE(u.admin_blocked, FALSE) = FALSE
+            ORDER BY u.email
+            LIMIT $2
+            """,
+            days,
+            limit,
+        )
+    return [str(r["email"]) for r in rows]
+
+
+async def email_winback_pending_count(pool) -> int:
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            f"SELECT COUNT(*)::int AS c FROM {EMAIL_WINBACK_SCHEDULE_TABLE} WHERE status = 'pending'"
+        )
+    return int(row["c"]) if row else 0
+
+
+async def email_winback_delete_pending_for_user(pool, user_id: str) -> None:
+    """Remove queued win-back when user subscribed (Stripe) or account deleted."""
+    async with pool.acquire() as conn:
+        await conn.execute(
+            f"DELETE FROM {EMAIL_WINBACK_SCHEDULE_TABLE} WHERE user_id = $1::uuid AND status = 'pending'",
             user_id,
         )

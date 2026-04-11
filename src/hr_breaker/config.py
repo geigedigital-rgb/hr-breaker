@@ -73,6 +73,8 @@ class Settings(BaseModel):
     google_oauth_client_id: str = ""
     google_oauth_client_secret: str = ""
     frontend_url: str = "http://localhost:5173"  # for OAuth redirect
+    # Public HTTPS origin for email assets (logo, hero SVG) and merge URLs. If empty, FRONTEND_URL is used.
+    email_public_base_url: str = ""
 
     # Filter thresholds
     filter_hallucination_threshold: float = 0.82
@@ -121,6 +123,15 @@ class Settings(BaseModel):
     reviews_rate_limit_ip_per_hour: int = 10
     reviews_rate_limit_email_per_day: int = 3
 
+    # Resend (https://resend.com/) — win-back and admin manual send
+    resend_api_key: str = ""
+    resend_from: str = ""  # e.g. PitchCV <onboarding@resend.dev>
+    resend_winback_subject: str = "Your resume is ready"
+    # Optional: published template id or alias from Resend Dashboard → Templates.
+    # If set, API sends with template + variables (no inline HTML). See docs/EMAIL_RESEND.md
+    resend_template_reminder_no_download: str = ""
+    resend_template_short_nudge: str = ""
+
 
 def get_settings() -> Settings:
     """Return settings from env. No cache so .env changes (e.g. MAX_ITERATIONS) apply without restart."""
@@ -160,6 +171,7 @@ def get_settings() -> Settings:
         google_oauth_client_id=os.getenv("GOOGLE_OAUTH_CLIENT_ID", ""),
         google_oauth_client_secret=os.getenv("GOOGLE_OAUTH_CLIENT_SECRET", ""),
         frontend_url=os.getenv("FRONTEND_URL", "http://localhost:5173"),
+        email_public_base_url=os.getenv("EMAIL_PUBLIC_BASE_URL", "").strip(),
         # Filter thresholds
         filter_hallucination_threshold=float(os.getenv("FILTER_HALLUCINATION_THRESHOLD", "0.82")),
         filter_keyword_threshold=float(os.getenv("FILTER_KEYWORD_THRESHOLD", "0.25")),
@@ -194,6 +206,11 @@ def get_settings() -> Settings:
         partner_program_enabled=os.getenv("PARTNER_PROGRAM_ENABLED", "true").lower() in ("true", "1", "yes"),
         reviews_rate_limit_ip_per_hour=int(os.getenv("REVIEWS_RATE_LIMIT_IP_PER_HOUR", "10")),
         reviews_rate_limit_email_per_day=int(os.getenv("REVIEWS_RATE_LIMIT_EMAIL_PER_DAY", "3")),
+        resend_api_key=os.getenv("RESEND_API_KEY", ""),
+        resend_from=os.getenv("RESEND_FROM", ""),
+        resend_winback_subject=os.getenv("RESEND_WINBACK_SUBJECT", "Your resume is ready"),
+        resend_template_reminder_no_download=os.getenv("RESEND_TEMPLATE_REMINDER_NO_DOWNLOAD", ""),
+        resend_template_short_nudge=os.getenv("RESEND_TEMPLATE_SHORT_NUDGE", ""),
     )
 
 

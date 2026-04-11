@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { ClipboardDocumentIcon } from "@heroicons/react/24/outline";
-import { ADMIN_EMAIL_DEMO_TEMPLATES, prepareEmailHtmlForAdminPreview } from "../../data/adminEmailDemoTemplates";
+import { ADMIN_EMAIL_DEMO_TEMPLATES, getEmailAssetOrigin, prepareEmailHtmlForAdminPreview } from "../../data/adminEmailDemoTemplates";
 import { t } from "../../i18n";
 
 export default function AdminEmailTemplates() {
@@ -8,11 +8,7 @@ export default function AdminEmailTemplates() {
   const [viewport, setViewport] = useState<"mobile" | "desktop">("desktop");
   const [htmlCopy, setHtmlCopy] = useState<"idle" | "ok" | "err">("idle");
   const [urlCopy, setUrlCopy] = useState<"idle" | "ok" | "err">("idle");
-  const [origin, setOrigin] = useState("");
-
-  useEffect(() => {
-    setOrigin(typeof window !== "undefined" ? window.location.origin : "");
-  }, []);
+  const origin = useMemo(() => getEmailAssetOrigin(), []);
 
   const selected = useMemo(
     () => ADMIN_EMAIL_DEMO_TEMPLATES.find((x) => x.id === selectedId) ?? ADMIN_EMAIL_DEMO_TEMPLATES[0],
