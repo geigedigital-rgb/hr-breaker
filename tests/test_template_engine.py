@@ -54,3 +54,48 @@ def test_template_render_smoke_pdf_stability():
         second = renderer.render(html)
         assert first.pdf_bytes[:4] == b"%PDF"
         assert first.page_count == second.page_count
+
+
+def test_schema_skill_limits_and_dedup():
+    long_keyword = "x" * 90
+    schema = UnifiedResumeSchema(
+        skills=[
+            {
+                "name": "Backend",
+                "keywords": [
+                    "Python",
+                    " python ",
+                    "FastAPI",
+                    long_keyword,
+                    "PostgreSQL",
+                    "Docker",
+                    "Kubernetes",
+                    "Redis",
+                    "RabbitMQ",
+                    "Kafka",
+                    "GraphQL",
+                ],
+            }
+        ]
+        + [{"name": f"Group {i}", "keywords": ["Item"]} for i in range(1, 16)]
+    )
+
+    assert len(schema.skills) == 6
+    first = schema.skills[0]
+    assert first.name == "Backend"
+    assert len(first.keywords) == 6
+    assert first.keywords[0] == "Python"
+    assert first.keywords[1] == "FastAPI"
+    assert first.keywords[2] == long_keyword[:64]
+    assert " python " not in first.keywords
+
+
+def test_schema_skill_total_tokens_cap():
+    schema = UnifiedResumeSchema(
+        skills=[
+            {"name": f"Group {i}", "keywords": [f"k{i}_{j}" for j in range(1, 7)]}
+            for i in range(1, 8)
+        ]
+    )
+    tokens = sum((1 if s.name else 0) + len(s.keywords) for s in schema.skills)
+    assert tokens <= 24
