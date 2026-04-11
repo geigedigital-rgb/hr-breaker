@@ -270,6 +270,7 @@ export function PostResultResumeStudio({
   };
 
   const pct = Math.max(0, Math.min(100, Math.round(qualityPct)));
+  const previewMatchHeadline = t("optimize.postResultPreviewMatchStrong");
   const showFallbackPreview = templatesLoadError || !templates.length;
   const effectivePreviewUrl = showFallbackPreview ? fallbackPreviewUrl : mainPreviewUrl;
 
@@ -414,7 +415,7 @@ export function PostResultResumeStudio({
             <CheckIcon className="h-4 w-4 shrink-0" strokeWidth={2.5} />
             <span className="tabular-nums">{pct}%</span>
           </span>
-          <p className="text-[14px] font-semibold text-[#181819]">Strong match for this job 🔥</p>
+          <p className="text-[14px] font-semibold text-[#181819] leading-snug">{previewMatchHeadline}</p>
         </div>
         <div ref={mainHostRef} className="relative min-h-[200px] bg-[#F4F6FA]">
           {mainLoading && !showFallbackPreview && (

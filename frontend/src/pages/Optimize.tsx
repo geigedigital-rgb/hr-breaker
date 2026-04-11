@@ -259,7 +259,7 @@ function JobPreviewContent({
 
 function getAtsScore(result: api.OptimizeResponse): number | null {
   const r = result.validation.results.find((f) => f.filter_name === "LLMChecker");
-  return r != null ? Math.round(r.score * 100) : null;
+  return r != null ? normalizeScorePercent(r.score) : null;
 }
 
 function getKeywordsScore(result: api.OptimizeResponse): { score: number; threshold: number } | null {
@@ -464,9 +464,9 @@ function clampPercent(value: number): number {
 }
 
 function rollPostImproveDiagramScore(): number {
-  // Product rule: after optimization show a realistic random score range.
-  // Inclusive integer range: 76-93.
-  return 76 + Math.floor(Math.random() * 18);
+  // Product rule: after optimization show a realistic random match range.
+  // Inclusive integer range: 82-93.
+  return 82 + Math.floor(Math.random() * 12);
 }
 
 function cleanRecommendationReason(label: string): string {
@@ -1798,7 +1798,7 @@ export default function Optimize() {
 
   const atsValue = result ? getAtsScore(result) : null;
   const keywordsValue = result ? getKeywordsScore(result) : null;
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (result && !result.error) {
       setPostImproveDiagramScore(rollPostImproveDiagramScore());
       return;
@@ -1806,8 +1806,9 @@ export default function Optimize() {
     setPostImproveDiagramScore(null);
   }, [result]);
 
+  /** "Improve even stronger" only when rolled score is at the low end (82); 83+ hides the CTA. */
   const showOptimizeAgainForAts =
-    Boolean(result && !result.error && postImproveDiagramScore != null && postImproveDiagramScore < 87);
+    Boolean(result && !result.error && postImproveDiagramScore != null && postImproveDiagramScore <= 82);
 
   const showSummaryBlocks = (stage === "assessment" && preScores != null) || stage === "result";
   const recommendationGroups = groupRecommendations(preScores?.recommendations, {
@@ -1907,23 +1908,34 @@ export default function Optimize() {
   const summaryData = showSummaryBlocks
     ? (() => {
         const resumeSummary = getResumeSummary(resumeContent, resumeName);
-        const atsPct = result && atsValue != null ? atsValue : preScores?.ats_score ?? 0;
-        const kwPct = result && keywordsValue != null ? Math.round(keywordsValue.score * 100) : preScores != null ? Math.round(preScores.keyword_score * 100) : 0;
-        const overallPct = Math.round((atsPct + kwPct) / 2);
-        const riskPct = preScores?.rejection_risk_score != null
-          ? Math.max(0, Math.min(100, Math.round(preScores.rejection_risk_score)))
-          : Math.max(0, 100 - overallPct);
+        const normPreAts = normalizeScorePercent(preScores?.ats_score);
+        const normPreKw = normalizeScorePercent(preScores?.keyword_score);
+        const atsPct =
+          result && atsValue != null ? atsValue : normPreAts ?? 0;
+        const kwPct =
+          result && keywordsValue != null
+            ? normalizeScorePercent(keywordsValue.score) ?? 0
+            : normPreKw ?? 0;
+        const safeAts = Number.isFinite(atsPct) ? atsPct : 0;
+        const safeKw = Number.isFinite(kwPct) ? kwPct : 0;
+        const overallPct = Math.round((safeAts + safeKw) / 2);
+        const normRejection = normalizeScorePercent(preScores?.rejection_risk_score);
+        const riskPct =
+          normRejection != null
+            ? Math.max(0, Math.min(100, normRejection))
+            : Math.max(0, 100 - overallPct);
         const displayName = resumeSummaryFromApi?.full_name?.trim() || resumeSummary.name;
         const displaySpecialty = resumeSummaryFromApi?.specialty?.trim() || resumeSummary.specialty;
         const displaySkills = resumeSummaryFromApi?.skills?.trim() || resumeSummary.skillsLine;
         const qualityPct =
           result && !result.error
-            ? (postImproveDiagramScore ?? Math.round(
-                ((atsValue != null ? atsValue : atsPct) +
-                  (keywordsValue != null ? Math.round(keywordsValue.score * 100) : kwPct)) /
-                  2,
-              ))
-            : Math.max(0, Math.min(100, 100 - riskPct));
+            ? (postImproveDiagramScore ??
+                Math.round(
+                  ((atsValue != null ? atsValue : atsPct) +
+                    (keywordsValue != null ? (normalizeScorePercent(keywordsValue.score) ?? 0) : kwPct)) /
+                    2,
+                ))
+            : clampPercent(overallPct);
         return {
           atsPct,
           kwPct,

@@ -330,6 +330,8 @@ const en = {
     templatesLoading: "Loading template previews…",
     templatesUnavailable: "Could not load template previews, using placeholders below.",
     templatePreviewError: "Preview failed for this template.",
+    /** Post-optimize PDF preview header (badge % + headline) */
+    postResultPreviewMatchStrong: "Strong match for this job 🔥",
   },
   app: {
     errorTitle: "Something went wrong",
