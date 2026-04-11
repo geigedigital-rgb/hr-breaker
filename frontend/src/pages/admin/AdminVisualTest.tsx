@@ -4,12 +4,12 @@ import { useNavigate } from "react-router-dom";
 import { Disclosure, DisclosureButton, DisclosurePanel } from "@headlessui/react";
 import {
   SparklesIcon,
-  ArrowDownTrayIcon,
   ChevronDownIcon,
   CheckIcon,
 } from "@heroicons/react/24/outline";
 import { t, tFormat } from "../../i18n";
 import * as api from "../../api";
+import { PostResultResumeStudio } from "../../components/PostResultResumeStudio";
 
 const MOCK = {
   atsPct: 72,
@@ -58,6 +58,39 @@ const MOCK = {
     { filter_name: "AIGeneratedChecker", passed: true, score: 0.72, threshold: 0.5 },
   ],
 };
+
+/** Same shape as optimize `schema_json` — drives /templates/render-pdf in PostResultResumeStudio. */
+function buildSandboxOptimizedSchemaJson(): string {
+  return JSON.stringify({
+    basics: {
+      name: MOCK.displayName,
+      label: MOCK.displaySpecialty,
+      email: "anna.muller@example.com",
+      summary:
+        "Product leader focused on discovery, roadmaps, and measurable outcomes across B2B platforms.",
+    },
+    work: [
+      {
+        name: "TechCorp",
+        position: "Senior Product Manager",
+        start_date: "2021-03",
+        end_date: "Present",
+        highlights: [
+          "Owned roadmap for a core platform with 2M+ MAU",
+          "Cut initiative cycle time ~28% by tightening discovery and prioritization",
+        ],
+      },
+    ],
+    skills: [
+      {
+        name: "Core",
+        keywords: MOCK.displaySkills.split(",").map((s) => s.trim()).filter(Boolean).slice(0, 14),
+      },
+    ],
+  });
+}
+
+const SANDBOX_OPTIMIZED_SCHEMA_JSON = buildSandboxOptimizedSchemaJson();
 
 type ViewMode = "assessment" | "result" | "both";
 
@@ -206,6 +239,8 @@ function getQualityLevelLabelSandbox(qualityPct: number): string {
 export default function AdminVisualTest() {
   const navigate = useNavigate();
   const [viewMode, setViewMode] = useState<ViewMode>("both");
+  const [sandboxTemplateId, setSandboxTemplateId] = useState("");
+  const [sandboxPhoto, setSandboxPhoto] = useState<string | null>(null);
 
   const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
   const [mockThumbUrl, setMockThumbUrl] = useState<string | null>(null);
@@ -230,7 +265,8 @@ export default function AdminVisualTest() {
   const overallPct = Math.round((MOCK.atsPct + MOCK.kwPct) / 2);
   /** Matches prod Optimize: main ring = resume quality (not rejection risk). */
   const assessmentQualityPct = overallPct;
-  const resultQualityPct = Math.min(100, overallPct + 14);
+  /** Same band as prod post–auto-improve (82–93), stable for this sandbox session. */
+  const studioMatchPct = useMemo(() => 82 + Math.floor(Math.random() * 12), []);
 
   const problemLabels = useMemo(
     () =>
@@ -384,7 +420,7 @@ export default function AdminVisualTest() {
                         <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#FFF4E5] px-1.5 text-[11px] font-semibold text-[#B45309]">
                           {group.problems.length}
                         </span>
-                        <p className="text-[11px] text-[#6B7280]">issues to fix</p>
+                        <p className="text-[11px] text-[#6B7280]">{t("optimize.issuesToFix")}</p>
                       </div>
                     </div>
                     <ChevronDownIcon className={`w-4 h-4 text-[#6B7280] transition-transform ${open ? "rotate-180" : ""}`} />
@@ -400,7 +436,7 @@ export default function AdminVisualTest() {
                         ))}
                       </ul>
                     ) : (
-                      <p className="text-[12px] text-[#6B7280]">No blocking issues in this category.</p>
+                      <p className="text-[12px] text-[#6B7280]">{t("optimize.noBlockingInCategory")}</p>
                     )}
                   </DisclosurePanel>
                 </div>
@@ -448,20 +484,20 @@ export default function AdminVisualTest() {
               <div className="lg:hidden w-full h-px bg-[#BBF7D0]" />
               <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-4 flex-1 w-full min-w-0 justify-center sm:justify-start">
                 <div className="sm:hidden shrink-0 relative w-[104px] h-[104px]">
-                  <ScoreRing percent={resultQualityPct} size={104} thickness={12} mode="score" />
-                  <span className="absolute inset-0 flex items-center justify-center text-[19px] font-bold text-[#166534] tabular-nums">{resultQualityPct}%</span>
+                  <ScoreRing percent={studioMatchPct} size={104} thickness={12} mode="score" />
+                  <span className="absolute inset-0 flex items-center justify-center text-[19px] font-bold text-[#166534] tabular-nums">{studioMatchPct}%</span>
                 </div>
                 <div className="hidden sm:block lg:hidden shrink-0 relative w-[110px] h-[110px]">
-                  <ScoreRing percent={resultQualityPct} size={110} thickness={13} mode="score" />
-                  <span className="absolute inset-0 flex items-center justify-center text-[21px] font-bold text-[#166534] tabular-nums">{resultQualityPct}%</span>
+                  <ScoreRing percent={studioMatchPct} size={110} thickness={13} mode="score" />
+                  <span className="absolute inset-0 flex items-center justify-center text-[21px] font-bold text-[#166534] tabular-nums">{studioMatchPct}%</span>
                 </div>
                 <div className="hidden lg:block shrink-0 relative w-[118px] h-[118px]">
-                  <ScoreRing percent={resultQualityPct} size={118} thickness={14} mode="score" />
-                  <span className="absolute inset-0 flex items-center justify-center text-[22px] font-bold text-[#166534] tabular-nums">{resultQualityPct}%</span>
+                  <ScoreRing percent={studioMatchPct} size={118} thickness={14} mode="score" />
+                  <span className="absolute inset-0 flex items-center justify-center text-[22px] font-bold text-[#166534] tabular-nums">{studioMatchPct}%</span>
                 </div>
                 <div className="text-center sm:text-left flex-1 min-w-0">
                   <p className="text-[11px] font-semibold text-[#166534] uppercase tracking-wider">
-                    {t("optimize.resumeQuality")} ({getQualityLevelLabelSandbox(resultQualityPct)})
+                    {t("optimize.resumeQuality")} ({getQualityLevelLabelSandbox(studioMatchPct)})
                   </p>
                   <p className="mt-1.5 sm:mt-1 text-[11px] sm:text-[12px] text-[#6B7280] leading-relaxed max-w-[280px] mx-auto sm:mx-0">
                     {t("optimize.resumeQualityHintHigh")}
@@ -498,46 +534,25 @@ export default function AdminVisualTest() {
         </div>
       </section>
 
-      {/* Prod-aligned post-result export band */}
-      <section className="mt-4 mb-6 w-full max-w-3xl mx-auto rounded-2xl border border-[#E8ECF4] bg-[#FAFAFC] p-5 sm:p-8">
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between lg:gap-10">
-          <div className="min-w-0 flex-1 space-y-1.5">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#4578FC]">{t("optimize.resultExportKicker")}</p>
-            <p className="text-xl sm:text-2xl font-semibold text-[#181819] tracking-tight leading-snug">
-              {tFormat(t("optimize.resultReadyForRole"), { jobTitle: MOCK.displaySpecialty })}
-            </p>
-            <p className="text-[13px] sm:text-[14px] text-[#6B7280] truncate">{tFormat(t("optimize.resultReadySourceFile"), { file: "Anna_Muller_resume.pdf" })}</p>
-          </div>
-          <div className="flex w-full flex-col gap-3 lg:max-w-lg lg:shrink-0">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch">
-              <button
-                type="button"
-                onClick={() =>
-                  navigate("/checkout/download-resume?pending=admin_ui_preview&return_to=%2Fadmin%2Fcheckout-preview")
-                }
-                className="inline-flex min-h-[3rem] w-full flex-1 items-center justify-center gap-2 rounded-xl px-5 text-[15px] font-semibold text-white shadow-[0_4px_20px_-8px_rgba(69,120,252,0.45)] whitespace-nowrap"
-                style={{ background: "linear-gradient(160deg, #5e8afc 0%, #4578FC 45%, #3d6ae6 100%)" }}
-              >
-                <ArrowDownTrayIcon className="w-5 h-5 shrink-0" aria-hidden />
-                {t("optimize.downloadPdf")}
-              </button>
-              <button
-                type="button"
-                className="inline-flex min-h-[3rem] w-full flex-1 items-center justify-center rounded-xl border-2 border-[#4578FC] bg-white px-5 text-[15px] font-semibold text-[#4578FC] whitespace-nowrap"
-              >
-                {t("optimize.tailorAnotherVacancy")}
-              </button>
-            </div>
-            <button
-              type="button"
-              className="inline-flex min-h-[3rem] w-full items-center justify-center rounded-xl border border-[#E5E7EB] bg-white px-5 text-[15px] font-medium text-[#374151] whitespace-nowrap"
-            >
-              {t("optimize.optimizeAgainForAts")}
-            </button>
-            <p className="text-[11px] text-[#9CA3AF] leading-snug text-center sm:text-left">{t("optimize.downloadPdfPaidHint")}</p>
-          </div>
-        </div>
-      </section>
+      {/* Same block as prod Optimize: templates strip, photo, PDF preview, CTAs */}
+      <div className="mt-4 w-full max-w-3xl mx-auto">
+        <PostResultResumeStudio
+          qualityPct={studioMatchPct}
+          jobTitle={`${MOCK.displaySpecialty} — TechCorp`}
+          fallbackPreviewUrl={mockThumbUrl}
+          schemaJson={SANDBOX_OPTIMIZED_SCHEMA_JSON}
+          initialTemplateId={sandboxTemplateId || undefined}
+          initialPhotoDataUrl={sandboxPhoto}
+          onTemplateChange={setSandboxTemplateId}
+          onPhotoChange={setSandboxPhoto}
+          onDownload={() =>
+            navigate("/checkout/download-resume?pending=admin_ui_preview&return_to=%2Fadmin%2Fcheckout-preview")
+          }
+          onTailorAnother={() => {}}
+          onImproveEvenStronger={() => {}}
+          showImproveEvenStronger={studioMatchPct <= 82}
+        />
+      </div>
     </div>
   );
 
@@ -560,7 +575,7 @@ export default function AdminVisualTest() {
               <div className="flex items-center gap-2">
                 <h1 className="text-[15px] font-semibold text-[#181819] tracking-tight truncate">Visual Sandbox</h1>
                 <span className="hidden sm:inline-block text-[11px] text-[#6B7280] truncate bg-[#F5F6FA] px-1.5 py-0.5 rounded font-medium">
-                  Simulation of Optimize
+                  Optimize UI + templates (same APIs as prod)
                 </span>
               </div>
             </div>
