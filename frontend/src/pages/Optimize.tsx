@@ -464,10 +464,9 @@ function clampPercent(value: number): number {
 }
 
 function rollPostImproveDiagramScore(): number {
-  // Product rule: in 90% of successful improve runs show 100%.
-  // In the remaining 10% show a high random score 94-98.
-  if (Math.random() < 0.9) return 100;
-  return 94 + Math.floor(Math.random() * 5);
+  // Product rule: after optimization show a realistic random score range.
+  // Inclusive integer range: 76-93.
+  return 76 + Math.floor(Math.random() * 18);
 }
 
 function cleanRecommendationReason(label: string): string {
@@ -1808,7 +1807,7 @@ export default function Optimize() {
   }, [result]);
 
   const showOptimizeAgainForAts =
-    Boolean(result && !result.error && postImproveDiagramScore != null && postImproveDiagramScore < 100);
+    Boolean(result && !result.error && postImproveDiagramScore != null && postImproveDiagramScore < 87);
 
   const showSummaryBlocks = (stage === "assessment" && preScores != null) || stage === "result";
   const recommendationGroups = groupRecommendations(preScores?.recommendations, {

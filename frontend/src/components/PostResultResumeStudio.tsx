@@ -414,7 +414,7 @@ export function PostResultResumeStudio({
             <CheckIcon className="h-4 w-4 shrink-0" strokeWidth={2.5} />
             <span className="tabular-nums">{pct}%</span>
           </span>
-          <p className="text-[14px] font-semibold text-[#181819]">{t("optimize.readyToSubmit")}</p>
+          <p className="text-[14px] font-semibold text-[#181819]">Strong match for this job 🔥</p>
         </div>
         <div ref={mainHostRef} className="relative min-h-[200px] bg-[#F4F6FA]">
           {mainLoading && !showFallbackPreview && (
