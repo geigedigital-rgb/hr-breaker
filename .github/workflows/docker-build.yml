@@ -1,0 +1,17 @@
+# Validates Dockerfile on every push (includes frontend/public → dist static files for email assets).
+# Deploy to Railway: connect the repo in Railway — each push to the tracked branch rebuilds the image.
+name: Docker build
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t hr-breaker:ci .

@@ -1,5 +1,5 @@
 import { Component, lazy, Suspense, type ReactNode } from "react";
-import { BrowserRouter, Navigate, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { isAdminUser } from "./api";
 import Layout from "./Layout";
@@ -30,6 +30,8 @@ const AdminReferrals = lazy(() => import("./pages/admin/AdminReferrals"));
 const AdminReviews = lazy(() => import("./pages/admin/AdminReviews"));
 const AdminVisualTest = lazy(() => import("./pages/admin/AdminVisualTest"));
 const AdminTemplatesLab = lazy(() => import("./pages/admin/AdminTemplatesLab"));
+const AdminEmailGroups = lazy(() => import("./pages/admin/AdminEmailGroups"));
+const AdminEmailTemplates = lazy(() => import("./pages/admin/AdminEmailTemplates"));
 
 function LazyShell({ children }: { children: ReactNode }) {
   return <Suspense fallback={<RouteFallback />}>{children}</Suspense>;
@@ -163,6 +165,9 @@ function App() {
               <Route path="app" element={<AdminApp />} />
               <Route path="templates-lab" element={<AdminTemplatesLab />} />
               <Route path="visual" element={<AdminVisualTest />} />
+              <Route path="email" element={<Navigate to="/admin/email/groups" replace />} />
+              <Route path="email/groups" element={<AdminEmailGroups />} />
+              <Route path="email/templates" element={<AdminEmailTemplates />} />
             </Route>
           </Routes>
         </AuthProvider>
