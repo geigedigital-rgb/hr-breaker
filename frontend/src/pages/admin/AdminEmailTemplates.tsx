@@ -17,6 +17,7 @@ export default function AdminEmailTemplates() {
 
   const logoAssetUrl = origin ? `${origin}/logo-color.svg` : "";
   const heroAssetUrl = origin ? `${origin}/email/hero-winback.svg` : "";
+  const wakeupAssetUrl = origin ? `${origin}/email/wakeup-email.svg` : "";
 
   const copyTemplateHtml = useCallback(async () => {
     if (!selected) return;
@@ -117,6 +118,23 @@ export default function AdminEmailTemplates() {
                   onClick={() => void copyAssetUrl(heroAssetUrl)}
                   className="shrink-0 rounded-lg border border-[#EBEDF5] p-1.5 text-[var(--text-muted)] hover:bg-[#F5F6FA] disabled:opacity-40"
                   title={t("admin.email.templates.copyHeroUrl")}
+                >
+                  <ClipboardDocumentIcon className="h-4 w-4" aria-hidden />
+                </button>
+              </div>
+            </div>
+            <div className="flex flex-col gap-1">
+              <span className="text-[11px] font-medium text-[var(--text)]">email/wakeup-email.svg</span>
+              <div className="flex items-start gap-2">
+                <code className="min-w-0 flex-1 break-all rounded bg-[#F5F6FA] px-2 py-1 text-[10px] text-[var(--text-muted)]">
+                  {wakeupAssetUrl || "…"}
+                </code>
+                <button
+                  type="button"
+                  disabled={!wakeupAssetUrl}
+                  onClick={() => void copyAssetUrl(wakeupAssetUrl)}
+                  className="shrink-0 rounded-lg border border-[#EBEDF5] p-1.5 text-[var(--text-muted)] hover:bg-[#F5F6FA] disabled:opacity-40"
+                  title={t("admin.email.templates.copyWakeupUrl")}
                 >
                   <ClipboardDocumentIcon className="h-4 w-4" aria-hidden />
                 </button>

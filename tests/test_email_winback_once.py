@@ -104,3 +104,32 @@ async def _record_skip(skipped_duplicate: list[str], schedule_id: str) -> None:
 
 async def _unexpected_deliver(**kwargs) -> None:
     raise AssertionError("deliver_winback_email should not run for a duplicate auto win-back")
+
+
+def test_load_ahead_of_candidates_template_and_merge() -> None:
+    raw = ew.load_email_template_html("ahead-of-candidates")
+    assert "{{wakeup_image_url}}" in raw
+    assert "{{optimize_entry_url}}" in raw
+    merged = ew.merge_winback_placeholders(
+        raw,
+        public_base="https://my.pitchcv.app",
+        unsubscribe_url="https://my.pitchcv.app/api/email/unsubscribe?token=x",
+        resume_url="https://my.pitchcv.app/optimize?resume=jwt",
+    )
+    assert "https://my.pitchcv.app/email/wakeup-email.svg" in merged
+    assert "utm_source=email" in merged and "utm_medium=email" in merged
+    assert "https://my.pitchcv.app/optimize?utm_source=email" in merged
+    assert "Continue your resume" in merged
+
+
+def test_winback_plain_text_ahead_primary_link() -> None:
+    body = ew.winback_plain_text(
+        resume_url="https://my.pitchcv.app/optimize?resume=jwt",
+        unsubscribe_url="https://u.example/unsub",
+        settings_url="https://my.pitchcv.app/settings",
+        plain_headline="You're already ahead of most candidates.",
+        primary_link="https://my.pitchcv.app/optimize?utm_source=email&utm_medium=email&utm_campaign=continue_resume",
+    )
+    assert "You're already ahead" in body
+    assert "Continue your resume:" in body
+    assert "utm_source=email" in body

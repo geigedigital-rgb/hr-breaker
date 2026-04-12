@@ -573,6 +573,7 @@ const en = {
           "Files live under frontend/public. In local dev, asset URLs default to https://my.pitchcv.app so images load in preview and match Resend. Override with VITE_EMAIL_ASSET_ORIGIN; API sends use EMAIL_PUBLIC_BASE_URL — see docs/EMAIL_RESEND.md.",
         copyLogoUrl: "Copy logo URL",
         copyHeroUrl: "Copy hero URL",
+        copyWakeupUrl: "Copy wake-up illustration URL",
         assetUrlCopied: "URL copied",
         empty: "No templates yet.",
         demo1Name: "Win-back #1 — optimized, not paid",
@@ -580,6 +581,9 @@ const en = {
           "Hero + illustration + CTA ({{download_url}}, {{unsubscribe_url}}); same merge tags as API / Resend {{{DOWNLOAD_URL}}}, {{{UNSUBSCRIBE_LINK}}}.",
         demo2Name: "Short nudge — plain follow-up",
         demo2Desc: "Light follow-up without newsletter styling; optional second touch.",
+        demo3Name: "Ahead of candidates — wake-up",
+        demo3Desc:
+          "Hero + wakeup illustration; CTA is {{optimize_entry_url}} (/optimize + UTM). Also {{wakeup_image_url}}, {{unsubscribe_url}}.",
       },
       send: {
         title: "Automation & send",

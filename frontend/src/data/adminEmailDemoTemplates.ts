@@ -1,5 +1,7 @@
 /** Seed HTML for admin email template previews (no editor yet). */
 
+import { EMAIL_AHEAD_CANDIDATES_HTML } from "./emailAheadCandidatesHtml";
+
 export type AdminEmailTemplateDemo = {
   id: string;
   nameKey: string;
@@ -38,6 +40,10 @@ export function prepareEmailHtmlForAdminPreview(html: string): string {
     h = h.replace(/\{\{\{HERO_IMAGE_URL\}\}\}/g, `${origin}/email/hero-winback.svg`);
     h = h.replace(/\{\{logo_url\}\}/g, `${origin}/logo-color.svg`);
     h = h.replace(/\{\{hero_image_url\}\}/g, `${origin}/email/hero-winback.svg`);
+    h = h.replace(/\{\{wakeup_image_url\}\}/g, `${origin}/email/wakeup-email.svg`);
+    h = h.replace(/\{\{\{WAKEUP_IMAGE_URL\}\}\}/g, `${origin}/email/wakeup-email.svg`);
+    h = h.replace(/\{\{optimize_entry_url\}\}/g, `${origin}/optimize?utm_source=email&utm_medium=email&utm_campaign=continue_resume`);
+    h = h.replace(/\{\{\{OPTIMIZE_ENTRY_URL\}\}\}/g, `${origin}/optimize?utm_source=email&utm_medium=email&utm_campaign=continue_resume`);
     h = h.replace(/\{\{\{DOWNLOAD_URL\}\}\}/g, "#");
     h = h.replace(/\{\{\{RESUME_URL\}\}\}/g, "#");
     h = h.replace(/\{\{download_url\}\}/g, "#");
@@ -46,8 +52,12 @@ export function prepareEmailHtmlForAdminPreview(html: string): string {
   } else {
     h = h.replace(/\{\{\{LOGO_URL\}\}\}/g, "about:blank");
     h = h.replace(/\{\{\{HERO_IMAGE_URL\}\}\}/g, "about:blank");
+    h = h.replace(/\{\{\{WAKEUP_IMAGE_URL\}\}\}/g, "about:blank");
+    h = h.replace(/\{\{\{OPTIMIZE_ENTRY_URL\}\}\}/g, "about:blank");
     h = h.replace(/\{\{logo_url\}\}/g, "about:blank");
     h = h.replace(/\{\{hero_image_url\}\}/g, "about:blank");
+    h = h.replace(/\{\{wakeup_image_url\}\}/g, "about:blank");
+    h = h.replace(/\{\{optimize_entry_url\}\}/g, "about:blank");
   }
   h = h.replace(/\{\{[\w]+\}\}/g, "#");
   h = h.replace(/\{\{\{[A-Z0-9_]+\}\}\}/g, "#");
@@ -242,5 +252,11 @@ export const ADMIN_EMAIL_DEMO_TEMPLATES: AdminEmailTemplateDemo[] = [
     nameKey: "admin.email.templates.demo2Name",
     descriptionKey: "admin.email.templates.demo2Desc",
     html: EMAIL_SHORT_NUDGE_HTML,
+  },
+  {
+    id: "ahead-of-candidates",
+    nameKey: "admin.email.templates.demo3Name",
+    descriptionKey: "admin.email.templates.demo3Desc",
+    html: EMAIL_AHEAD_CANDIDATES_HTML,
   },
 ];

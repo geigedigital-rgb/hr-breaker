@@ -62,6 +62,7 @@ def build_resume_open_url(settings: Settings, user_id: str, filename: str) -> st
 _TEMPLATE_FILES = {
     "reminder-no-download": "reminder_no_download.html",
     "short-nudge": "short_nudge.html",
+    "ahead-of-candidates": "resume_ahead.html",
 }
 
 
@@ -89,11 +90,21 @@ def _apply_email_token(html: str, token_name: str, value: str) -> str:
     return h
 
 
+def _optimize_entry_url_for_email(public_base: str) -> str:
+    """Marketing CTA: /optimize with UTM (no resume JWT)."""
+    base = (public_base or "").rstrip("/")
+    if not base:
+        return "{{optimize_entry_url}}"
+    return f"{base}/optimize?utm_source=email&utm_medium=email&utm_campaign=continue_resume"
+
+
 def merge_winback_placeholders(html: str, *, public_base: str, unsubscribe_url: str, resume_url: str = "") -> str:
     """Inline HTML: merge tags; unsubscribe_url is signed one-click URL for this user."""
     base = (public_base or "").rstrip("/")
     logo = f"{base}/logo-color.svg" if base else "{{logo_url}}"
     hero = f"{base}/email/hero-winback.svg" if base else "{{hero_image_url}}"
+    wakeup = f"{base}/email/wakeup-email.svg" if base else "{{wakeup_image_url}}"
+    optimize_entry = _optimize_entry_url_for_email(public_base)
     download = resume_url or (f"{base}/upgrade" if base else "{{download_url}}")
     unsub = unsubscribe_url or (f"{base}/settings" if base else "{{unsubscribe_url}}")
     settings_url = f"{base}/settings" if base else "{{settings_url}}"
@@ -102,6 +113,10 @@ def merge_winback_placeholders(html: str, *, public_base: str, unsubscribe_url: 
         h = _apply_email_token(h, stem, logo)
     for stem in ("hero_image_url", "HERO_IMAGE_URL"):
         h = _apply_email_token(h, stem, hero)
+    for stem in ("wakeup_image_url", "WAKEUP_IMAGE_URL"):
+        h = _apply_email_token(h, stem, wakeup)
+    for stem in ("optimize_entry_url", "OPTIMIZE_ENTRY_URL"):
+        h = _apply_email_token(h, stem, optimize_entry)
     for stem in ("download_url", "DOWNLOAD_URL", "resume_url", "RESUME_URL"):
         h = _apply_email_token(h, stem, download)
     for stem in ("unsubscribe_url", "UNSUBSCRIBE_LINK"):
@@ -123,12 +138,16 @@ def resend_variables_for_send(*, public_base: str, unsubscribe_url: str, resume_
     base = (public_base or "").rstrip("/")
     logo = f"{base}/logo-color.svg" if base else ""
     hero = f"{base}/email/hero-winback.svg" if base else ""
+    wakeup = f"{base}/email/wakeup-email.svg" if base else ""
+    optimize_entry = _optimize_entry_url_for_email(public_base)
     open_resume = resume_url or (f"{base}/upgrade" if base else "")
     settings = f"{base}/settings" if base else ""
     unsub = unsubscribe_url or ""
     core: dict[str, str] = {
         "LOGO_URL": logo,
         "HERO_IMAGE_URL": hero,
+        "WAKEUP_IMAGE_URL": wakeup,
+        "OPTIMIZE_ENTRY_URL": optimize_entry,
         "DOWNLOAD_URL": open_resume,
         "RESUME_URL": open_resume,
         "SETTINGS_URL": settings,
@@ -136,6 +155,8 @@ def resend_variables_for_send(*, public_base: str, unsubscribe_url: str, resume_
         # Aliases (templates pasted from inline HTML / mixed case)
         "logo_url": logo,
         "hero_image_url": hero,
+        "wakeup_image_url": wakeup,
+        "optimize_entry_url": optimize_entry,
         "download_url": open_resume,
         "resume_url": open_resume,
         "settings_url": settings,
@@ -145,23 +166,33 @@ def resend_variables_for_send(*, public_base: str, unsubscribe_url: str, resume_
     return {k: (v if v is not None else "") for k, v in core.items()}
 
 
-def winback_plain_text(*, resume_url: str, unsubscribe_url: str, settings_url: str) -> str:
+def winback_plain_text(
+    *,
+    resume_url: str,
+    unsubscribe_url: str,
+    settings_url: str,
+    plain_headline: str | None = None,
+    primary_link: str | None = None,
+) -> str:
     """Explicit text/plain part so clients see a simple message (not only HTML-to-text heuristics)."""
     ru = (resume_url or "").strip()
+    main_link = (primary_link or ru).strip() or "(link unavailable)"
     uu = (unsubscribe_url or "").strip()
     su = (settings_url or "").strip()
+    headline = (plain_headline or "Your tailored resume is available in PitchCV.").strip()
+    open_label = "Continue your resume:" if plain_headline else "Open your resume:"
     lines = [
-        "Your tailored resume is available in PitchCV.",
+        headline,
         "",
-        "Open your resume:",
-        ru or "(link unavailable)",
+        open_label,
+        main_link,
         "",
     ]
     if su:
         lines.extend(["Account settings:", su, ""])
     if uu:
         lines.extend(["Unsubscribe from these messages:", uu, ""])
-    lines.extend(["", "With best wishes,", "Anna", "The PitchCV team"])
+    lines.extend(["With best wishes,", "Anna", "The PitchCV team"])
     return "\n".join(lines)
 
 
@@ -246,6 +277,11 @@ async def deliver_winback_email(
     base = (public_base or "").rstrip("/")
     download = (resume_url or "").strip() or (f"{base}/upgrade" if base else "")
     settings_url = f"{base}/settings" if base else ""
+    plain_headline: str | None = None
+    primary_plain_link: str | None = None
+    if (app_template_id or "").strip() == "ahead-of-candidates" and base:
+        plain_headline = "You're already ahead of most candidates."
+        primary_plain_link = _optimize_entry_url_for_email(public_base)
     extras = resend_transactional_extras(settings, unsubscribe_url=unsub)
     rid = resend_published_template_id(
         settings,
@@ -280,6 +316,8 @@ async def deliver_winback_email(
         resume_url=download,
         unsubscribe_url=unsub,
         settings_url=settings_url,
+        plain_headline=plain_headline,
+        primary_link=primary_plain_link,
     )
     await resend_send_html(
         api_key=api_key,
