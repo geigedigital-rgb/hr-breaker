@@ -1013,11 +1013,42 @@ function pendingTokenInUrl(): boolean {
   return Boolean(new URLSearchParams(window.location.search).get("pending"));
 }
 
+function jobTextFromSnapshotForResume(job: api.JobPostingOut, jobUrl: string | null | undefined): string {
+  const u = (jobUrl || "").trim();
+  if (u) return u;
+  const parts = [
+    job.title,
+    job.company,
+    ...(job.requirements || []),
+    job.description,
+  ].filter((x) => (x || "").trim());
+  const s = parts.join("\n\n").trim();
+  return s || (job.title || "").trim() || "—";
+}
+
+function snapshotDataToOptimizeResponse(snap: api.OptimizationSnapshotPublic): api.OptimizeResponse {
+  return {
+    success: true,
+    pdf_base64: null,
+    pdf_filename: snap.pdf_download_available ? snap.pdf_filename : null,
+    pending_export_token: snap.pending_export_token ?? null,
+    pending_export_expires_at: null,
+    validation: snap.validation,
+    job: snap.job,
+    key_changes: snap.key_changes ?? null,
+    error: null,
+    optimized_resume_text: snap.optimized_resume_text ?? null,
+    schema_json: snap.schema_json ?? null,
+    snapshot_expires_at: snap.expires_at,
+    snapshot_url: null,
+  };
+}
+
 export default function Optimize() {
   const location = useLocation();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { user, refreshUser } = useAuth();
+  const { user, loading, refreshUser } = useAuth();
   const [resumeContent, setResumeContent] = useState("");
   const [resumeName, setResumeName] = useState<{ first?: string; last?: string } | null>(null);
   const [jobInput, setJobInput] = useState("");
@@ -1068,6 +1099,9 @@ export default function Optimize() {
   const step2SectionRef = useRef<HTMLDivElement>(null);
   const prevHadResumeRef = useRef(false);
   const claimedPendingRef = useRef<string | null>(null);
+  const resumeHydratedTokenRef = useRef<string | null>(null);
+  const resumeGuestRedirectStartedRef = useRef(false);
+  const [resumeBootstrapping, setResumeBootstrapping] = useState(false);
   const autoImproveGateRef = useRef<{
     preScores: api.AnalyzeResponse | null;
     resumeContent: string;
@@ -1118,6 +1152,108 @@ export default function Optimize() {
         setStage("idle");
       });
   }, [pendingToken, user, setSearchParams]);
+
+  // Email / deep link: ?resume=JWT — full Result UI (same account); guests → login with token in sessionStorage
+  const resumeTokenParam = searchParams.get(api.OPTIMIZE_RESUME_QUERY_PARAM);
+  useEffect(() => {
+    if (!resumeTokenParam) {
+      resumeGuestRedirectStartedRef.current = false;
+      return;
+    }
+    if (loading) return;
+    if (!user || user.id === "local") {
+      if (resumeGuestRedirectStartedRef.current) return;
+      resumeGuestRedirectStartedRef.current = true;
+      try {
+        sessionStorage.setItem(api.OPTIMIZE_RESUME_SESSION_KEY, resumeTokenParam);
+      } catch {
+        /* ignore */
+      }
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.delete(api.OPTIMIZE_RESUME_QUERY_PARAM);
+          return next;
+        },
+        { replace: true },
+      );
+      navigate("/login", { replace: true });
+      return;
+    }
+    if (resumeHydratedTokenRef.current === resumeTokenParam) {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.delete(api.OPTIMIZE_RESUME_QUERY_PARAM);
+          return next;
+        },
+        { replace: true },
+      );
+      return;
+    }
+    let cancelled = false;
+    setResumeBootstrapping(true);
+    setError(null);
+    void (async () => {
+      const res = await api.fetchOptimizationSnapshotForMe(resumeTokenParam);
+      if (cancelled) return;
+      if (!res.ok) {
+        setError(res.detail || t("optimize.restoreResumeError"));
+        setResumeBootstrapping(false);
+        setSearchParams(
+          (prev) => {
+            const next = new URLSearchParams(prev);
+            next.delete(api.OPTIMIZE_RESUME_QUERY_PARAM);
+            return next;
+          },
+          { replace: true },
+        );
+        return;
+      }
+      const d = res.data;
+      const jobLine = jobTextFromSnapshotForResume(d.job, d.job_url);
+      const rc = (d.optimized_resume_text || "").trim();
+      setResumeContent(rc || t("optimize.restoredResumePlaceholder"));
+      setJobInput(jobLine);
+      setJobMode(d.job_url?.trim() ? "url" : "text");
+      setParsedJob(d.job);
+      setPreScores({
+        ats_score: d.pre_ats_score ?? 0,
+        keyword_score: d.pre_keyword_score ?? 0,
+        keyword_threshold: 0.6,
+        job: d.job,
+        recommendations: [],
+      });
+      setResult(snapshotDataToOptimizeResponse(d));
+      setPostImproveDiagramScore(null);
+      setPostResultFlow("main");
+      setSelectedTemplateId("");
+      setPhotoDataUrl(null);
+      if (d.pdf_download_available && d.pdf_filename) {
+        setUploadedFileName(d.pdf_filename);
+        setResumeSourceWasPdf(true);
+      } else {
+        setUploadedFileName(null);
+        setResumeSourceWasPdf(false);
+      }
+      setLastUploadedPdfFile(null);
+      setClaimGate(false);
+      setStage("result");
+      resumeHydratedTokenRef.current = resumeTokenParam;
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.delete(api.OPTIMIZE_RESUME_QUERY_PARAM);
+          return next;
+        },
+        { replace: true },
+      );
+      setResumeBootstrapping(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [resumeTokenParam, user, loading, navigate, setSearchParams]);
 
   // Restore analyze state after trial checkout (before paint) so data is ready for auto-improve
   useLayoutEffect(() => {
@@ -1227,13 +1363,14 @@ export default function Optimize() {
 
   // Сброс при неполных данных (не трогаем пока ждём claim с лендинга)
   useEffect(() => {
+    if (resumeBootstrapping) return;
     if (!hasResume || !hasJob) {
       if (claimGate) return;
       if (stage !== "landing" && stage !== "idle") {
         setStage("idle");
       }
     }
-  }, [hasResume, hasJob, stage, claimGate]);
+  }, [hasResume, hasJob, stage, claimGate, resumeBootstrapping]);
 
   // После загрузки файла резюме — сразу прокрутить к шагу 2
   useEffect(() => {
@@ -2042,6 +2179,16 @@ export default function Optimize() {
 
   return (
     <div className="relative flex flex-col gap-4 sm:gap-5 w-full min-w-0 min-h-0 overflow-x-hidden pb-28 sm:pb-12">
+        {resumeBootstrapping && (
+          <div
+            className="fixed inset-0 z-[60] flex flex-col items-center justify-center gap-3 bg-[#F2F3F9]/85 backdrop-blur-[2px]"
+            role="status"
+            aria-live="polite"
+          >
+            <span className="h-10 w-10 animate-spin rounded-full border-2 border-[#4578FC] border-t-transparent" aria-hidden />
+            <p className="text-sm font-medium text-[#181819]">{t("optimize.restoringResumeSession")}</p>
+          </div>
+        )}
         {error && !isOfferPasteAsTextError(error) && (
           <div className="flex gap-2 text-sm text-[var(--text-muted)]/90 rounded-xl border border-[#EBEDF5] bg-[#FAFAFC] px-4 py-3 shrink-0" role="alert">
             <ExclamationTriangleIcon className="w-5 h-5 shrink-0 text-amber-500 mt-0.5" aria-hidden />
@@ -2362,6 +2509,11 @@ export default function Optimize() {
                 </div>
               ) : (
                 <>
+                  {result.snapshot_url && (
+                    <div className="mb-4 rounded-xl border border-sky-200/90 bg-sky-50/90 px-4 py-3 text-[13px] leading-relaxed text-sky-950">
+                      {t("optimize.snapshotRetentionHint")}
+                    </div>
+                  )}
                   {result.key_changes && result.key_changes.length > 0 && (
                     <section className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-4 sm:p-5" aria-labelledby="key-changes-heading">
                       <h3 id="key-changes-heading" className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">{t("optimize.keyChanges")}</h3>

@@ -60,6 +60,12 @@ export default function Login() {
         navigate("/signup-success", { replace: true });
         return;
       }
+      const resumeTok = sessionStorage.getItem(api.OPTIMIZE_RESUME_SESSION_KEY);
+      if (resumeTok) {
+        sessionStorage.removeItem(api.OPTIMIZE_RESUME_SESSION_KEY);
+        navigate(`/optimize?resume=${encodeURIComponent(resumeTok)}`, { replace: true });
+        return;
+      }
       const pending = sessionStorage.getItem(LANDING_PENDING_KEY) || pendingToken;
       if (pending) {
         sessionStorage.removeItem(LANDING_PENDING_KEY);
@@ -101,6 +107,12 @@ export default function Login() {
         return;
       } else {
         await login(email, password, referral);
+      }
+      const resumeStored = sessionStorage.getItem(api.OPTIMIZE_RESUME_SESSION_KEY);
+      if (resumeStored) {
+        sessionStorage.removeItem(api.OPTIMIZE_RESUME_SESSION_KEY);
+        navigate(`/optimize?resume=${encodeURIComponent(resumeStored)}`, { replace: true });
+        return;
       }
       if (pendingToken) {
         sessionStorage.setItem(LANDING_PENDING_KEY, pendingToken);

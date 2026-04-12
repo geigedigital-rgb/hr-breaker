@@ -70,7 +70,8 @@ RESEND_TEMPLATE_SHORT_NUDGE=
 |----------------------|----------------------|
 | `LOGO_URL` | база из `EMAIL_PUBLIC_BASE_URL` (или `FRONTEND_URL`) + `/logo-color.svg` |
 | `HERO_IMAGE_URL` | та же база + `/email/hero-winback.svg` |
-| `DOWNLOAD_URL` | та же база + `/upgrade` |
+| `DOWNLOAD_URL` | персональная ссылка на последний сохранённый PDF пользователя (`/api/email/open-resume?token=...`), если PDF есть; иначе fallback на `.../upgrade` |
+| `RESUME_URL` | alias той же персональной ссылки (для удобства новых шаблонов) |
 | `SETTINGS_URL` | та же база + `/settings` (настройки аккаунта) |
 | `UNSUBSCRIBE_LINK` | **Одноразовая ссылка отписки** для этого получателя: `GET {база}/api/email/unsubscribe?token=<JWT>` (JWT год, `purpose=email_unsub`). В Resend **нельзя** завести свою переменную с именем `UNSUBSCRIBE_URL` — оно зарезервировано у них; используйте **`UNSUBSCRIBE_LINK`**. |
 

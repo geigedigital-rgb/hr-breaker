@@ -11,9 +11,15 @@ from urllib.parse import quote
 
 from hr_breaker.config import Settings, get_settings
 
-from hr_breaker.services.auth import create_email_unsubscribe_token
+from hr_breaker.services.auth import (
+    create_email_resume_open_token,
+    create_email_unsubscribe_token,
+    create_optimize_snapshot_token,
+)
 from hr_breaker.services.db import (
     admin_email_settings_get,
+    db_list_all,
+    optimization_snapshot_get_latest_valid,
     email_winback_claim_due_batch,
     email_winback_mark_failed,
     email_winback_mark_sent,
@@ -42,6 +48,13 @@ def build_unsubscribe_url(settings: Settings, user_id: str) -> str:
     return f"{base}/api/email/unsubscribe?token={quote(token, safe='')}"
 
 
+def build_resume_open_url(settings: Settings, user_id: str, filename: str) -> str:
+    """One-click link to open a specific saved PDF without login (signed JWT)."""
+    base = public_base_for_email(settings)
+    token = create_email_resume_open_token(user_id, filename)
+    return f"{base}/api/email/open-resume?token={quote(token, safe='')}"
+
+
 _TEMPLATE_FILES = {
     "reminder-no-download": "reminder_no_download.html",
     "short-nudge": "short_nudge.html",
@@ -62,12 +75,12 @@ def load_email_template_html(template_id: str) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def merge_winback_placeholders(html: str, *, public_base: str, unsubscribe_url: str) -> str:
+def merge_winback_placeholders(html: str, *, public_base: str, unsubscribe_url: str, resume_url: str = "") -> str:
     """Inline HTML: merge tags; unsubscribe_url is signed one-click URL for this user."""
     base = (public_base or "").rstrip("/")
     logo = f"{base}/logo-color.svg" if base else "{{logo_url}}"
     hero = f"{base}/email/hero-winback.svg" if base else "{{hero_image_url}}"
-    download = f"{base}/upgrade" if base else "{{download_url}}"
+    download = resume_url or (f"{base}/upgrade" if base else "{{download_url}}")
     unsub = unsubscribe_url or (f"{base}/settings" if base else "{{unsubscribe_url}}")
     h = html.replace("{{logo_url}}", logo)
     h = h.replace("{{hero_image_url}}", hero)
@@ -76,19 +89,52 @@ def merge_winback_placeholders(html: str, *, public_base: str, unsubscribe_url: 
     return h
 
 
-def resend_variables_for_send(*, public_base: str, unsubscribe_url: str) -> dict[str, str]:
+def resend_variables_for_send(*, public_base: str, unsubscribe_url: str, resume_url: str = "") -> dict[str, str]:
     """
     Variables for Resend Dashboard templates. Do not use Resend-reserved names as custom keys.
     Use UNSUBSCRIBE_LINK (not UNSUBSCRIBE_URL) for the one-click URL.
     """
     base = (public_base or "").rstrip("/")
+    open_resume = resume_url or f"{base}/upgrade"
     return {
         "LOGO_URL": f"{base}/logo-color.svg",
         "HERO_IMAGE_URL": f"{base}/email/hero-winback.svg",
-        "DOWNLOAD_URL": f"{base}/upgrade",
+        "DOWNLOAD_URL": open_resume,
+        "RESUME_URL": open_resume,
         "SETTINGS_URL": f"{base}/settings",
         "UNSUBSCRIBE_LINK": unsubscribe_url,
     }
+
+
+async def latest_resume_open_url_for_user(pool, settings: Settings, user_id: str) -> str:
+    """Return one-click URL to newest saved resume for user; empty when no record exists."""
+    records = await db_list_all(pool, settings.output_dir, user_id=user_id)
+    if not records:
+        return ""
+    filename = records[0].path.name
+    if not filename:
+        return ""
+    return build_resume_open_url(settings, user_id, filename)
+
+
+async def latest_email_cta_url_for_user(pool, settings: Settings, user_id: str) -> str:
+    """Primary CTA for email: latest non-expired optimization deep link; else app home (no raw PDF API)."""
+    row = await optimization_snapshot_get_latest_valid(pool, user_id)
+    base = public_base_for_email(settings).rstrip("/")
+    if row:
+        exp = row["expires_at"]
+        if isinstance(exp, datetime):
+            if exp.tzinfo is None:
+                exp = exp.replace(tzinfo=timezone.utc)
+        else:
+            return f"{base}/"
+        sid = str(row["id"])
+        try:
+            tok = create_optimize_snapshot_token(user_id, sid, exp)
+        except Exception:
+            return f"{base}/"
+        return f"{base}/optimize?resume={quote(tok, safe='')}"
+    return f"{base}/"
 
 
 def resend_published_template_id(
@@ -121,6 +167,7 @@ async def deliver_winback_email(
     user_id: str,
     db_resend_template_reminder: str = "",
     db_resend_template_short_nudge: str = "",
+    resume_url: str = "",
 ) -> None:
     unsub = build_unsubscribe_url(settings, user_id)
     rid = resend_published_template_id(
@@ -136,11 +183,20 @@ async def deliver_winback_email(
             to=to,
             subject=subject,
             template_id=rid,
-            variables=resend_variables_for_send(public_base=public_base, unsubscribe_url=unsub),
+            variables=resend_variables_for_send(
+                public_base=public_base,
+                unsubscribe_url=unsub,
+                resume_url=resume_url,
+            ),
         )
         return
     raw = load_email_template_html(app_template_id)
-    html = merge_winback_placeholders(raw, public_base=public_base, unsubscribe_url=unsub)
+    html = merge_winback_placeholders(
+        raw,
+        public_base=public_base,
+        unsubscribe_url=unsub,
+        resume_url=resume_url,
+    )
     await resend_send_html(
         api_key=api_key,
         from_addr=from_addr,
@@ -248,6 +304,7 @@ async def process_winback_due_batch(pool, *, limit: int = 25) -> dict[str, Any]:
                 await email_winback_mark_skipped_paid(pool, sid)
                 skipped += 1
                 continue
+            resume_url = await latest_email_cta_url_for_user(pool, settings, uid)
             await deliver_winback_email(
                 settings=settings,
                 api_key=api_key,
@@ -259,6 +316,7 @@ async def process_winback_due_batch(pool, *, limit: int = 25) -> dict[str, Any]:
                 user_id=uid,
                 db_resend_template_reminder=db_r,
                 db_resend_template_short_nudge=db_n,
+                resume_url=resume_url,
             )
             await email_winback_mark_sent(pool, sid)
             sent += 1
@@ -310,6 +368,7 @@ async def send_winback_to_email(
     sub = await user_get_subscription(pool, uid)
     if _user_is_paid(sub):
         raise ValueError("User has an active paid/trial subscription — skipped")
+    resume_url = await latest_email_cta_url_for_user(pool, settings, uid)
 
     await deliver_winback_email(
         settings=settings,
@@ -322,4 +381,50 @@ async def send_winback_to_email(
         user_id=uid,
         db_resend_template_reminder=db_r,
         db_resend_template_short_nudge=db_n,
+        resume_url=resume_url,
+    )
+
+
+async def send_resend_template_to_email(
+    pool,
+    *,
+    to_email: str,
+    resend_template_id: str,
+) -> None:
+    """Send one email to a known user using explicit Resend template id (from dashboard list)."""
+    settings = get_settings()
+    api_key = (settings.resend_api_key or "").strip()
+    from_addr = (settings.resend_from or "").strip()
+    public_base = public_base_for_email(settings)
+    subject = (settings.resend_winback_subject or "Your resume is ready").strip() or "Your resume is ready"
+    if not api_key or not from_addr:
+        raise ValueError("RESEND_API_KEY and RESEND_FROM must be set")
+    rid = (resend_template_id or "").strip()
+    if not rid:
+        raise ValueError("Resend template id is required")
+
+    u = await user_get_by_email(pool, to_email.strip())
+    if not u:
+        raise ValueError("No user with this email")
+    if u.get("admin_blocked"):
+        raise ValueError("User is admin-blocked")
+    if u.get("marketing_emails_opt_in") is False:
+        raise ValueError("User opted out of marketing emails")
+    uid = str(u["id"])
+    sub = await user_get_subscription(pool, uid)
+    if _user_is_paid(sub):
+        raise ValueError("User has an active paid/trial subscription — skipped")
+    resume_url = await latest_email_cta_url_for_user(pool, settings, uid)
+    unsub = build_unsubscribe_url(settings, uid)
+    await resend_send_template(
+        api_key=api_key,
+        from_addr=from_addr,
+        to=to_email.strip(),
+        subject=subject,
+        template_id=rid,
+        variables=resend_variables_for_send(
+            public_base=public_base,
+            unsubscribe_url=unsub,
+            resume_url=resume_url,
+        ),
     )

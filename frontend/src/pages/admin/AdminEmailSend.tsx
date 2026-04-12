@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   ADMIN_EMAIL_SEGMENT_OPTIMIZED_UNPAID,
+  getAdminResendTemplates,
   getAdminEmailControl,
   patchAdminEmailControl,
+  postAdminEmailSendOne,
   postAdminEmailQueueProcess,
   postAdminEmailSegmentPreview,
   postAdminEmailSegmentSend,
   type AdminEmailControl,
+  type AdminResendTemplate,
+  type AdminEmailSendOneResult,
   type AdminEmailSegmentPreview,
   type AdminEmailSegmentSendResult,
 } from "../../api";
@@ -34,6 +38,11 @@ export default function AdminEmailSend() {
   const [sendResult, setSendResult] = useState<AdminEmailSegmentSendResult | null>(null);
   const [queueResult, setQueueResult] = useState<Record<string, unknown> | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [resendTemplates, setResendTemplates] = useState<AdminResendTemplate[]>([]);
+  const [templatesErr, setTemplatesErr] = useState<string | null>(null);
+  const [singleEmail, setSingleEmail] = useState("");
+  const [singleTemplateId, setSingleTemplateId] = useState("");
+  const [singleResult, setSingleResult] = useState<AdminEmailSendOneResult | null>(null);
 
   const reload = useCallback(async () => {
     setLoadErr(null);
@@ -45,6 +54,17 @@ export default function AdminEmailSend() {
       setDMax(c.winback_delay_max_minutes);
       setTmplReminder(c.resend_template_reminder_no_download ?? "");
       setTmplNudge(c.resend_template_short_nudge ?? "");
+      try {
+        setTemplatesErr(null);
+        const ts = await getAdminResendTemplates();
+        setResendTemplates(ts);
+        if (ts.length > 0) {
+          setSingleTemplateId((prev) => prev || ts[0].id);
+        }
+      } catch (e) {
+        setTemplatesErr(e instanceof Error ? e.message : String(e));
+        setResendTemplates([]);
+      }
     } catch (e) {
       setLoadErr(e instanceof Error ? e.message : String(e));
     }
@@ -127,6 +147,30 @@ export default function AdminEmailSend() {
     }
   };
 
+  const onSendOne = async () => {
+    if (!singleEmail.trim() || !singleTemplateId.trim()) return;
+    const ok = window.confirm(t("admin.email.send.singleConfirm").replace("{email}", singleEmail.trim()));
+    if (!ok) return;
+    setBusy("single-send");
+    setSingleResult(null);
+    try {
+      const r = await postAdminEmailSendOne({
+        email: singleEmail.trim(),
+        resend_template_id: singleTemplateId.trim(),
+      });
+      setSingleResult(r);
+    } catch (e) {
+      setSingleResult({
+        ok: false,
+        email: singleEmail.trim(),
+        resend_template_id: singleTemplateId.trim(),
+        error: e instanceof Error ? e.message : String(e),
+      });
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const onProcessQueue = async () => {
     setBusy("queue");
     setQueueResult(null);
@@ -181,6 +225,57 @@ export default function AdminEmailSend() {
         ) : null}
         <p className="mt-3 text-xs opacity-90">{t("admin.email.send.deliveryDocHint")}</p>
       </div>
+
+      <section className="rounded-xl border border-[#EBEDF5] bg-[var(--card)] p-5 shadow-sm" aria-labelledby="email-single">
+        <h3 id="email-single" className="text-sm font-semibold text-[var(--text)]">
+          {t("admin.email.send.singleTitle")}
+        </h3>
+        <p className="mt-2 text-xs text-[var(--text-muted)] leading-relaxed">{t("admin.email.send.singleHint")}</p>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <div>
+            <label className="text-xs font-medium text-[var(--text-muted)]">{t("admin.email.send.singleEmailLabel")}</label>
+            <input
+              type="email"
+              value={singleEmail}
+              onChange={(e) => setSingleEmail(e.target.value)}
+              placeholder="user@example.com"
+              autoComplete="off"
+              className="mt-1 w-full rounded-lg border border-[#EBEDF5] px-3 py-2 text-sm"
+            />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-[var(--text-muted)]">{t("admin.email.send.singleTemplateLabel")}</label>
+            <select
+              value={singleTemplateId}
+              onChange={(e) => setSingleTemplateId(e.target.value)}
+              className="mt-1 w-full rounded-lg border border-[#EBEDF5] px-3 py-2 text-sm"
+            >
+              <option value="">{t("admin.email.send.singleTemplatePlaceholder")}</option>
+              {resendTemplates.map((tpl) => (
+                <option key={tpl.id} value={tpl.id}>
+                  {tpl.name} ({tpl.id})
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+        {templatesErr ? <p className="mt-2 text-xs text-red-700">{templatesErr}</p> : null}
+        <button
+          type="button"
+          disabled={busy === "single-send" || !singleEmail.trim() || !singleTemplateId.trim()}
+          onClick={() => void onSendOne()}
+          className="mt-4 rounded-lg bg-[#1D4ED8] px-4 py-2 text-sm font-medium text-white hover:bg-[#1e40af] disabled:opacity-50"
+        >
+          {busy === "single-send" ? "…" : t("admin.email.send.singleSend")}
+        </button>
+        {singleResult ? (
+          <p className={`mt-2 text-xs ${singleResult.ok ? "text-emerald-700" : "text-red-700"}`}>
+            {singleResult.ok
+              ? t("admin.email.send.singleOk").replace("{email}", singleResult.email)
+              : t("admin.email.send.singleErr").replace("{error}", singleResult.error || "unknown error")}
+          </p>
+        ) : null}
+      </section>
 
       <section className="rounded-xl border border-[#EBEDF5] bg-[var(--card)] p-5 shadow-sm" aria-labelledby="email-auto">
         <h3 id="email-auto" className="text-sm font-semibold text-[var(--text)]">

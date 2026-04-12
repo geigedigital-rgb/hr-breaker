@@ -8,6 +8,10 @@ import type { AdminPipelineLogEntry } from "./adminPipelineLogStore";
 const API = "/api";
 const AUTH_TOKEN_KEY = "hr_breaker_token";
 
+/** Deep-link from email: `/optimize?resume=…` — token stored before redirect to login if needed. */
+export const OPTIMIZE_RESUME_QUERY_PARAM = "resume";
+export const OPTIMIZE_RESUME_SESSION_KEY = "pitchcv_optimize_resume_token_v1";
+
 export function getStoredToken(): string | null {
   return localStorage.getItem(AUTH_TOKEN_KEY);
 }
@@ -72,7 +76,83 @@ export type OptimizeResponse = {
   error: string | null;
   optimized_resume_text?: string | null;
   schema_json?: string | null;
+  /** Public link to read-only saved result (~3 days). */
+  snapshot_url?: string | null;
+  snapshot_expires_at?: string | null;
 };
+
+/** GET /api/optimization-snapshot — same shape as server `OptimizationSnapshotPublicOut`. */
+export type OptimizationSnapshotPublic = {
+  expires_at: string;
+  pdf_filename: string | null;
+  pdf_download_available: boolean;
+  job: JobPostingOut;
+  validation: ValidationResultOut;
+  key_changes?: ChangeDetailOut[] | null;
+  schema_json?: string | null;
+  pre_ats_score?: number | null;
+  pre_keyword_score?: number | null;
+  post_ats_score?: number | null;
+  post_keyword_score?: number | null;
+  pending_export_token?: string | null;
+  job_url?: string | null;
+  optimized_resume_text?: string | null;
+};
+
+export function optimizationSnapshotPdfUrl(token: string): string {
+  const q = new URLSearchParams({ token });
+  return `${API}/optimization-snapshot/pdf?${q.toString()}`;
+}
+
+export type OptimizationSnapshotFetchResult =
+  | { ok: true; data: OptimizationSnapshotPublic }
+  | { ok: false; status: number; detail: string };
+
+export async function fetchOptimizationSnapshotForMe(token: string): Promise<OptimizationSnapshotFetchResult> {
+  const q = new URLSearchParams({ token });
+  const r = await fetch(`${API}/optimization-snapshot/for-me?${q.toString()}`, {
+    headers: authHeaders(),
+  });
+  const text = await r.text();
+  let parsed: unknown = {};
+  if (text.trim()) {
+    try {
+      parsed = JSON.parse(text) as unknown;
+    } catch {
+      parsed = {};
+    }
+  }
+  if (!r.ok) {
+    const detail =
+      typeof (parsed as { detail?: unknown }).detail === "string"
+        ? (parsed as { detail: string }).detail
+        : r.statusText || "Request failed";
+    return { ok: false, status: r.status, detail };
+  }
+  return { ok: true, data: parsed as OptimizationSnapshotPublic };
+}
+
+export async function fetchOptimizationSnapshot(token: string): Promise<OptimizationSnapshotFetchResult> {
+  const q = new URLSearchParams({ token });
+  const r = await fetch(`${API}/optimization-snapshot?${q.toString()}`);
+  const text = await r.text();
+  let parsed: unknown = {};
+  if (text.trim()) {
+    try {
+      parsed = JSON.parse(text) as unknown;
+    } catch {
+      parsed = {};
+    }
+  }
+  if (!r.ok) {
+    const detail =
+      typeof (parsed as { detail?: unknown }).detail === "string"
+        ? (parsed as { detail: string }).detail
+        : r.statusText || "Request failed";
+    return { ok: false, status: r.status, detail };
+  }
+  return { ok: true, data: parsed as OptimizationSnapshotPublic };
+}
 
 export type DownloadPendingOptimizePdfResponse = {
   blob: Blob;
@@ -1154,6 +1234,42 @@ export async function postAdminEmailQueueProcess(limit?: number): Promise<Record
   });
   const data = await parseJsonOrThrow<Record<string, unknown> & { detail?: string }>(r);
   if (!r.ok) throw new Error(String(data.detail || r.statusText));
+  return data;
+}
+
+export type AdminResendTemplate = {
+  id: string;
+  name: string;
+};
+
+export async function getAdminResendTemplates(): Promise<AdminResendTemplate[]> {
+  const r = await fetch(`${API}/admin/email/resend/templates`, { headers: authHeaders() });
+  const data = await parseJsonOrThrow<(AdminResendTemplate & { detail?: string })[]>(r);
+  if (!r.ok) {
+    const detail = Array.isArray(data) ? undefined : (data as { detail?: string }).detail;
+    throw new Error(detail || r.statusText);
+  }
+  return data as AdminResendTemplate[];
+}
+
+export type AdminEmailSendOneResult = {
+  ok: boolean;
+  email: string;
+  resend_template_id: string;
+  error?: string | null;
+};
+
+export async function postAdminEmailSendOne(body: {
+  email: string;
+  resend_template_id: string;
+}): Promise<AdminEmailSendOneResult> {
+  const r = await fetch(`${API}/admin/email/send-one`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(body),
+  });
+  const data = await parseJsonOrThrow<AdminEmailSendOneResult & { detail?: string }>(r);
+  if (!r.ok) throw new Error(data.detail || r.statusText);
   return data;
 }
 

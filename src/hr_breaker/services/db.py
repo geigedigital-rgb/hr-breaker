@@ -8,7 +8,7 @@ Requires: pip install 'hr-breaker[db]'
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -314,6 +314,27 @@ async def init_table(pool) -> None:
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             )
             """
+        )
+        await conn.execute(
+            f"""
+            CREATE TABLE IF NOT EXISTS optimization_snapshots (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                user_id UUID NOT NULL REFERENCES {USERS_TABLE}(id) ON DELETE CASCADE,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                expires_at TIMESTAMPTZ NOT NULL,
+                pdf_filename TEXT,
+                payload JSONB NOT NULL DEFAULT '{{}}'::jsonb
+            )
+            """
+        )
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_opt_snapshots_user_expires ON optimization_snapshots (user_id, expires_at DESC)"
+        )
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_opt_snapshots_expires ON optimization_snapshots (expires_at)"
+        )
+        await conn.execute(
+            "DELETE FROM optimization_snapshots WHERE expires_at < NOW() - INTERVAL '30 days'"
         )
 
 
@@ -1348,6 +1369,7 @@ async def user_record_visit(pool, user_id: str) -> None:
 ADMIN_EMAIL_SETTINGS_TABLE = "admin_email_settings"
 EMAIL_WINBACK_SCHEDULE_TABLE = "email_winback_schedule"
 ADMIN_EMAIL_CAMPAIGN_LOG_TABLE = "admin_email_campaign_log"
+OPTIMIZATION_SNAPSHOTS_TABLE = "optimization_snapshots"
 
 
 async def admin_email_settings_get(pool) -> dict[str, Any]:
@@ -1422,6 +1444,60 @@ async def admin_email_settings_update(
             n_tn,
         )
     return await admin_email_settings_get(pool)
+
+
+async def optimization_snapshot_insert(
+    pool,
+    *,
+    user_id: str,
+    pdf_filename: str | None,
+    payload: dict[str, Any],
+    expires_at: datetime,
+) -> str:
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            f"""
+            INSERT INTO {OPTIMIZATION_SNAPSHOTS_TABLE} (user_id, expires_at, pdf_filename, payload)
+            VALUES ($1::uuid, $2, $3, $4::jsonb)
+            RETURNING id::text
+            """,
+            user_id,
+            expires_at,
+            pdf_filename,
+            payload,
+        )
+    return str(row["id"]) if row else ""
+
+
+async def optimization_snapshot_get_latest_valid(pool, user_id: str) -> dict[str, Any] | None:
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            f"""
+            SELECT id, user_id, created_at, expires_at, pdf_filename, payload
+            FROM {OPTIMIZATION_SNAPSHOTS_TABLE}
+            WHERE user_id = $1::uuid AND expires_at > NOW()
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            user_id,
+        )
+    return dict(row) if row else None
+
+
+async def optimization_snapshot_get_by_id_for_user(
+    pool, *, snapshot_id: str, user_id: str
+) -> dict[str, Any] | None:
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            f"""
+            SELECT id, user_id, created_at, expires_at, pdf_filename, payload
+            FROM {OPTIMIZATION_SNAPSHOTS_TABLE}
+            WHERE id = $1::uuid AND user_id = $2::uuid
+            """,
+            snapshot_id,
+            user_id,
+        )
+    return dict(row) if row else None
 
 
 async def email_winback_replace_pending(

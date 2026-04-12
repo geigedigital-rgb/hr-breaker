@@ -10,6 +10,7 @@ import httpx
 logger = logging.getLogger(__name__)
 
 RESEND_API = "https://api.resend.com/emails"
+RESEND_TEMPLATES_API = "https://api.resend.com/templates"
 
 
 async def resend_send_html(
@@ -62,3 +63,30 @@ async def resend_send_template(
             return dict(r.json()) if r.content else {}
         except Exception:
             return {"raw": r.text[:500]}
+
+
+async def resend_list_templates(
+    *,
+    api_key: str,
+) -> list[dict[str, str]]:
+    """List published templates from Resend Dashboard. Returns [{id, name}] best-effort."""
+    out: list[dict[str, str]] = []
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        r = await client.get(
+            RESEND_TEMPLATES_API,
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+        )
+        r.raise_for_status()
+        payload: dict[str, Any] = dict(r.json()) if r.content else {}
+    raw_items = payload.get("data")
+    if not isinstance(raw_items, list):
+        return out
+    for item in raw_items:
+        if not isinstance(item, dict):
+            continue
+        tid = str(item.get("id") or "").strip()
+        name = str(item.get("name") or item.get("alias") or tid).strip()
+        if not tid:
+            continue
+        out.append({"id": tid, "name": name or tid})
+    return out

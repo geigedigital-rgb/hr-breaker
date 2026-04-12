@@ -14,7 +14,8 @@ import re
 import secrets
 import tempfile
 import time
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
+from urllib.parse import quote
 from pathlib import Path
 from typing import Any, Literal
 
@@ -50,7 +51,13 @@ from hr_breaker.services import (
     wrap_full_html,
 )
 from hr_breaker.services.job_scraper import extract_company_logo_url
-from hr_breaker.services.auth import create_access_token, decode_token, hash_password, verify_password
+from hr_breaker.services.auth import (
+    create_access_token,
+    create_optimize_snapshot_token,
+    decode_token,
+    hash_password,
+    verify_password,
+)
 from hr_breaker.services.usage_audit import log_usage_event
 from hr_breaker.utils import extract_text_from_html
 from hr_breaker.services.db import (
@@ -99,6 +106,8 @@ from hr_breaker.services.db import (
     email_segment_optimized_unpaid_count,
     email_segment_optimized_unpaid_emails,
     email_winback_pending_count,
+    optimization_snapshot_get_by_id_for_user,
+    optimization_snapshot_insert,
     user_set_marketing_emails_opt_in,
 )
 from hr_breaker.services.reviews_repo import (
@@ -118,6 +127,7 @@ from hr_breaker.services.referral_service import (
     process_first_paid_invoice_commission,
     try_apply_referral_after_auth,
 )
+from hr_breaker.services.resend_send import resend_list_templates
 
 # For SSE progress events
 def _put_progress(queue: asyncio.Queue | None, percent: int, message: str) -> None:
@@ -535,6 +545,28 @@ class OptimizeResponse(BaseModel):
     error: str | None = None
     optimized_resume_text: str | None = None  # for "improve more" — next round uses this as resume_content
     schema_json: str | None = None
+    # Saved result summary (TTL); link opens read-only snapshot without login.
+    snapshot_url: str | None = None
+    snapshot_expires_at: str | None = None
+
+
+class OptimizationSnapshotPublicOut(BaseModel):
+    """Saved optimization result (JWT). Public GET or authenticated for-me."""
+
+    expires_at: str
+    pdf_filename: str | None = None
+    pdf_download_available: bool = False
+    job: JobPostingOut
+    validation: ValidationResultOut
+    key_changes: list[ChangeDetailOut] | None = None
+    schema_json: str | None = None
+    pre_ats_score: int | None = None
+    pre_keyword_score: float | None = None
+    post_ats_score: int | None = None
+    post_keyword_score: float | None = None
+    pending_export_token: str | None = None
+    job_url: str | None = None
+    optimized_resume_text: str | None = None
 
 
 class HistoryItem(BaseModel):
@@ -1156,6 +1188,23 @@ class AdminEmailSegmentSendOut(BaseModel):
     sent: int
     failed: int
     errors_sample: list[str]
+
+
+class AdminResendTemplateItem(BaseModel):
+    id: str
+    name: str
+
+
+class AdminEmailSendOneBody(BaseModel):
+    email: str
+    resend_template_id: str = Field(..., min_length=2, max_length=200)
+
+
+class AdminEmailSendOneOut(BaseModel):
+    ok: bool
+    email: str
+    resend_template_id: str
+    error: str | None = None
 
 
 class AdminActivityItem(BaseModel):
@@ -3026,6 +3075,10 @@ async def _run_optimize(
     pending_export_expires_at: str | None = None
     optimized_resume_text: str | None = None
     schema_json: str | None = None
+    post_ats: int | None = None
+    post_kw: float | None = None
+    snapshot_url_out: str | None = None
+    snapshot_expires_at_out: str | None = None
     _put_progress(progress_queue, 85, "Saving PDF…")
     can_export_pdf = True
     if user and not _is_admin_user(user):
@@ -3060,8 +3113,6 @@ async def _run_optimize(
         )
         pdf_path.parent.mkdir(parents=True, exist_ok=True)
         pdf_path.write_bytes(optimized.pdf_bytes)
-        post_ats = None
-        post_kw = None
         # Post ATS: same methodology as pre (score_resume_vs_job on text) so "до" and "после" are comparable
         try:
             optimized_resume_text = await asyncio.to_thread(extract_text_from_pdf_bytes, optimized.pdf_bytes)
@@ -3153,6 +3204,21 @@ async def _run_optimize(
                     "data": {"pdf_bytes": len(optimized.pdf_bytes), "has_text_fallback": bool(txt)},
                 },
             )
+    # Comparable post scores for DB snapshot / response when PDF was not saved to history (free hold) or text-only path
+    if post_kw is None and validation.results:
+        for r in validation.results:
+            if r.filter_name == "KeywordMatcher":
+                post_kw = r.score
+                break
+    if post_ats is None and optimized_resume_text and job and optimized_resume_text.strip():
+        try:
+            post_ats = await score_resume_vs_job(optimized_resume_text.strip(), job)
+        except Exception as e:
+            logger.warning("Post ATS score from resume text failed: %s", e)
+            for r in validation.results:
+                if r.filter_name == "LLMChecker":
+                    post_ats = round(r.score * 100)
+                    break
     _put_progress(progress_queue, 100, "Done")
 
     if opt_uid:
@@ -3174,8 +3240,8 @@ async def _run_optimize(
                     await user_increment_free_optimize(pool_rd, opt_uid)
 
     pool_done = await get_pool()
+    ok = validation.passed and bool(optimized and optimized.pdf_bytes)
     if audit_uid and pool_done:
-        ok = validation.passed and bool(optimized and optimized.pdf_bytes)
         opt_fail_reason: str | None = None
         if not ok:
             if not optimized:
@@ -3211,8 +3277,39 @@ async def _run_optimize(
             except Exception as e:
                 logger.warning("Win-back schedule skipped: %s", e)
 
+    if pool_done and ok and opt_uid and opt_uid != "local":
+        try:
+            snap_exp = datetime.now(timezone.utc) + timedelta(days=3)
+            payload_snap: dict[str, Any] = {
+                "job": job_out.model_dump(),
+                "validation": validation_out.model_dump(),
+                "key_changes": [c.model_dump() for c in key_changes_out] if key_changes_out else [],
+                "schema_json": schema_json,
+                "pre_ats_score": req.pre_ats_score,
+                "pre_keyword_score": req.pre_keyword_score,
+                "post_ats_score": post_ats,
+                "post_keyword_score": post_kw,
+                "pending_export_token": pending_export_token,
+                "job_url": req.job_url,
+                "optimized_resume_text": optimized_resume_text,
+            }
+            snap_id = await optimization_snapshot_insert(
+                pool_done,
+                user_id=opt_uid,
+                pdf_filename=pdf_filename,
+                payload=payload_snap,
+                expires_at=snap_exp,
+            )
+            if snap_id:
+                tok = create_optimize_snapshot_token(opt_uid, snap_id, snap_exp)
+                base_pub = (settings.email_public_base_url or settings.frontend_url or "").strip().rstrip("/")
+                snapshot_url_out = f"{base_pub}/optimize?resume={quote(tok, safe='')}"
+                snapshot_expires_at_out = snap_exp.isoformat()
+        except Exception as e:
+            logger.warning("optimization_snapshot_insert: %s", e)
+
     return OptimizeResponse(
-        success=validation.passed and bool(optimized and optimized.pdf_bytes),
+        success=ok,
         pdf_base64=pdf_b64,
         pdf_filename=pdf_filename,
         pending_export_token=pending_export_token,
@@ -3222,6 +3319,8 @@ async def _run_optimize(
         key_changes=key_changes_out,
         optimized_resume_text=optimized_resume_text,
         schema_json=schema_json,
+        snapshot_url=snapshot_url_out,
+        snapshot_expires_at=snapshot_expires_at_out,
     )
 
 
@@ -3757,6 +3856,55 @@ async def api_admin_email_queue_process(
     return await process_winback_due_batch(pool, limit=limit)
 
 
+@router.get("/admin/email/resend/templates", response_model=list[AdminResendTemplateItem])
+async def api_admin_email_resend_templates(_admin: dict = Depends(get_admin_user)) -> list[AdminResendTemplateItem]:
+    """List Resend templates available for admin quick-send."""
+    settings = get_settings()
+    api_key = (settings.resend_api_key or "").strip()
+    if not api_key:
+        raise HTTPException(400, "RESEND_API_KEY is not set")
+    try:
+        items = await resend_list_templates(api_key=api_key)
+    except Exception as e:
+        logger.exception("Resend templates list failed: %s", e)
+        raise HTTPException(502, "Failed to load templates from Resend")
+    return [AdminResendTemplateItem(id=x["id"], name=x["name"]) for x in items]
+
+
+@router.post("/admin/email/send-one", response_model=AdminEmailSendOneOut)
+async def api_admin_email_send_one(
+    body: AdminEmailSendOneBody,
+    _admin: dict = Depends(get_admin_user),
+) -> AdminEmailSendOneOut:
+    """Simple manual send: one email + one explicit Resend template id."""
+    pool = await get_pool()
+    if pool is None:
+        raise HTTPException(503, "Database not configured")
+    from hr_breaker.services.email_winback import send_resend_template_to_email
+
+    em = (body.email or "").strip()
+    if not em or "@" not in em:
+        raise HTTPException(400, "Valid email is required")
+    try:
+        await send_resend_template_to_email(
+            pool,
+            to_email=em,
+            resend_template_id=(body.resend_template_id or "").strip(),
+        )
+    except Exception as e:
+        return AdminEmailSendOneOut(
+            ok=False,
+            email=em,
+            resend_template_id=(body.resend_template_id or "").strip(),
+            error=str(e)[:500],
+        )
+    return AdminEmailSendOneOut(
+        ok=True,
+        email=em,
+        resend_template_id=(body.resend_template_id or "").strip(),
+    )
+
+
 @router.post("/admin/email/segment/preview", response_model=AdminEmailSegmentPreviewOut)
 async def api_admin_email_segment_preview(
     body: AdminEmailSegmentPreviewBody,
@@ -3862,6 +4010,227 @@ async def api_email_unsubscribe(token: str = Query("", min_length=10)) -> Redire
         return RedirectResponse(url=_email_unsubscribe_redirect_url(False), status_code=302)
     await user_set_marketing_emails_opt_in(pool, uid, False)
     return RedirectResponse(url=_email_unsubscribe_redirect_url(True), status_code=302)
+
+
+@router.get("/email/open-resume")
+async def api_email_open_resume(token: str = Query("", min_length=10)):
+    """Open a specific saved resume from email using signed JWT token."""
+    pool = await get_pool()
+    if pool is None:
+        raise HTTPException(503, "Database not configured")
+    payload = decode_token(token.strip())
+    if not payload or payload.get("purpose") != "email_resume_open":
+        raise HTTPException(401, "Invalid or expired token")
+    uid = str(payload.get("sub") or "").strip()
+    filename = str(payload.get("fn") or "").strip()
+    if not uid or not filename or "/" in filename or "\\" in filename:
+        raise HTTPException(400, "Invalid link payload")
+    record = await pdf_storage.get_record_by_filename_async(filename, user_id=uid)
+    if not record:
+        raise HTTPException(404, "Resume not found")
+    settings = get_settings()
+    path = settings.output_dir / filename
+    if not path.is_file():
+        raise HTTPException(404, "File not found")
+    return FileResponse(
+        path,
+        media_type="application/pdf",
+        headers={"Content-Disposition": "inline"},
+    )
+
+
+def _optimization_snapshot_row_expires_at(row: dict[str, Any]) -> datetime:
+    exp = row.get("expires_at")
+    if exp is None:
+        return datetime.min.replace(tzinfo=timezone.utc)
+    if getattr(exp, "tzinfo", None) is None:
+        exp = exp.replace(tzinfo=timezone.utc)
+    return exp
+
+
+def _optimization_snapshot_payload(row: dict[str, Any]) -> dict[str, Any]:
+    pl = row.get("payload") or {}
+    if isinstance(pl, str):
+        try:
+            return json.loads(pl)
+        except Exception:
+            return {}
+    if isinstance(pl, dict):
+        return pl
+    return {}
+
+
+def _snap_int_field(v: Any) -> int | None:
+    if v is None or isinstance(v, bool):
+        return None
+    if isinstance(v, int):
+        return v
+    if isinstance(v, float):
+        return int(round(v))
+    return None
+
+
+def _snap_float_field(v: Any) -> float | None:
+    if v is None or isinstance(v, bool):
+        return None
+    if isinstance(v, (int, float)):
+        return float(v)
+    return None
+
+
+async def _build_optimization_snapshot_public_out(row: dict[str, Any], user_id: str) -> OptimizationSnapshotPublicOut:
+    exp = _optimization_snapshot_row_expires_at(row)
+    pl = _optimization_snapshot_payload(row)
+    raw_fn = row.get("pdf_filename")
+    pdf_fn = str(raw_fn).strip() if raw_fn else ""
+    if not pdf_fn or "/" in pdf_fn or "\\" in pdf_fn:
+        pdf_fn = ""
+    pdf_ok = False
+    if pdf_fn:
+        rec = await pdf_storage.get_record_by_filename_async(pdf_fn, user_id=user_id)
+        if rec:
+            path = get_settings().output_dir / pdf_fn
+            pdf_ok = path.is_file()
+    job_d = pl.get("job") or {}
+    val_d = pl.get("validation") or {"passed": False, "results": []}
+    kc_raw = pl.get("key_changes")
+    key_changes: list[ChangeDetailOut] | None = None
+    if isinstance(kc_raw, list) and kc_raw:
+        try:
+            key_changes = [ChangeDetailOut.model_validate(x) for x in kc_raw]
+        except Exception:
+            key_changes = None
+    try:
+        job_out = JobPostingOut.model_validate(job_d)
+    except Exception:
+        job_out = JobPostingOut(title="", company="", requirements=[], keywords=[], description="")
+    try:
+        validation_out = ValidationResultOut.model_validate(val_d)
+    except Exception:
+        validation_out = ValidationResultOut(passed=False, results=[])
+    schema_json = pl.get("schema_json")
+    if schema_json is not None and not isinstance(schema_json, str):
+        schema_json = None
+    _ju = pl.get("job_url")
+    job_url_out: str | None = None
+    if _ju is not None:
+        js = str(_ju).strip()
+        job_url_out = js or None
+    _pet = pl.get("pending_export_token")
+    pet_out: str | None = None
+    if _pet is not None:
+        ps = str(_pet).strip()
+        pet_out = ps or None
+    _ort = pl.get("optimized_resume_text")
+    ort_out: str | None = None
+    if _ort is not None:
+        os_ = str(_ort)
+        ort_out = os_ if os_.strip() else None
+
+    return OptimizationSnapshotPublicOut(
+        expires_at=exp.isoformat(),
+        pdf_filename=pdf_fn or None,
+        pdf_download_available=pdf_ok,
+        job=job_out,
+        validation=validation_out,
+        key_changes=key_changes,
+        schema_json=schema_json,
+        pre_ats_score=_snap_int_field(pl.get("pre_ats_score")),
+        pre_keyword_score=_snap_float_field(pl.get("pre_keyword_score")),
+        post_ats_score=_snap_int_field(pl.get("post_ats_score")),
+        post_keyword_score=_snap_float_field(pl.get("post_keyword_score")),
+        pending_export_token=pet_out,
+        job_url=job_url_out,
+        optimized_resume_text=ort_out,
+    )
+
+
+@router.get("/optimization-snapshot", response_model=OptimizationSnapshotPublicOut)
+async def api_optimization_snapshot(token: str = Query("", min_length=10)) -> OptimizationSnapshotPublicOut:
+    """Public JSON for saved optimize result (JWT from email or last run). No login."""
+    pool = await get_pool()
+    if pool is None:
+        raise HTTPException(503, "Database not configured")
+    payload = decode_token(token.strip())
+    if not payload or payload.get("purpose") != "optimize_snapshot":
+        raise HTTPException(401, "Invalid or expired link")
+    uid = str(payload.get("sub") or "").strip()
+    sid = str(payload.get("sid") or "").strip()
+    if not uid or not sid:
+        raise HTTPException(400, "Invalid link payload")
+    row = await optimization_snapshot_get_by_id_for_user(pool, snapshot_id=sid, user_id=uid)
+    if not row:
+        raise HTTPException(404, "Saved result not found")
+    exp = _optimization_snapshot_row_expires_at(row)
+    if exp <= datetime.now(timezone.utc):
+        raise HTTPException(410, "This saved result has expired")
+    return await _build_optimization_snapshot_public_out(row, uid)
+
+
+@router.get("/optimization-snapshot/for-me", response_model=OptimizationSnapshotPublicOut)
+async def api_optimization_snapshot_for_me(
+    token: str = Query("", min_length=10),
+    user: dict = Depends(get_current_user),
+) -> OptimizationSnapshotPublicOut:
+    """Same as public snapshot JSON, but requires login and JWT user must match session (safe in-app restore)."""
+    if not user or user.get("id") == "local":
+        raise HTTPException(401, "Sign in to restore this session")
+    pool = await get_pool()
+    if pool is None:
+        raise HTTPException(503, "Database not configured")
+    payload = decode_token(token.strip())
+    if not payload or payload.get("purpose") != "optimize_snapshot":
+        raise HTTPException(401, "Invalid or expired link")
+    uid = str(payload.get("sub") or "").strip()
+    sid = str(payload.get("sid") or "").strip()
+    if not uid or not sid:
+        raise HTTPException(400, "Invalid link payload")
+    if uid != str(user.get("id") or ""):
+        raise HTTPException(403, "This link belongs to another account")
+    row = await optimization_snapshot_get_by_id_for_user(pool, snapshot_id=sid, user_id=uid)
+    if not row:
+        raise HTTPException(404, "Saved result not found")
+    exp = _optimization_snapshot_row_expires_at(row)
+    if exp <= datetime.now(timezone.utc):
+        raise HTTPException(410, "This saved result has expired")
+    return await _build_optimization_snapshot_public_out(row, uid)
+
+
+@router.get("/optimization-snapshot/pdf")
+async def api_optimization_snapshot_pdf(token: str = Query("", min_length=10)):
+    """Serve PDF for a valid optimization snapshot token (same constraints as JSON)."""
+    pool = await get_pool()
+    if pool is None:
+        raise HTTPException(503, "Database not configured")
+    payload = decode_token(token.strip())
+    if not payload or payload.get("purpose") != "optimize_snapshot":
+        raise HTTPException(401, "Invalid or expired link")
+    uid = str(payload.get("sub") or "").strip()
+    sid = str(payload.get("sid") or "").strip()
+    if not uid or not sid:
+        raise HTTPException(400, "Invalid link payload")
+    row = await optimization_snapshot_get_by_id_for_user(pool, snapshot_id=sid, user_id=uid)
+    if not row:
+        raise HTTPException(404, "Saved result not found")
+    exp = _optimization_snapshot_row_expires_at(row)
+    if exp <= datetime.now(timezone.utc):
+        raise HTTPException(410, "This saved result has expired")
+    raw_fn = row.get("pdf_filename")
+    pdf_fn = str(raw_fn).strip() if raw_fn else ""
+    if not pdf_fn or "/" in pdf_fn or "\\" in pdf_fn:
+        raise HTTPException(404, "No PDF for this saved result")
+    rec = await pdf_storage.get_record_by_filename_async(pdf_fn, user_id=uid)
+    if not rec:
+        raise HTTPException(404, "Resume not found")
+    settings = get_settings()
+    path = settings.output_dir / pdf_fn
+    if not path.is_file():
+        raise HTTPException(404, "File not found")
+    return FileResponse(
+        path,
+        media_type="application/pdf",
+        headers={"Content-Disposition": "inline"},
+    )
 
 
 def _admin_activity_file_kind(filename: str) -> str:

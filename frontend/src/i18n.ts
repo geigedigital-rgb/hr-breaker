@@ -27,6 +27,28 @@ const en = {
     bodyErr: "Use the unsubscribe link from your latest email, or sign in and update notifications in Settings.",
     backHome: "Back to PitchCV",
   },
+  optimizeSnapshot: {
+    titleMissing: "Link incomplete",
+    bodyMissing: "Open the full link from your email, or sign in and run Optimize again.",
+    titleExpired: "This saved result expired",
+    bodyExpired: "We only keep a read-only copy for a few days. Sign in to run a new optimization.",
+    titleError: "Could not load saved result",
+    bodyError: "The link may be invalid or the server is unavailable. Try again from your email or sign in.",
+    readOnlyBanner: "Read-only copy: template switching and downloads follow your account rules.",
+    savedResult: "Saved optimization",
+    untitledJob: "Optimization result",
+    expiresLabel: "Available until:",
+    blendedScore: "blended match",
+    preAts: "Pre ATS",
+    postAts: "Post ATS",
+    preKw: "Pre keywords",
+    postKw: "Post keywords",
+    pdfPreview: "PDF preview",
+    pendingExportHint: "PDF download was reserved for a paid plan. Sign in on the same account to finish checkout:",
+    signIn: "Sign in",
+    signInFull: "Sign in for full editor",
+    backHome: "Back to PitchCV",
+  },
   partner: {
     title: "Partner program",
     subtitle: "Invite friends and earn from their first payment. You manage your earnings here.",
@@ -197,6 +219,12 @@ const en = {
     softOnlyNote: "Reordering and emphasis from your resume only; no skills added.",
     downloadResume: "Download resume",
     filterOk: "OK",
+    /** After a successful run when server returns snapshot_url (~3 day TTL). */
+    snapshotRetentionHint:
+      "We keep a read-only copy of this result (scores and breakdown) for about 3 days — you can reopen it from reminder emails.",
+    restoredResumePlaceholder: "(Restored session — resume text from your last run)",
+    restoringResumeSession: "Restoring your result…",
+    restoreResumeError: "Could not restore this link. It may have expired or does not match your account.",
     freeLimitReached: "Free monthly limit reached.",
     freeLimitWallTitle: "Free monthly limit reached",
     freeLimitWallSubtitle:
@@ -568,6 +596,16 @@ const en = {
         deliveryInlineNudge:
           "Short nudge: inline HTML (no template id below and no optional RESEND_TEMPLATE_SHORT_NUDGE on the server).",
         deliveryTemplateNudge: "Short nudge: Resend template id configured (database or optional env).",
+        singleTitle: "Quick send (one user)",
+        singleHint:
+          "Enter user email, choose any published Resend template from your account, and send. Backend auto-injects unsubscribe link and saved-resume link for this user.",
+        singleEmailLabel: "User email",
+        singleTemplateLabel: "Resend template",
+        singleTemplatePlaceholder: "Select published template from Resend…",
+        singleSend: "Send one email",
+        singleConfirm: "Send email now to {email}?",
+        singleOk: "Email sent to {email}",
+        singleErr: "Send failed: {error}",
         autoTitle: "Automatic win-back after optimize",
         autoHint:
           "When enabled, each successful optimization for a non-paying user schedules one email between the min and max delay (minutes). If they subscribe before send time, the queued email is removed.",
