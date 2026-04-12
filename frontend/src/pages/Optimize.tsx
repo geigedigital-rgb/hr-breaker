@@ -160,10 +160,29 @@ function LoaderFactCard({ fact }: { fact: string }) {
   const body = stripFactPrefix(fact);
   if (!body) return null;
   return (
-    <div className="mt-8 max-w-sm animate-pulse text-center">
-      <p className="text-[14px] font-medium leading-relaxed text-[#8b8d99]">
-        {body}
-      </p>
+    <p className="mt-10 max-w-[min(22rem,90vw)] text-center text-[13px] leading-relaxed text-[var(--text-tertiary)]">
+      {body}
+    </p>
+  );
+}
+
+/** Minimal “AI wait” indicator — three soft dots, no heavy chrome */
+function LoaderDots() {
+  return (
+    <div className="mb-10 flex items-center justify-center gap-1.5" aria-hidden>
+      {[0, 1, 2].map((i) => (
+        <span
+          key={i}
+          className="h-1.5 w-1.5 rounded-full bg-[#4578FC]/55 motion-safe:animate-[loader-dot_1.2s_ease-in-out_infinite]"
+          style={{ animationDelay: `${i * 160}ms` }}
+        />
+      ))}
+      <style>{`
+        @keyframes loader-dot {
+          0%, 80%, 100% { opacity: 0.28; transform: translateY(0); }
+          40% { opacity: 1; transform: translateY(-2px); }
+        }
+      `}</style>
     </div>
   );
 }
@@ -183,37 +202,29 @@ function OptimizeLoaderCard({
 }) {
   const safeProgress = progress == null ? undefined : Math.max(0, Math.min(100, Math.round(progress)));
   return (
-    <div className="flex w-full flex-col items-center justify-center py-16 px-4">
-      <div className="mx-auto flex max-w-md flex-col items-center text-center">
-        <div className="relative mb-8 flex h-12 w-12 items-center justify-center">
-          <div className="absolute inset-0 animate-ping rounded-full bg-[#4578FC]/15" />
-          <div className="absolute inset-1 animate-pulse rounded-full bg-[#4578FC]/20" />
-          <SparklesIcon className="relative h-6 w-6 text-[#4578FC]" />
-        </div>
+    <div className="flex w-full max-w-lg flex-col items-center px-5 text-center">
+      <LoaderDots />
 
-        <div className="mb-6 space-y-2">
-          <p className="text-[20px] font-medium tracking-tight text-[#181819]">{title}</p>
-          <p className="mx-auto max-w-sm text-[15px] text-[var(--text-muted)]">{subtitle}</p>
-        </div>
+      <h2 className="text-[15px] font-medium tracking-[-0.01em] text-[#181819] sm:text-base">{title}</h2>
+      <p className="mt-2 max-w-sm text-[13px] leading-relaxed text-[var(--text-muted)] sm:text-[14px]">{subtitle}</p>
 
-        {safeProgress != null ? (
-          <div className="w-full max-w-[240px] space-y-3">
-            <div className="h-1 w-full overflow-hidden rounded-full bg-[#EBEDF5]">
-              <div
-                className="h-full rounded-full bg-[#4578FC] transition-all duration-300 ease-out"
-                style={{ width: `${safeProgress}%` }}
-                role="progressbar"
-                aria-valuenow={safeProgress}
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-label={progressAriaLabel}
-              />
-            </div>
+      {safeProgress != null ? (
+        <div className="mt-8 w-full max-w-[200px]">
+          <div className="h-px w-full overflow-hidden rounded-full bg-[#E4E7EF]">
+            <div
+              className="h-full rounded-full bg-[#4578FC]/90 transition-[width] duration-300 ease-out"
+              style={{ width: `${safeProgress}%` }}
+              role="progressbar"
+              aria-valuenow={safeProgress}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-label={progressAriaLabel}
+            />
           </div>
-        ) : null}
+        </div>
+      ) : null}
 
-        {fact ? <LoaderFactCard fact={fact} /> : null}
-      </div>
+      {fact ? <LoaderFactCard fact={fact} /> : null}
     </div>
   );
 }
@@ -2426,12 +2437,15 @@ export default function Optimize() {
     <div className="relative flex flex-col gap-4 sm:gap-5 w-full min-w-0 min-h-0 overflow-x-hidden pb-28 sm:pb-12">
         {resumeBootstrapping && (
           <div
-            className="fixed inset-0 z-[60] flex flex-col items-center justify-center gap-3 bg-[#F2F3F9]/85 backdrop-blur-[2px]"
+            className="fixed inset-0 z-[60] flex flex-col items-center justify-center bg-[#F2F3F9]/92 backdrop-blur-[6px] px-6"
             role="status"
             aria-live="polite"
           >
-            <span className="h-10 w-10 animate-spin rounded-full border-2 border-[#4578FC] border-t-transparent" aria-hidden />
-            <p className="text-sm font-medium text-[#181819]">{t("optimize.restoringResumeSession")}</p>
+            <div className="flex w-full max-w-sm flex-col items-center text-center">
+              <LoaderDots />
+              <p className="mt-2 text-[15px] font-medium text-[#181819]">{t("optimize.restoringResumeSession")}</p>
+              <p className="mt-2 text-[13px] leading-relaxed text-[var(--text-muted)]">{t("optimize.doNotClosePage")}</p>
+            </div>
           </div>
         )}
         {error && !isOfferPasteAsTextError(error) && (
@@ -3214,8 +3228,8 @@ export default function Optimize() {
         )}
         </div>
       ) : (
-      <div className="flex flex-col w-full min-w-0 gap-5 overflow-x-hidden">
-        {(stage === "scanning" || stage === "loading" || stage === "assessment" || stage === "result") &&
+      <div className="flex min-h-[100dvh] w-full min-w-0 flex-col items-center justify-center overflow-x-hidden bg-[linear-gradient(180deg,#F2F3F9_0%,#FAFBFE_42%,#ffffff_100%)] px-4 pb-28 pt-8 sm:pb-16">
+        {(stage === "scanning" || stage === "loading" || (stage === "assessment" && preScores == null)) &&
           (hasResume && hasJob || awaitingLandingClaim) && (
           <>
             {(stage === "scanning" || (stage === "assessment" && preScores == null)) && (
