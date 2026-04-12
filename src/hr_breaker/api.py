@@ -4092,7 +4092,8 @@ async def api_admin_email_resend_templates(_admin: dict = Depends(get_admin_user
         items = await resend_list_templates(api_key=api_key)
     except Exception as e:
         logger.exception("Resend templates list failed: %s", e)
-        raise HTTPException(502, "Failed to load templates from Resend")
+        msg = str(e).strip() or "Failed to load templates from Resend"
+        raise HTTPException(502, msg[:2000])
     return [AdminResendTemplateItem(id=x["id"], name=x["name"]) for x in items]
 
 

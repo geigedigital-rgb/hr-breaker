@@ -84,24 +84,51 @@ async def resend_list_templates(
     *,
     api_key: str,
 ) -> list[dict[str, str]]:
-    """List published templates from Resend Dashboard. Returns [{id, name}] best-effort."""
+    """List templates from Resend (Dashboard → Templates). Paginates; returns [{id, name}].
+
+    Resend may reject requests without a User-Agent. Template *sending* still uses the id you
+    copy from the dashboard if the list API is unavailable on your plan.
+    """
     out: list[dict[str, str]] = []
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        r = await client.get(
-            RESEND_TEMPLATES_API,
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-        )
-        r.raise_for_status()
-        payload: dict[str, Any] = dict(r.json()) if r.content else {}
-    raw_items = payload.get("data")
-    if not isinstance(raw_items, list):
-        return out
-    for item in raw_items:
-        if not isinstance(item, dict):
-            continue
-        tid = str(item.get("id") or "").strip()
-        name = str(item.get("name") or item.get("alias") or tid).strip()
-        if not tid:
-            continue
-        out.append({"id": tid, "name": name or tid})
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "User-Agent": "hr-breaker/1.0 (Resend templates list)",
+    }
+    after: str | None = None
+    async with httpx.AsyncClient(timeout=45.0) as client:
+        while True:
+            params: dict[str, str] = {"limit": "100"}
+            if after:
+                params["after"] = after
+            r = await client.get(RESEND_TEMPLATES_API, headers=headers, params=params)
+            try:
+                r.raise_for_status()
+            except httpx.HTTPStatusError as e:
+                body = (e.response.text or "")[:800]
+                raise RuntimeError(
+                    f"Resend GET /templates HTTP {e.response.status_code}: {body or e.response.reason_phrase}"
+                ) from e
+            payload: dict[str, Any] = dict(r.json()) if r.content else {}
+            raw_items = payload.get("data")
+            if not isinstance(raw_items, list):
+                break
+            for item in raw_items:
+                if not isinstance(item, dict):
+                    continue
+                tid = str(item.get("id") or "").strip()
+                name = str(item.get("name") or item.get("alias") or tid).strip()
+                if not tid:
+                    continue
+                out.append({"id": tid, "name": name or tid})
+            if not payload.get("has_more") or not raw_items:
+                break
+            last = raw_items[-1]
+            if isinstance(last, dict):
+                nxt = str(last.get("id") or "").strip()
+                if nxt and nxt != after:
+                    after = nxt
+                    continue
+            break
     return out
