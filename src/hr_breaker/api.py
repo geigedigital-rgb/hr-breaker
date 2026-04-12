@@ -51,10 +51,16 @@ from hr_breaker.services import (
     wrap_full_html,
 )
 from hr_breaker.services.job_scraper import extract_company_logo_url
+from hr_breaker.services.email_automation_registry import (
+    AUTOMATION_DEFINITIONS,
+    automation_def_by_id,
+    parse_automation_states,
+)
 from hr_breaker.services.email_winback import public_base_for_email
 from hr_breaker.services.auth import (
     create_access_token,
     create_optimize_snapshot_token,
+    create_session_draft_token,
     decode_token,
     hash_password,
     verify_password,
@@ -107,8 +113,14 @@ from hr_breaker.services.db import (
     email_segment_optimized_unpaid_count,
     email_segment_optimized_unpaid_emails,
     email_winback_pending_count,
+    email_winback_delete_all_pending,
+    email_winback_pending_list_for_user,
     optimization_snapshot_get_by_id_for_user,
+    optimization_snapshot_get_latest_valid,
     optimization_snapshot_insert,
+    optimize_session_draft_delete,
+    optimize_session_draft_get,
+    optimize_session_draft_upsert,
     user_set_marketing_emails_opt_in,
 )
 from hr_breaker.services.reviews_repo import (
@@ -479,6 +491,7 @@ class AnalyzeRequest(BaseModel):
     job_text: str | None = None
     job_url: str | None = None
     output_language: str | None = None  # e.g. "en", "ru". Default: English
+    session_template_id: str | None = Field(None, max_length=200)
 
 
 class RecommendationItem(BaseModel):
@@ -508,6 +521,8 @@ class AnalyzeResponse(BaseModel):
     improvement_tips: str | None = None  # LLM-generated tips with headers for "recommendations" block
     # Admin-only: ordered pipeline steps (scraping, parsing, scoring, LLM); omitted for non-admins
     admin_pipeline_log: list[dict[str, Any]] | None = None
+    # JWT (purpose session_draft) for /optimize?resume= after server persisted analyze; null without DB / guest.
+    resume_session_token: str | None = None
 
 
 class FilterResultOut(BaseModel):
@@ -576,6 +591,26 @@ class OptimizationSnapshotPublicOut(BaseModel):
     photo_data_url: str | None = None
     pre_analyze: AnalyzeResponse | None = None
     snapshot_source_was_pdf: bool | None = None
+
+
+class SessionDraftRestoreOut(BaseModel):
+    """Persisted in-progress session (stages 1–2) for /optimize?resume= JWT purpose session_draft."""
+
+    expires_at: str
+    stage: int
+    resume_content: str
+    job_url: str | None = None
+    job: JobPostingOut
+    analyze: AnalyzeResponse | None = None
+    selected_template_id: str | None = None
+
+
+class OptimizationResumeRestoreOut(BaseModel):
+    """Authenticated /optimization-snapshot/for-me: completed snapshot or mid-flow draft."""
+
+    kind: Literal["complete", "draft"]
+    complete: OptimizationSnapshotPublicOut | None = None
+    draft: SessionDraftRestoreOut | None = None
 
 
 class HistoryItem(BaseModel):
@@ -1227,6 +1262,70 @@ class AdminEmailCtaInfoOut(BaseModel):
     has_valid_snapshot: bool
     snapshot_expires_at: str | None = None
     has_saved_pdf: bool = False
+
+
+class AdminWinbackPendingItemOut(BaseModel):
+    id: str
+    run_at: str
+    template_id: str
+    status: str
+
+
+class AdminOptimizeDraftSummaryOut(BaseModel):
+    stage: int | None = None
+    expires_at: str | None = None
+    updated_at: str | None = None
+
+
+class AdminOptimizeSnapshotSummaryOut(BaseModel):
+    has_valid: bool
+    expires_at: str | None = None
+    stage: int | None = None
+    created_at: str | None = None
+
+
+class AdminUserJourneyOut(BaseModel):
+    """Admin: optimize funnel + queue for one account (inspect duplicates / stages)."""
+    email: str
+    user_found: bool
+    user_id: str | None = None
+    marketing_emails_opt_in: bool | None = None
+    subscription_plan: str | None = None
+    subscription_status: str | None = None
+    admin_blocked: bool | None = None
+    optimize_draft: AdminOptimizeDraftSummaryOut | None = None
+    optimize_snapshot: AdminOptimizeSnapshotSummaryOut
+    winback_pending: list[AdminWinbackPendingItemOut] = Field(default_factory=list)
+
+
+class AdminEmailAutomationItemOut(BaseModel):
+    id: str
+    name: str
+    description: str
+    channel: str
+    dedupe_summary: str
+    conditions_code: str
+    wired: bool
+    enabled: bool
+    paused: bool
+    pending_queue_count: int | None = None
+    supports_enable_toggle: bool = False
+    supports_pause: bool = False
+    supports_clear_queue: bool = False
+
+
+class AdminEmailAutomationsListOut(BaseModel):
+    items: list[AdminEmailAutomationItemOut]
+    global_pending_queue_count: int
+
+
+class AdminEmailAutomationPatchBody(BaseModel):
+    enabled: bool | None = None
+    paused: bool | None = None
+
+
+class AdminEmailClearQueueOut(BaseModel):
+    deleted: int
 
 
 class AdminActivityItem(BaseModel):
@@ -2775,6 +2874,33 @@ async def api_analyze(req: AnalyzeRequest, user: dict | None = Depends(get_optio
     )
 
     resume_stripped = req.resume_content.strip()
+    job_out = JobPostingOut(
+        title=job.title,
+        company=job.company,
+        requirements=job.requirements,
+        keywords=job.keywords,
+        description=job.description,
+    )
+    tpl_draft = (req.session_template_id or "").strip()[:200] or ""
+    if user_id and user_id != "local":
+        pool_d1 = await get_pool()
+        if pool_d1:
+            exp_d = datetime.now(timezone.utc) + timedelta(days=3)
+            try:
+                await optimize_session_draft_upsert(
+                    pool_d1,
+                    user_id=user_id,
+                    payload={
+                        "stage": 1,
+                        "resume_text": resume_stripped,
+                        "job_url": (req.job_url or "").strip() or None,
+                        "job": job_out.model_dump(),
+                        "selected_template_id": tpl_draft or None,
+                    },
+                    expires_at=exp_d,
+                )
+            except Exception as e:
+                logger.warning("optimize_session_draft_upsert stage 1: %s", e)
     out_lang = (req.output_language or "en").strip().lower() or "en"
     kw_result = await asyncio.to_thread(check_keywords, resume_stripped, job)
     alog(
@@ -2795,13 +2921,6 @@ async def api_analyze(req: AnalyzeRequest, user: dict | None = Depends(get_optio
             "rejection_risk_model": insights.rejection_risk_score,
             "callback_blockers_n": len(insights.callback_blockers),
         },
-    )
-    job_out = JobPostingOut(
-        title=job.title,
-        company=job.company,
-        requirements=job.requirements,
-        keywords=job.keywords,
-        description=job.description,
     )
     recommendations = _recommendations_from_insights(
         insights,
@@ -2828,7 +2947,7 @@ async def api_analyze(req: AnalyzeRequest, user: dict | None = Depends(get_optio
         keyword_score=kw_result.score,
         keyword_threshold=settings.filter_keyword_threshold,
     )
-    return AnalyzeResponse(
+    resp = AnalyzeResponse(
         ats_score=ats_score,
         keyword_score=kw_result.score,
         keyword_threshold=settings.filter_keyword_threshold,
@@ -2841,6 +2960,38 @@ async def api_analyze(req: AnalyzeRequest, user: dict | None = Depends(get_optio
         improvement_tips=insights.improvement_tips,
         admin_pipeline_log=pipe if is_admin else None,
     )
+    resume_tok: str | None = None
+    if user_id and user_id != "local":
+        pool_d2 = await get_pool()
+        if pool_d2:
+            exp_d2 = datetime.now(timezone.utc) + timedelta(days=3)
+            analyze_dump = resp.model_dump(mode="json")
+            analyze_dump.pop("resume_session_token", None)
+            if not is_admin:
+                analyze_dump.pop("admin_pipeline_log", None)
+            try:
+                await optimize_session_draft_upsert(
+                    pool_d2,
+                    user_id=user_id,
+                    payload={
+                        "stage": 2,
+                        "resume_text": resume_stripped,
+                        "job_url": (req.job_url or "").strip() or None,
+                        "job": job_out.model_dump(),
+                        "pre_ats_score": resp.ats_score,
+                        "pre_keyword_score": resp.keyword_score,
+                        "recommendations": [r.model_dump() for r in resp.recommendations],
+                        "analyze": analyze_dump,
+                        "selected_template_id": tpl_draft or None,
+                    },
+                    expires_at=exp_d2,
+                )
+                resume_tok = create_session_draft_token(user_id, exp_d2)
+            except Exception as e:
+                logger.warning("optimize_session_draft_upsert stage 2: %s", e)
+    if resume_tok:
+        resp = resp.model_copy(update={"resume_session_token": resume_tok})
+    return resp
 
 
 async def _run_optimize(
@@ -3306,6 +3457,7 @@ async def _run_optimize(
             photo_snap = _sanitize_photo_for_snapshot(req.session_photo_data_url)
             analyze_snap = _sanitize_session_analyze_payload(req.session_analyze)
             payload_snap: dict[str, Any] = {
+                "stage": 4,
                 "job": job_out.model_dump(),
                 "validation": validation_out.model_dump(),
                 "key_changes": [c.model_dump() for c in key_changes_out] if key_changes_out else [],
@@ -3334,6 +3486,10 @@ async def _run_optimize(
                 base_pub = (settings.email_public_base_url or settings.frontend_url or "").strip().rstrip("/")
                 snapshot_url_out = f"{base_pub}/optimize?resume={quote(tok, safe='')}"
                 snapshot_expires_at_out = snap_exp.isoformat()
+                try:
+                    await optimize_session_draft_delete(pool_done, opt_uid)
+                except Exception as e:
+                    logger.warning("optimize_session_draft_delete: %s", e)
         except Exception as e:
             logger.warning("optimization_snapshot_insert: %s", e)
 
@@ -3952,6 +4108,179 @@ async def api_admin_email_cta_info(
     return AdminEmailCtaInfoOut(**d)
 
 
+def _admin_dt_iso(v: Any) -> str | None:
+    if v is None:
+        return None
+    if isinstance(v, datetime):
+        if v.tzinfo is None:
+            v = v.replace(tzinfo=timezone.utc)
+        return v.isoformat()
+    return str(v)
+
+
+def _build_admin_automation_list_out(cfg: dict[str, Any], pending_global: int) -> AdminEmailAutomationsListOut:
+    states = parse_automation_states(cfg.get("automation_states"))
+    items: list[AdminEmailAutomationItemOut] = []
+    for a in AUTOMATION_DEFINITIONS:
+        aid = a["id"]
+        enabled = False
+        paused = False
+        pend: int | None = None
+        sup_en = False
+        sup_pause = False
+        sup_clear = False
+        if aid == "post_optimize_winback":
+            enabled = bool(cfg.get("winback_auto_enabled"))
+            row = states.get(aid)
+            paused = bool((row or {}).get("paused")) if isinstance(row, dict) else False
+            pend = pending_global
+            sup_en = True
+            sup_pause = True
+            sup_clear = True
+        elif aid == "segment_optimized_unpaid":
+            enabled = True
+        elif aid == "draft_analyze_followup":
+            enabled = False
+        items.append(
+            AdminEmailAutomationItemOut(
+                id=aid,
+                name=a["name"],
+                description=a["description"],
+                channel=a["channel"],
+                dedupe_summary=a["dedupe_summary"],
+                conditions_code=a["conditions_code"],
+                wired=a["wired"],
+                enabled=enabled,
+                paused=paused,
+                pending_queue_count=pend,
+                supports_enable_toggle=sup_en,
+                supports_pause=sup_pause,
+                supports_clear_queue=sup_clear,
+            )
+        )
+    return AdminEmailAutomationsListOut(items=items, global_pending_queue_count=pending_global)
+
+
+@router.get("/admin/email/automations", response_model=AdminEmailAutomationsListOut)
+async def api_admin_email_automations(_admin: dict = Depends(get_admin_user)) -> AdminEmailAutomationsListOut:
+    pool = await get_pool()
+    if pool is None:
+        raise HTTPException(503, "Database not configured")
+    cfg = await admin_email_settings_get(pool)
+    pending = await email_winback_pending_count(pool)
+    return _build_admin_automation_list_out(cfg, pending)
+
+
+@router.patch("/admin/email/automations/{automation_id}", response_model=AdminEmailAutomationsListOut)
+async def api_admin_email_automations_patch(
+    automation_id: str,
+    body: AdminEmailAutomationPatchBody,
+    _admin: dict = Depends(get_admin_user),
+) -> AdminEmailAutomationsListOut:
+    pool = await get_pool()
+    if pool is None:
+        raise HTTPException(503, "Database not configured")
+    aid = (automation_id or "").strip()
+    if automation_def_by_id(aid) is None:
+        raise HTTPException(404, "Unknown automation")
+    if aid == "segment_optimized_unpaid":
+        raise HTTPException(400, "This flow is manual only — use the segment section below (no enable/pause).")
+    if aid == "draft_analyze_followup":
+        raise HTTPException(400, "Automation is planned but not wired yet.")
+    if aid != "post_optimize_winback":
+        raise HTTPException(400, "Unsupported automation for PATCH")
+    if body.enabled is None and body.paused is None:
+        raise HTTPException(400, "Provide enabled and/or paused")
+    st_patch: dict[str, Any] | None = None
+    if body.paused is not None:
+        st_patch = {"post_optimize_winback": {"paused": body.paused}}
+    await admin_email_settings_update(
+        pool,
+        winback_auto_enabled=body.enabled,
+        automation_states=st_patch,
+    )
+    cfg = await admin_email_settings_get(pool)
+    pending = await email_winback_pending_count(pool)
+    return _build_admin_automation_list_out(cfg, pending)
+
+
+@router.post("/admin/email/automations/{automation_id}/clear-pending-queue", response_model=AdminEmailClearQueueOut)
+async def api_admin_email_automations_clear_queue(
+    automation_id: str,
+    _admin: dict = Depends(get_admin_user),
+) -> AdminEmailClearQueueOut:
+    pool = await get_pool()
+    if pool is None:
+        raise HTTPException(503, "Database not configured")
+    aid = (automation_id or "").strip()
+    if aid != "post_optimize_winback":
+        raise HTTPException(400, "Only post_optimize_winback uses the shared pending queue today.")
+    n = await email_winback_delete_all_pending(pool)
+    return AdminEmailClearQueueOut(deleted=n)
+
+
+@router.get("/admin/email/user-journey", response_model=AdminUserJourneyOut)
+async def api_admin_email_user_journey(
+    email: str = Query(..., min_length=3, max_length=254),
+    _admin: dict = Depends(get_admin_user),
+) -> AdminUserJourneyOut:
+    pool = await get_pool()
+    if pool is None:
+        raise HTTPException(503, "Database not configured")
+    em = email.strip()
+    u = await user_get_by_email(pool, em)
+    if not u:
+        return AdminUserJourneyOut(
+            email=em,
+            user_found=False,
+            optimize_snapshot=AdminOptimizeSnapshotSummaryOut(has_valid=False),
+        )
+    uid = str(u["id"])
+    sub = await user_get_subscription(pool, uid)
+    draft_row = await optimize_session_draft_get(pool, uid)
+    draft_out: AdminOptimizeDraftSummaryOut | None = None
+    if draft_row:
+        pl_d = _draft_payload_dict(draft_row)
+        draft_out = AdminOptimizeDraftSummaryOut(
+            stage=_snap_int_field(pl_d.get("stage")),
+            expires_at=_admin_dt_iso(draft_row.get("expires_at")),
+            updated_at=_admin_dt_iso(draft_row.get("updated_at")),
+        )
+    snap_row = await optimization_snapshot_get_latest_valid(pool, uid)
+    snap_sum = AdminOptimizeSnapshotSummaryOut(has_valid=False)
+    if snap_row:
+        pl_s = _optimization_snapshot_payload(snap_row)
+        snap_sum = AdminOptimizeSnapshotSummaryOut(
+            has_valid=True,
+            expires_at=_admin_dt_iso(snap_row.get("expires_at")),
+            stage=_snap_int_field(pl_s.get("stage")),
+            created_at=_admin_dt_iso(snap_row.get("created_at")),
+        )
+    wb_rows = await email_winback_pending_list_for_user(pool, uid)
+    wb_out: list[AdminWinbackPendingItemOut] = []
+    for r in wb_rows:
+        wb_out.append(
+            AdminWinbackPendingItemOut(
+                id=str(r.get("id") or ""),
+                run_at=_admin_dt_iso(r.get("run_at")) or "",
+                template_id=str(r.get("template_id") or ""),
+                status=str(r.get("status") or ""),
+            )
+        )
+    return AdminUserJourneyOut(
+        email=em,
+        user_found=True,
+        user_id=uid,
+        marketing_emails_opt_in=u.get("marketing_emails_opt_in"),
+        subscription_plan=(sub or {}).get("plan"),
+        subscription_status=(sub or {}).get("status"),
+        admin_blocked=bool(u.get("admin_blocked")),
+        optimize_draft=draft_out,
+        optimize_snapshot=snap_sum,
+        winback_pending=wb_out,
+    )
+
+
 @router.post("/admin/email/segment/preview", response_model=AdminEmailSegmentPreviewOut)
 async def api_admin_email_segment_preview(
     body: AdminEmailSegmentPreviewBody,
@@ -4237,6 +4566,62 @@ async def _build_optimization_snapshot_public_out(row: dict[str, Any], user_id: 
     )
 
 
+def _draft_payload_dict(row: dict[str, Any]) -> dict[str, Any]:
+    pl = row.get("payload") or {}
+    if isinstance(pl, str):
+        try:
+            return json.loads(pl)
+        except Exception:
+            return {}
+    if isinstance(pl, dict):
+        return pl
+    return {}
+
+
+def _build_session_draft_restore_out(row: dict[str, Any]) -> SessionDraftRestoreOut:
+    exp = row.get("expires_at")
+    if exp is None:
+        exp_s = ""
+    elif isinstance(exp, datetime):
+        if exp.tzinfo is None:
+            exp = exp.replace(tzinfo=timezone.utc)
+        exp_s = exp.isoformat()
+    else:
+        exp_s = str(exp)
+    pl = _draft_payload_dict(row)
+    stage = int(pl.get("stage") or 0)
+    resume_content = str(pl.get("resume_text") or pl.get("resume_content") or "")
+    ju = pl.get("job_url")
+    job_url_out: str | None = None
+    if ju is not None:
+        js = str(ju).strip()
+        job_url_out = js or None
+    job_d = pl.get("job") or {}
+    try:
+        job_out = JobPostingOut.model_validate(job_d)
+    except Exception:
+        job_out = JobPostingOut(title="", company="", requirements=[], keywords=[], description="")
+    analyze_out: AnalyzeResponse | None = None
+    ar = pl.get("analyze")
+    if isinstance(ar, dict):
+        try:
+            pad = {k: v for k, v in ar.items() if k != "admin_pipeline_log"}
+            analyze_out = AnalyzeResponse.model_validate(pad)
+        except Exception:
+            analyze_out = None
+    tpl_raw = pl.get("selected_template_id")
+    tpl_out = str(tpl_raw).strip()[:200] if tpl_raw is not None and str(tpl_raw).strip() else None
+    return SessionDraftRestoreOut(
+        expires_at=exp_s,
+        stage=stage,
+        resume_content=resume_content,
+        job_url=job_url_out,
+        job=job_out,
+        analyze=analyze_out,
+        selected_template_id=tpl_out or None,
+    )
+
+
 @router.get("/optimization-snapshot", response_model=OptimizationSnapshotPublicOut)
 async def api_optimization_snapshot(token: str = Query("", min_length=10)) -> OptimizationSnapshotPublicOut:
     """Public JSON for saved optimize result (JWT from email or last run). No login."""
@@ -4259,33 +4644,51 @@ async def api_optimization_snapshot(token: str = Query("", min_length=10)) -> Op
     return await _build_optimization_snapshot_public_out(row, uid)
 
 
-@router.get("/optimization-snapshot/for-me", response_model=OptimizationSnapshotPublicOut)
+@router.get("/optimization-snapshot/for-me", response_model=OptimizationResumeRestoreOut)
 async def api_optimization_snapshot_for_me(
     token: str = Query("", min_length=10),
     user: dict = Depends(get_current_user),
-) -> OptimizationSnapshotPublicOut:
-    """Same as public snapshot JSON, but requires login and JWT user must match session (safe in-app restore)."""
+) -> OptimizationResumeRestoreOut:
+    """Snapshot (completed optimize) or mid-flow draft (session_draft JWT); requires login."""
     if not user or user.get("id") == "local":
         raise HTTPException(401, "Sign in to restore this session")
     pool = await get_pool()
     if pool is None:
         raise HTTPException(503, "Database not configured")
     payload = decode_token(token.strip())
-    if not payload or payload.get("purpose") != "optimize_snapshot":
+    if not payload:
         raise HTTPException(401, "Invalid or expired link")
+    purpose = str(payload.get("purpose") or "")
     uid = str(payload.get("sub") or "").strip()
-    sid = str(payload.get("sid") or "").strip()
-    if not uid or not sid:
+    if not uid:
         raise HTTPException(400, "Invalid link payload")
     if uid != str(user.get("id") or ""):
         raise HTTPException(403, "This link belongs to another account")
-    row = await optimization_snapshot_get_by_id_for_user(pool, snapshot_id=sid, user_id=uid)
-    if not row:
-        raise HTTPException(404, "Saved result not found")
-    exp = _optimization_snapshot_row_expires_at(row)
-    if exp <= datetime.now(timezone.utc):
-        raise HTTPException(410, "This saved result has expired")
-    return await _build_optimization_snapshot_public_out(row, uid)
+    if purpose == "optimize_snapshot":
+        sid = str(payload.get("sid") or "").strip()
+        if not sid:
+            raise HTTPException(400, "Invalid link payload")
+        row = await optimization_snapshot_get_by_id_for_user(pool, snapshot_id=sid, user_id=uid)
+        if not row:
+            raise HTTPException(404, "Saved result not found")
+        exp = _optimization_snapshot_row_expires_at(row)
+        if exp <= datetime.now(timezone.utc):
+            raise HTTPException(410, "This saved result has expired")
+        complete = await _build_optimization_snapshot_public_out(row, uid)
+        return OptimizationResumeRestoreOut(kind="complete", complete=complete, draft=None)
+    if purpose == "session_draft":
+        drow = await optimize_session_draft_get(pool, uid)
+        if not drow:
+            raise HTTPException(404, "No saved in-progress session")
+        exp_d = drow.get("expires_at")
+        if isinstance(exp_d, datetime):
+            if exp_d.tzinfo is None:
+                exp_d = exp_d.replace(tzinfo=timezone.utc)
+            if exp_d <= datetime.now(timezone.utc):
+                raise HTTPException(410, "This session link has expired")
+        draft = _build_session_draft_restore_out(drow)
+        return OptimizationResumeRestoreOut(kind="draft", complete=None, draft=draft)
+    raise HTTPException(401, "Invalid or expired link")
 
 
 @router.get("/optimization-snapshot/pdf")

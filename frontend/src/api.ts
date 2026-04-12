@@ -110,11 +110,26 @@ export function optimizationSnapshotPdfUrl(token: string): string {
   return `${API}/optimization-snapshot/pdf?${q.toString()}`;
 }
 
-export type OptimizationSnapshotFetchResult =
-  | { ok: true; data: OptimizationSnapshotPublic }
+export type SessionDraftRestore = {
+  expires_at: string;
+  stage: number;
+  resume_content: string;
+  job_url?: string | null;
+  job: JobPostingOut;
+  analyze?: AnalyzeResponse | null;
+  selected_template_id?: string | null;
+};
+
+/** GET /optimization-snapshot/for-me — completed snapshot or mid-flow draft. */
+export type OptimizationResumeRestore =
+  | { kind: "complete"; complete: OptimizationSnapshotPublic; draft?: null }
+  | { kind: "draft"; draft: SessionDraftRestore; complete?: null };
+
+export type OptimizationResumeFetchResult =
+  | { ok: true; data: OptimizationResumeRestore }
   | { ok: false; status: number; detail: string };
 
-export async function fetchOptimizationSnapshotForMe(token: string): Promise<OptimizationSnapshotFetchResult> {
+export async function fetchOptimizationSnapshotForMe(token: string): Promise<OptimizationResumeFetchResult> {
   const q = new URLSearchParams({ token });
   const r = await fetch(`${API}/optimization-snapshot/for-me?${q.toString()}`, {
     headers: authHeaders(),
@@ -135,7 +150,18 @@ export async function fetchOptimizationSnapshotForMe(token: string): Promise<Opt
         : r.statusText || "Request failed";
     return { ok: false, status: r.status, detail };
   }
-  return { ok: true, data: parsed as OptimizationSnapshotPublic };
+  const o = parsed as { kind?: string; complete?: OptimizationSnapshotPublic; draft?: SessionDraftRestore };
+  if (o?.kind === "draft" && o.draft) {
+    return { ok: true, data: { kind: "draft", draft: o.draft } };
+  }
+  if (o?.kind === "complete" && o.complete) {
+    return { ok: true, data: { kind: "complete", complete: o.complete } };
+  }
+  return {
+    ok: false,
+    status: 502,
+    detail: "Unexpected restore payload",
+  };
 }
 
 export async function fetchOptimizationSnapshot(token: string): Promise<OptimizationSnapshotFetchResult> {
@@ -305,6 +331,8 @@ export type AnalyzeResponse = {
   ats_score: number;
   keyword_score: number;
   keyword_threshold: number;
+  /** Server-issued JWT to reopen /optimize after analyze (purpose session_draft). */
+  resume_session_token?: string | null;
   job?: JobPostingOut | null;
   recommendations?: RecommendationItem[];
   /** LLM-provided rejection risk 0-100 */
@@ -339,6 +367,7 @@ export async function analyze(params: {
   job_text?: string;
   job_url?: string;
   output_language?: string;
+  session_template_id?: string;
 }): Promise<AnalyzeResponse> {
   if (isAdminPipelineCaptureEnabled()) {
     appendAdminPipelineLog({
@@ -1300,6 +1329,99 @@ export async function getAdminEmailCtaInfo(email: string): Promise<AdminEmailCta
   const q = encodeURIComponent(email.trim());
   const r = await fetch(`${API}/admin/email/cta-info?email=${q}`, { headers: authHeaders() });
   const data = await parseJsonOrThrow<AdminEmailCtaInfo & { detail?: string }>(r);
+  if (!r.ok) throw new Error((data as { detail?: string }).detail || r.statusText);
+  return data;
+}
+
+export type AdminEmailAutomationItem = {
+  id: string;
+  name: string;
+  description: string;
+  channel: string;
+  dedupe_summary: string;
+  conditions_code: string;
+  wired: boolean;
+  enabled: boolean;
+  paused: boolean;
+  pending_queue_count: number | null;
+  supports_enable_toggle: boolean;
+  supports_pause: boolean;
+  supports_clear_queue: boolean;
+};
+
+export type AdminEmailAutomationsList = {
+  items: AdminEmailAutomationItem[];
+  global_pending_queue_count: number;
+};
+
+export async function getAdminEmailAutomations(): Promise<AdminEmailAutomationsList> {
+  const r = await fetch(`${API}/admin/email/automations`, { headers: authHeaders() });
+  const data = await parseJsonOrThrow<AdminEmailAutomationsList & { detail?: string }>(r);
+  if (!r.ok) throw new Error((data as { detail?: string }).detail || r.statusText);
+  return data;
+}
+
+export async function patchAdminEmailAutomation(
+  automationId: string,
+  body: { enabled?: boolean; paused?: boolean },
+): Promise<AdminEmailAutomationsList> {
+  const r = await fetch(`${API}/admin/email/automations/${encodeURIComponent(automationId)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(body),
+  });
+  const data = await parseJsonOrThrow<AdminEmailAutomationsList & { detail?: string }>(r);
+  if (!r.ok) throw new Error((data as { detail?: string }).detail || r.statusText);
+  return data;
+}
+
+export async function postAdminEmailClearPendingQueue(automationId: string): Promise<{ deleted: number }> {
+  const r = await fetch(
+    `${API}/admin/email/automations/${encodeURIComponent(automationId)}/clear-pending-queue`,
+    { method: "POST", headers: authHeaders() },
+  );
+  const data = await parseJsonOrThrow<{ deleted: number; detail?: string }>(r);
+  if (!r.ok) throw new Error(data.detail || r.statusText);
+  return { deleted: data.deleted };
+}
+
+export type AdminWinbackPendingItem = {
+  id: string;
+  run_at: string;
+  template_id: string;
+  status: string;
+};
+
+export type AdminOptimizeDraftSummary = {
+  stage: number | null;
+  expires_at: string | null;
+  updated_at: string | null;
+};
+
+export type AdminOptimizeSnapshotSummary = {
+  has_valid: boolean;
+  expires_at: string | null;
+  stage: number | null;
+  created_at: string | null;
+};
+
+export type AdminUserJourney = {
+  email: string;
+  user_found: boolean;
+  user_id: string | null;
+  marketing_emails_opt_in: boolean | null;
+  subscription_plan: string | null;
+  subscription_status: string | null;
+  admin_blocked: boolean | null;
+  optimize_draft: AdminOptimizeDraftSummary | null;
+  optimize_snapshot: AdminOptimizeSnapshotSummary;
+  winback_pending: AdminWinbackPendingItem[];
+};
+
+export async function getAdminUserJourney(email: string): Promise<AdminUserJourney> {
+  const q = encodeURIComponent(email.trim());
+  const r = await fetch(`${API}/admin/email/user-journey?email=${q}`, { headers: authHeaders() });
+  const data = await parseJsonOrThrow<AdminUserJourney & { detail?: string }>(r);
   if (!r.ok) throw new Error((data as { detail?: string }).detail || r.statusText);
   return data;
 }

@@ -550,7 +550,8 @@ const en = {
     email: {
       groups: {
         title: "Email groups",
-        subtitle: "Live segment counts use the same rules as Automation & send. Use that page to preview recipients and send (or dry-run).",
+        subtitle:
+          "Live segment counts use the same rules as Automation & send. Open Automation & send for the automation catalog, user journey inspector, segment send, and queue controls.",
         resendNoteTitle: "Resend API key",
         resendNoteBody:
           "Put your key only in server environment variables (e.g. RESEND_API_KEY, RESEND_FROM). Never paste API keys into the frontend or git. If a key was shared in chat, revoke it in Resend and create a new one.",
@@ -591,7 +592,7 @@ const en = {
       send: {
         title: "Automation & send",
         subtitle:
-          "Turn on delayed win-back after a successful optimize (free users only). Preview a segment, dry-run, then send real mail via Resend. Call “Process queue” periodically (or add a cron hitting POST /api/admin/email/queue/process).",
+          "Catalog of automated and manual email flows, per-user funnel inspection, then templates, queue, and segment tools. Cron: POST /api/admin/email/queue/process (paused automations skip processing).",
         resendOk: "Resend is configured (API key + From).",
         resendMissing: "Set RESEND_API_KEY and RESEND_FROM on the server to send real email.",
         deliveryDocHint: "Full setup (Resend templates vs inline HTML, variables, cron): see docs/EMAIL_RESEND.md in the repo.",
@@ -636,7 +637,7 @@ const en = {
         loadErr: "Could not load email control",
         queueTitle: "Scheduled queue",
         queueHint:
-          "Shows how many win-back sends are waiting for their send time. “Process queue” sends up to the limit of due rows (checks again that the user is still unpaid).",
+          "Shows how many win-back sends are waiting for their send time. If “Post-optimize win-back” is Paused in Automations, processing returns without sending. “Process queue” sends up to the limit of due rows (checks again that the user is still unpaid).",
         pendingLabel: "Pending in queue",
         processQueue: "Process queue now",
         processResult: "Last process result",
@@ -661,6 +662,50 @@ const en = {
         failed: "Failed",
         attempted: "Attempted",
         previewFirst: "Preview the segment first.",
+        automationsTitle: "Email automations",
+        automationsSubtitle:
+          "Each block is defined in code (see email_automation_registry.py). Use Start/Stop for scheduling, Pause to freeze new schedules and queue processing, Clear queue to cancel all pending rows (no undo).",
+        automationChannel: "Channel",
+        automationWired: "Wired to backend",
+        automationWiredNo: "Planned — not wired",
+        automationDedupe: "Dedupe / safety",
+        automationConditions: "Conditions (code reference)",
+        statusPlanned: "Planned",
+        statusManual: "Manual only",
+        statusRunning: "Running",
+        statusStopped: "Stopped",
+        statusPaused: "Paused",
+        btnStart: "Start",
+        btnStop: "Stop",
+        btnPause: "Pause",
+        btnResume: "Resume",
+        btnClearQueue: "Clear pending queue",
+        clearQueueConfirm:
+          "Delete ALL {n} pending win-back rows in the database? Users will not receive those scheduled emails. This cannot be undone.",
+        clearQueueConfirmFinal: "Second confirmation: permanently remove every pending win-back job?",
+        automationPatchErr: "Could not update automation",
+        automationLoadErr: "Could not load automations",
+        segmentUseBelow: "Use the “Manual send to segment” section below — no toggle here.",
+        journeyTitle: "User funnel & queue",
+        journeySubtitle:
+          "Uses the same email as Quick send. Shows optimize draft stage (1–2), latest snapshot (stage 4), and pending win-back rows for dedupe checks.",
+        journeyLoad: "Load user journey",
+        journeyLoading: "Loading…",
+        journeyErr: "Could not load journey",
+        journeyNotFound: "No account with this email.",
+        journeyUserId: "User id",
+        journeySubscription: "Subscription",
+        journeyMarketing: "Marketing opt-in",
+        journeyBlocked: "Admin blocked",
+        journeyDraft: "Optimize draft (DB)",
+        journeyDraftNone: "No active draft row",
+        journeySnapshot: "Latest optimize snapshot",
+        journeySnapshotNone: "No valid snapshot",
+        journeyWinback: "Pending win-back rows",
+        journeyWinbackNone: "None",
+        journeyStage: "Stage {n}",
+        journeyExpires: "Expires",
+        journeyRunAt: "Scheduled",
       },
     },
     dashboard: {

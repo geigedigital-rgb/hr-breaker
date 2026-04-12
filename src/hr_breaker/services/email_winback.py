@@ -16,6 +16,8 @@ from hr_breaker.services.auth import (
     create_email_unsubscribe_token,
     create_optimize_snapshot_token,
 )
+from hr_breaker.services.email_automation_registry import is_post_optimize_winback_paused
+
 from hr_breaker.services.db import (
     admin_email_settings_get,
     db_list_all,
@@ -316,6 +318,8 @@ async def maybe_schedule_winback_after_optimize(
         cfg = await admin_email_settings_get(pool)
         if not cfg.get("winback_auto_enabled"):
             return
+        if is_post_optimize_winback_paused(cfg):
+            return
         sub = await user_get_subscription(pool, uid)
         if _user_is_paid(sub):
             return
@@ -361,6 +365,19 @@ async def process_winback_due_batch(pool, *, limit: int = 25) -> dict[str, Any]:
     cfg = await admin_email_settings_get(pool)
     db_r = str(cfg.get("resend_template_reminder_no_download") or "")
     db_n = str(cfg.get("resend_template_short_nudge") or "")
+
+    if is_post_optimize_winback_paused(cfg):
+        return {
+            "ok": True,
+            "paused": True,
+            "message": "Post-optimize win-back is paused in admin; no rows processed.",
+            "claimed": 0,
+            "sent": 0,
+            "skipped_paid": 0,
+            "skipped_marketing": 0,
+            "failed": 0,
+            "errors_sample": [],
+        }
 
     batch = await email_winback_claim_due_batch(pool, min(limit, 100))
     for row in batch:

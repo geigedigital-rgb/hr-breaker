@@ -1262,7 +1262,74 @@ export default function Optimize() {
         );
         return;
       }
-      const d = res.data;
+      const bundle = res.data;
+      if (bundle.kind === "draft" && bundle.draft) {
+        const dr = bundle.draft;
+        setError(null);
+        setResult(null);
+        setPostImproveDiagramScore(null);
+        setPostResultFlow("main");
+        setLastUploadedPdfFile(null);
+        setClaimGate(false);
+        setSelectedTemplateId((dr.selected_template_id || "").trim());
+        setPhotoDataUrl(null);
+        setUploadedFileName(null);
+        setResumeSourceWasPdf(false);
+        const jobLine = jobTextFromSnapshotForResume(dr.job, dr.job_url);
+        setJobInput(jobLine);
+        setJobMode((dr.job_url || "").trim() ? "url" : "text");
+        setParsedJob(dr.job);
+        setResumeContent((dr.resume_content || "").trim());
+        if (dr.stage === 1) {
+          setPreScores(null);
+          setStage("idle");
+        } else if (dr.stage === 2) {
+          const pre =
+            dr.analyze ??
+            ({
+              ats_score: 0,
+              keyword_score: 0,
+              keyword_threshold: 0.6,
+              job: dr.job,
+              recommendations: [],
+            } satisfies api.AnalyzeResponse);
+          setPreScores(pre);
+          setStage("assessment");
+        } else {
+          setPreScores(null);
+          setStage("idle");
+        }
+        try {
+          sessionStorage.setItem(api.OPTIMIZE_LAST_SNAPSHOT_JWT_KEY, resumeTokenParam);
+        } catch {
+          /* ignore */
+        }
+        resumeHydratedTokenRef.current = resumeTokenParam;
+        setSearchParams(
+          (prev) => {
+            const next = new URLSearchParams(prev);
+            next.delete(api.OPTIMIZE_RESUME_QUERY_PARAM);
+            return next;
+          },
+          { replace: true },
+        );
+        setResumeBootstrapping(false);
+        return;
+      }
+      const d = bundle.complete;
+      if (!d) {
+        setError(t("optimize.restoreResumeError"));
+        setResumeBootstrapping(false);
+        setSearchParams(
+          (prev) => {
+            const next = new URLSearchParams(prev);
+            next.delete(api.OPTIMIZE_RESUME_QUERY_PARAM);
+            return next;
+          },
+          { replace: true },
+        );
+        return;
+      }
       const jobLine = jobTextFromSnapshotForResume(d.job, d.job_url);
       const rc = (d.optimized_resume_text || "").trim();
       setResumeContent(rc || t("optimize.restoredResumePlaceholder"));
@@ -1512,11 +1579,24 @@ export default function Optimize() {
     setPreScores(null);
     const jobPayload = jobMode === "text" ? { job_text: jobInput.trim() } : { job_url: jobInput.trim() };
     api
-      .analyze({ resume_content: resumeContent.trim(), ...jobPayload, output_language: api.getOutputLanguage() })
+      .analyze({
+        resume_content: resumeContent.trim(),
+        ...jobPayload,
+        output_language: api.getOutputLanguage(),
+        session_template_id: selectedTemplateId.trim() || undefined,
+      })
       .then((data) => {
         if (!analyzeMountedRef.current) return;
         setPreScores(data);
         if (data.job) setParsedJob(data.job);
+        const rt = (data.resume_session_token || "").trim();
+        if (rt) {
+          try {
+            sessionStorage.setItem(api.OPTIMIZE_LAST_SNAPSHOT_JWT_KEY, rt);
+          } catch {
+            /* ignore */
+          }
+        }
         void refreshUser();
       })
       .catch((e) => {
@@ -1539,7 +1619,7 @@ export default function Optimize() {
       .finally(() => {
         if (analyzeMountedRef.current) setIsAnalyzing(false);
       });
-  }, [stage, hasResume, hasJob, jobMode, jobInput, resumeContent, result, refreshUser]);
+  }, [stage, hasResume, hasJob, jobMode, jobInput, resumeContent, result, refreshUser, selectedTemplateId]);
 
   // PDF thumbnail on assessment when user is not logged in (no register-upload path).
   useEffect(() => {

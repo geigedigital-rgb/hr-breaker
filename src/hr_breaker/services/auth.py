@@ -88,6 +88,30 @@ def create_email_unsubscribe_token(user_id: str) -> str:
     )
 
 
+def create_session_draft_token(user_id: str, expires_at: datetime) -> str:
+    """JWT to restore in-progress optimize session (analyze draft) for the same user."""
+    try:
+        import jwt
+    except ImportError:
+        raise RuntimeError("PyJWT not installed. Install: pip install 'hr-breaker[auth]'")
+    settings = get_settings()
+    if not settings.jwt_secret:
+        raise ValueError("JWT_SECRET not set in .env")
+    exp = expires_at if expires_at.tzinfo else expires_at.replace(tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc)
+    payload = {
+        "sub": user_id,
+        "purpose": "session_draft",
+        "exp": exp,
+        "iat": now,
+    }
+    return jwt.encode(
+        payload,
+        settings.jwt_secret,
+        algorithm=settings.jwt_algorithm,
+    )
+
+
 def create_optimize_snapshot_token(user_id: str, snapshot_id: str, expires_at: datetime) -> str:
     """JWT to open a saved optimization snapshot page (expires with snapshot TTL)."""
     try:

@@ -7,6 +7,7 @@ PDF and source .txt files stay on disk; only metadata is in the DB.
 Requires: pip install 'hr-breaker[db]'
 """
 
+import json
 import logging
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -280,6 +281,9 @@ async def init_table(pool) -> None:
             "ALTER TABLE admin_email_settings ADD COLUMN IF NOT EXISTS resend_template_short_nudge TEXT NOT NULL DEFAULT ''"
         )
         await conn.execute(
+            "ALTER TABLE admin_email_settings ADD COLUMN IF NOT EXISTS automation_states JSONB NOT NULL DEFAULT '{}'::jsonb"
+        )
+        await conn.execute(
             f"""
             CREATE TABLE IF NOT EXISTS email_winback_schedule (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -335,6 +339,19 @@ async def init_table(pool) -> None:
         )
         await conn.execute(
             "DELETE FROM optimization_snapshots WHERE expires_at < NOW() - INTERVAL '30 days'"
+        )
+        await conn.execute(
+            f"""
+            CREATE TABLE IF NOT EXISTS optimize_session_drafts (
+                user_id UUID PRIMARY KEY REFERENCES {USERS_TABLE}(id) ON DELETE CASCADE,
+                payload JSONB NOT NULL DEFAULT '{{}}'::jsonb,
+                expires_at TIMESTAMPTZ NOT NULL,
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+            """
+        )
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_opt_session_drafts_expires ON optimize_session_drafts (expires_at)"
         )
 
 
@@ -1370,6 +1387,63 @@ ADMIN_EMAIL_SETTINGS_TABLE = "admin_email_settings"
 EMAIL_WINBACK_SCHEDULE_TABLE = "email_winback_schedule"
 ADMIN_EMAIL_CAMPAIGN_LOG_TABLE = "admin_email_campaign_log"
 OPTIMIZATION_SNAPSHOTS_TABLE = "optimization_snapshots"
+OPTIMIZE_SESSION_DRAFTS_TABLE = "optimize_session_drafts"
+
+
+async def optimize_session_draft_upsert(
+    pool,
+    *,
+    user_id: str,
+    payload: dict[str, Any],
+    expires_at: datetime,
+) -> None:
+    """One draft row per user; only replace if new payload stage >= existing stage (numeric)."""
+    t = OPTIMIZE_SESSION_DRAFTS_TABLE
+    async with pool.acquire() as conn:
+        await conn.execute(
+            f"""
+            INSERT INTO {t} (user_id, payload, expires_at, updated_at)
+            VALUES ($1::uuid, $2::jsonb, $3, NOW())
+            ON CONFLICT (user_id) DO UPDATE SET
+                payload = CASE
+                    WHEN coalesce((EXCLUDED.payload->>'stage')::int, 0)
+                         >= coalesce(({t}.payload->>'stage')::int, 0)
+                    THEN EXCLUDED.payload
+                    ELSE {t}.payload
+                END,
+                expires_at = CASE
+                    WHEN coalesce((EXCLUDED.payload->>'stage')::int, 0)
+                         >= coalesce(({t}.payload->>'stage')::int, 0)
+                    THEN EXCLUDED.expires_at
+                    ELSE {t}.expires_at
+                END,
+                updated_at = NOW()
+            """,
+            user_id,
+            payload,
+            expires_at,
+        )
+
+
+async def optimize_session_draft_get(pool, user_id: str) -> dict[str, Any] | None:
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            f"""
+            SELECT user_id, payload, expires_at, updated_at
+            FROM {OPTIMIZE_SESSION_DRAFTS_TABLE}
+            WHERE user_id = $1::uuid AND expires_at > NOW()
+            """,
+            user_id,
+        )
+    return dict(row) if row else None
+
+
+async def optimize_session_draft_delete(pool, user_id: str) -> None:
+    async with pool.acquire() as conn:
+        await conn.execute(
+            f"DELETE FROM {OPTIMIZE_SESSION_DRAFTS_TABLE} WHERE user_id = $1::uuid",
+            user_id,
+        )
 
 
 async def admin_email_settings_get(pool) -> dict[str, Any]:
@@ -1382,14 +1456,26 @@ async def admin_email_settings_get(pool) -> dict[str, Any]:
             "winback_delay_max_minutes": 30,
             "resend_template_reminder_no_download": "",
             "resend_template_short_nudge": "",
+            "automation_states": {},
         }
     d = dict(row)
+    raw_as = d.get("automation_states")
+    if isinstance(raw_as, str):
+        try:
+            automation_states = json.loads(raw_as)
+        except Exception:
+            automation_states = {}
+    elif isinstance(raw_as, dict):
+        automation_states = dict(raw_as)
+    else:
+        automation_states = {}
     return {
         "winback_auto_enabled": bool(d.get("winback_auto_enabled")),
         "winback_delay_min_minutes": int(d.get("winback_delay_min_minutes") or 25),
         "winback_delay_max_minutes": int(d.get("winback_delay_max_minutes") or 30),
         "resend_template_reminder_no_download": str(d.get("resend_template_reminder_no_download") or "")[:200],
         "resend_template_short_nudge": str(d.get("resend_template_short_nudge") or "")[:200],
+        "automation_states": automation_states,
     }
 
 
@@ -1401,6 +1487,7 @@ async def admin_email_settings_update(
     winback_delay_max_minutes: int | None = None,
     resend_template_reminder_no_download: str | None = None,
     resend_template_short_nudge: str | None = None,
+    automation_states: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     cur = await admin_email_settings_get(pool)
     n_auto = cur["winback_auto_enabled"] if winback_auto_enabled is None else bool(winback_auto_enabled)
@@ -1424,6 +1511,17 @@ async def admin_email_settings_update(
         n_max = n_min
     if n_max > 180:
         n_max = 180
+    merged_states: dict[str, Any] = dict(cur.get("automation_states") or {})
+    if automation_states is not None:
+        for k, v in automation_states.items():
+            ks = str(k).strip()[:80]
+            if not ks:
+                continue
+            if isinstance(v, dict):
+                prev = merged_states.get(ks) if isinstance(merged_states.get(ks), dict) else {}
+                merged_states[ks] = {**(prev or {}), **{kk: vv for kk, vv in v.items() if isinstance(kk, str)}}
+            else:
+                merged_states[ks] = v
     async with pool.acquire() as conn:
         await conn.execute(
             f"""
@@ -1433,6 +1531,7 @@ async def admin_email_settings_update(
                 winback_delay_max_minutes = $4,
                 resend_template_reminder_no_download = $5,
                 resend_template_short_nudge = $6,
+                automation_states = $7::jsonb,
                 updated_at = NOW()
             WHERE id = $1
             """,
@@ -1442,6 +1541,7 @@ async def admin_email_settings_update(
             n_max,
             n_tr,
             n_tn,
+            json.dumps(merged_states),
         )
     return await admin_email_settings_get(pool)
 
@@ -1711,6 +1811,36 @@ async def email_winback_pending_count(pool) -> int:
             f"SELECT COUNT(*)::int AS c FROM {EMAIL_WINBACK_SCHEDULE_TABLE} WHERE status = 'pending'"
         )
     return int(row["c"]) if row else 0
+
+
+async def email_winback_pending_list_for_user(pool, user_id: str) -> list[dict[str, Any]]:
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            f"""
+            SELECT id::text AS id, run_at, template_id, status, created_at
+            FROM {EMAIL_WINBACK_SCHEDULE_TABLE}
+            WHERE user_id = $1::uuid AND status = 'pending'
+            ORDER BY run_at ASC
+            """,
+            user_id,
+        )
+    return [dict(r) for r in rows]
+
+
+async def email_winback_delete_all_pending(pool) -> int:
+    """Admin: cancel every pending win-back row (dangerous). Returns deleted count."""
+    async with pool.acquire() as conn:
+        tag = await conn.execute(
+            f"DELETE FROM {EMAIL_WINBACK_SCHEDULE_TABLE} WHERE status = 'pending'",
+        )
+    # asyncpg execute returns e.g. "DELETE 42"
+    s = str(tag)
+    if s.upper().startswith("DELETE "):
+        try:
+            return int(s.split()[-1])
+        except Exception:
+            return 0
+    return 0
 
 
 async def email_winback_delete_pending_for_user(pool, user_id: str) -> None:
