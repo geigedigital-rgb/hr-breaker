@@ -33,14 +33,23 @@ export function prepareEmailHtmlForAdminPreview(html: string): string {
   const origin = getEmailAssetOrigin();
   let h = html;
   if (origin) {
+    h = h.replace(/\{\{\{LOGO_URL\}\}\}/g, `${origin}/logo-color.svg`);
+    h = h.replace(/\{\{\{HERO_IMAGE_URL\}\}\}/g, `${origin}/email/hero-winback.svg`);
     h = h.replace(/\{\{logo_url\}\}/g, `${origin}/logo-color.svg`);
     h = h.replace(/\{\{hero_image_url\}\}/g, `${origin}/email/hero-winback.svg`);
+    h = h.replace(/\{\{\{DOWNLOAD_URL\}\}\}/g, "#");
+    h = h.replace(/\{\{\{RESUME_URL\}\}\}/g, "#");
+    h = h.replace(/\{\{download_url\}\}/g, "#");
+    h = h.replace(/\{\{\{UNSUBSCRIBE_LINK\}\}\}/g, `${origin}/api/email/unsubscribe?token=…`);
     h = h.replace(/\{\{unsubscribe_url\}\}/g, `${origin}/api/email/unsubscribe?token=…`);
   } else {
+    h = h.replace(/\{\{\{LOGO_URL\}\}\}/g, "about:blank");
+    h = h.replace(/\{\{\{HERO_IMAGE_URL\}\}\}/g, "about:blank");
     h = h.replace(/\{\{logo_url\}\}/g, "about:blank");
     h = h.replace(/\{\{hero_image_url\}\}/g, "about:blank");
   }
   h = h.replace(/\{\{[\w]+\}\}/g, "#");
+  h = h.replace(/\{\{\{[A-Z0-9_]+\}\}\}/g, "#");
   return h;
 }
 

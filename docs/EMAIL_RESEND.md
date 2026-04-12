@@ -64,16 +64,22 @@ RESEND_TEMPLATE_SHORT_NUDGE=
 ### 3.1 Создать шаблон
 
 1. Resend → **Templates** → Create.
-2. Сверстать письмо. Вместо жёстких URL вставить **переменные** с именами **ровно** такими (ограничения Resend: только `A–Z`, `0–9`, `_`, до 50 символов; зарезервированы `FIRST_NAME`, `LAST_NAME`, `EMAIL`, `UNSUBSCRIBE_URL` — их для своих полей не используйте):
+2. Сверстать письмо. В редакторе Resend переменные вставляются как **`{{{ИМЯ}}}`** (три фигурные скобки слева, две справа) — см. [Working with Variables](https://resend.com/docs/dashboard/templates/template-variables). Имена кастомных переменных: `A–Z`, `0–9`, `_`, до 50 символов.
 
-| Переменная в шаблоне | Что подставит бэкенд |
-|----------------------|----------------------|
-| `LOGO_URL` | база из `EMAIL_PUBLIC_BASE_URL` (или `FRONTEND_URL`) + `/logo-color.svg` |
-| `HERO_IMAGE_URL` | та же база + `/email/hero-winback.svg` |
-| `DOWNLOAD_URL` | персональная ссылка на последний сохранённый PDF пользователя (`/api/email/open-resume?token=...`), если PDF есть; иначе fallback на `.../upgrade` |
-| `RESUME_URL` | alias той же персональной ссылки (для удобства новых шаблонов) |
-| `SETTINGS_URL` | та же база + `/settings` (настройки аккаунта) |
-| `UNSUBSCRIBE_LINK` | **Одноразовая ссылка отписки** для этого получателя: `GET {база}/api/email/unsubscribe?token=<JWT>` (JWT год, `purpose=email_unsub`). В Resend **нельзя** завести свою переменную с именем `UNSUBSCRIBE_URL` — оно зарезервировано у них; используйте **`UNSUBSCRIBE_LINK`**. |
+**Важно:** `UNSUBSCRIBE_URL` — **зарезервировано Resend** (как и `FIRST_NAME`, `LAST_NAME`, `EMAIL`). Если вставить его как «свою» переменную или в href, часто получится **пустая ссылка** и кнопка не кликается. Для одноразовой отписки PitchCV используйте только **`UNSUBSCRIBE_LINK`** (и в шаблоне: `{{{UNSUBSCRIBE_LINK}}}`).
+
+Бэкенд при отправке передаёт **и UPPERCASE, и lowercase-алиасы** (`download_url`, `unsubscribe_url`, …), чтобы шаблоны, скопированные из inline-HTML репозитория с `{{download_url}}`, тоже заполнялись.
+
+| Ключ в API / в шаблоне (рекомендуется) | В HTML (Resend) | Что подставит бэкенд |
+|----------------------------------------|-----------------|----------------------|
+| `LOGO_URL` | `{{{LOGO_URL}}}` | база + `/logo-color.svg` |
+| `HERO_IMAGE_URL` | `{{{HERO_IMAGE_URL}}}` | база + `/email/hero-winback.svg` |
+| `DOWNLOAD_URL` | `{{{DOWNLOAD_URL}}}` | ссылка на результат (`/optimize?resume=…` или дом приложения) |
+| `RESUME_URL` | `{{{RESUME_URL}}}` | то же, что `DOWNLOAD_URL` |
+| `SETTINGS_URL` | `{{{SETTINGS_URL}}}` | база + `/settings` |
+| `UNSUBSCRIBE_LINK` | `{{{UNSUBSCRIBE_LINK}}}` | `GET {база}/api/email/unsubscribe?token=<JWT>` (`purpose=email_unsub`) |
+| (алиас) `download_url` | `{{download_url}}` или `{{{download_url}}}` | то же, что `DOWNLOAD_URL` |
+| (алиас) `unsubscribe_url` | `{{unsubscribe_url}}` | то же, что `UNSUBSCRIBE_LINK` |
 
 База в коде: `public_base_for_email()` в `email_winback.py` — для PitchCV задайте `EMAIL_PUBLIC_BASE_URL=https://my.pitchcv.app`, чтобы ссылки в письме (в т.ч. отписка и картинки) вели на тот же хост, где доступен `/api` ([my.pitchcv.app](https://my.pitchcv.app/)).
 
@@ -83,7 +89,7 @@ RESEND_TEMPLATE_SHORT_NUDGE=
 
 После перехода по ссылке API выставляет `marketing_emails_opt_in = false` и редиректит на страницу **`/email/unsubscribed?ok=1`** (фронт).
 
-В редакторе Resend переменные обычно пишутся как `{{LOGO_URL}}` — ориентируйтесь на их UI.
+В UI Resend для вставки переменной используйте палитру команд / chip переменной — в сыром HTML это будет **`{{{LOGO_URL}}}`** и т.д.
 
 3. **Publish** шаблон. Скопировать **Template ID** или **alias** из интерфейса.
 

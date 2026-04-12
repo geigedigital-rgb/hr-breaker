@@ -75,6 +75,16 @@ def load_email_template_html(template_id: str) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def _apply_email_token(html: str, token_name: str, value: str) -> str:
+    """Replace Resend-style {{{TOKEN}}} and legacy {{TOKEN}} (token_name must match template)."""
+    if not value:
+        return html
+    h = html
+    h = h.replace("{{{" + token_name + "}}}", value)
+    h = h.replace("{{" + token_name + "}}", value)
+    return h
+
+
 def merge_winback_placeholders(html: str, *, public_base: str, unsubscribe_url: str, resume_url: str = "") -> str:
     """Inline HTML: merge tags; unsubscribe_url is signed one-click URL for this user."""
     base = (public_base or "").rstrip("/")
@@ -82,28 +92,53 @@ def merge_winback_placeholders(html: str, *, public_base: str, unsubscribe_url: 
     hero = f"{base}/email/hero-winback.svg" if base else "{{hero_image_url}}"
     download = resume_url or (f"{base}/upgrade" if base else "{{download_url}}")
     unsub = unsubscribe_url or (f"{base}/settings" if base else "{{unsubscribe_url}}")
-    h = html.replace("{{logo_url}}", logo)
-    h = h.replace("{{hero_image_url}}", hero)
-    h = h.replace("{{download_url}}", download)
-    h = h.replace("{{unsubscribe_url}}", unsub)
+    settings_url = f"{base}/settings" if base else "{{settings_url}}"
+    h = html
+    for stem in ("logo_url", "LOGO_URL"):
+        h = _apply_email_token(h, stem, logo)
+    for stem in ("hero_image_url", "HERO_IMAGE_URL"):
+        h = _apply_email_token(h, stem, hero)
+    for stem in ("download_url", "DOWNLOAD_URL", "resume_url", "RESUME_URL"):
+        h = _apply_email_token(h, stem, download)
+    for stem in ("unsubscribe_url", "UNSUBSCRIBE_LINK"):
+        h = _apply_email_token(h, stem, unsub)
+    for stem in ("settings_url", "SETTINGS_URL"):
+        h = _apply_email_token(h, stem, settings_url)
     return h
 
 
 def resend_variables_for_send(*, public_base: str, unsubscribe_url: str, resume_url: str = "") -> dict[str, str]:
     """
-    Variables for Resend Dashboard templates. Do not use Resend-reserved names as custom keys.
-    Use UNSUBSCRIBE_LINK (not UNSUBSCRIBE_URL) for the one-click URL.
+    Variables for Resend Dashboard templates.
+
+    Resend editor uses {{{VARIABLE}}} in HTML; API keys must match template-declared names (case-sensitive).
+    Do **not** use UNSUBSCRIBE_URL as a custom variable name — it is reserved and often renders empty.
+
+    We send UPPERCASE keys plus lowercase/snake aliases so templates copied from repo HTML still work.
     """
     base = (public_base or "").rstrip("/")
-    open_resume = resume_url or f"{base}/upgrade"
-    return {
-        "LOGO_URL": f"{base}/logo-color.svg",
-        "HERO_IMAGE_URL": f"{base}/email/hero-winback.svg",
+    logo = f"{base}/logo-color.svg" if base else ""
+    hero = f"{base}/email/hero-winback.svg" if base else ""
+    open_resume = resume_url or (f"{base}/upgrade" if base else "")
+    settings = f"{base}/settings" if base else ""
+    unsub = unsubscribe_url or ""
+    core: dict[str, str] = {
+        "LOGO_URL": logo,
+        "HERO_IMAGE_URL": hero,
         "DOWNLOAD_URL": open_resume,
         "RESUME_URL": open_resume,
-        "SETTINGS_URL": f"{base}/settings",
-        "UNSUBSCRIBE_LINK": unsubscribe_url,
+        "SETTINGS_URL": settings,
+        "UNSUBSCRIBE_LINK": unsub,
+        # Aliases (templates pasted from inline HTML / mixed case)
+        "logo_url": logo,
+        "hero_image_url": hero,
+        "download_url": open_resume,
+        "resume_url": open_resume,
+        "settings_url": settings,
+        "unsubscribe_url": unsub,
+        "unsubscribe_link": unsub,
     }
+    return {k: (v if v is not None else "") for k, v in core.items()}
 
 
 async def latest_resume_open_url_for_user(pool, settings: Settings, user_id: str) -> str:
