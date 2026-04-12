@@ -3459,7 +3459,11 @@ async def _run_optimize(
             error_message=opt_fail_reason,
             metadata=oc_meta,
         )
-    if pool_done and ok and opt_uid and opt_uid != "local":
+    # Save snapshot whenever the optimizer produced output — regardless of validation.passed.
+    # The frontend transitions to "result" stage for any non-error response, so the user always
+    # sees their result; we must always persist it so they can return via email link.
+    has_optimizer_output = bool(optimized and optimized.pdf_bytes)
+    if pool_done and has_optimizer_output and opt_uid and opt_uid != "local":
         try:
             snap_exp = datetime.now(timezone.utc) + timedelta(days=3)
             tpl_snap = (req.session_template_id or "").strip()[:200] or None
