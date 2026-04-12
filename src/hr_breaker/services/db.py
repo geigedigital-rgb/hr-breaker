@@ -159,7 +159,15 @@ async def get_pool():
     if "neon.tech" in url and "sslmode=" not in url:
         url = url + ("&" if "?" in url else "?") + "sslmode=require"
     try:
-        pool = await asyncpg.create_pool(url, min_size=0, max_size=4, command_timeout=10)
+        # statement_cache_size=0: avoids InvalidCachedStatementError after DDL (e.g. new columns)
+        # while dev server / pool stays up across migrations or concurrent schema changes.
+        pool = await asyncpg.create_pool(
+            url,
+            min_size=0,
+            max_size=4,
+            command_timeout=10,
+            statement_cache_size=0,
+        )
         await init_table(pool)
         _pool = pool
         logger.info("Postgres pool created for history")
