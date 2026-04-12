@@ -3520,7 +3520,8 @@ async def _run_optimize(
     else:
         snapshot_saved = False
 
-    if pool_done and ok and snapshot_saved:
+    # Schedule win-back when a snapshot was persisted (same bar as email deep link), not only when filters passed.
+    if pool_done and snapshot_saved:
         from hr_breaker.services.email_winback import maybe_schedule_winback_after_optimize
 
         try:
