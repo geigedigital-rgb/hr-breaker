@@ -6,9 +6,10 @@ from typing import Any
 from dotenv import load_dotenv
 from pydantic import BaseModel
 
-# Load .env from project root so it works regardless of CWD (e.g. uvicorn from any dir)
-_env_path = Path(__file__).resolve().parent.parent.parent / ".env"
-load_dotenv(_env_path, override=True)
+# Project root .env — always use this path in get_settings() too (CWD may not be repo root).
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+_ENV_PATH = _PROJECT_ROOT / ".env"
+load_dotenv(_ENV_PATH, override=True)
 # Fallback: load from current working directory (e.g. when run from project root)
 load_dotenv(override=False)
 
@@ -135,7 +136,9 @@ class Settings(BaseModel):
 
 def get_settings() -> Settings:
     """Return settings from env. No cache so .env changes (e.g. MAX_ITERATIONS) apply without restart."""
-    load_dotenv()  # re-read .env so edits take effect
+    # Must load root .env explicitly — bare load_dotenv() only searches CWD.
+    load_dotenv(_ENV_PATH, override=True)
+    load_dotenv(override=False)
     thinking_env = os.getenv("GEMINI_THINKING_BUDGET")
     thinking_budget: int | None = 8192
     if thinking_env is not None:
