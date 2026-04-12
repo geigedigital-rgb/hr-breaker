@@ -105,16 +105,68 @@ function ResumePdfPreview({
   return <ResumeThumbnailBlock imageUrl={thumbUrl} />;
 }
 
-/** Preview from history (e.g. came from Home): show thumbnail by filename. */
+/** Document-style skeleton inside the small resume frame (Overall match preview). */
+function ResumeFrameSkeleton() {
+  return (
+    <div
+      className="absolute inset-0 z-[1] flex flex-col gap-2 p-2.5 bg-gradient-to-b from-[#f1f5f9] to-[#e8ecf4]"
+      aria-hidden
+    >
+      <div className="h-2 w-[55%] rounded bg-white/80 animate-pulse" />
+      <div className="flex-1 min-h-[48px] rounded-md bg-white/45 animate-pulse" />
+      <div className="h-2 w-[40%] rounded bg-white/70 animate-pulse mx-auto" />
+    </div>
+  );
+}
+
+/** Preview from history: fetch PNG with Bearer (same as other API calls) — img src alone can miss auth on some setups. */
 function ResumeHistoryThumbnailPreview({
   filename,
 }: {
   filename: string;
 }) {
-  const [imgError, setImgError] = useState(false);
-  const token = api.getStoredToken();
-  const src = api.historyThumbnailUrl(filename, token);
-  if (imgError) {
+  const [objectUrl, setObjectUrl] = useState<string | null>(null);
+  const [decoded, setDecoded] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const objectUrlRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setFailed(false);
+    setDecoded(false);
+    setObjectUrl(null);
+    if (objectUrlRef.current) {
+      URL.revokeObjectURL(objectUrlRef.current);
+      objectUrlRef.current = null;
+    }
+    const token = api.getStoredToken();
+    const url = api.historyThumbnailUrl(filename, token);
+    void (async () => {
+      try {
+        const r = await fetch(url, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (!r.ok) throw new Error(String(r.status));
+        const blob = await r.blob();
+        if (!blob.type.startsWith("image/")) throw new Error("unexpected");
+        if (cancelled) return;
+        const u = URL.createObjectURL(blob);
+        objectUrlRef.current = u;
+        setObjectUrl(u);
+      } catch {
+        if (!cancelled) setFailed(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      if (objectUrlRef.current) {
+        URL.revokeObjectURL(objectUrlRef.current);
+        objectUrlRef.current = null;
+      }
+    };
+  }, [filename]);
+
+  if (failed) {
     return (
       <div className="pointer-events-auto flex flex-col items-center gap-2">
         <p className="text-xs text-[var(--text-muted)]">Preview unavailable</p>
@@ -124,13 +176,46 @@ function ResumeHistoryThumbnailPreview({
   return (
     <div className="relative w-full max-w-[240px] flex flex-col items-center pointer-events-auto translate-y-3">
       <div className="w-full rounded-md overflow-hidden border border-[#d1d5db] bg-white shadow-lg flex flex-col relative aspect-[210/297] max-h-[200px]">
-        <img
-          src={src}
-          alt=""
-          className="absolute inset-0 w-full h-full object-cover object-top"
-          onError={() => setImgError(true)}
-        />
+        {!decoded && <ResumeFrameSkeleton />}
+        {objectUrl ? (
+          <img
+            src={objectUrl}
+            alt=""
+            className={`absolute inset-0 w-full h-full object-cover object-top transition-opacity duration-200 ${
+              decoded ? "opacity-90" : "opacity-0"
+            }`}
+            onLoad={() => setDecoded(true)}
+            onError={() => {
+              setFailed(true);
+              if (objectUrlRef.current) {
+                URL.revokeObjectURL(objectUrlRef.current);
+                objectUrlRef.current = null;
+              }
+            }}
+          />
+        ) : null}
       </div>
+    </div>
+  );
+}
+
+/** Object-URL thumbnail (e.g. PDF preview blob): skeleton until decoded. */
+function ResumeBlobThumbnail({ url }: { url: string }) {
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    setReady(false);
+  }, [url]);
+  return (
+    <div className="relative h-full min-h-[96px] w-full">
+      {!ready && <ResumeFrameSkeleton />}
+      <img
+        src={url}
+        alt=""
+        className={`absolute inset-0 h-full w-full object-cover object-top transition-opacity duration-200 ${
+          ready ? "opacity-90" : "opacity-0"
+        }`}
+        onLoad={() => setReady(true)}
+      />
     </div>
   );
 }
@@ -2480,13 +2565,7 @@ export default function Optimize() {
                           {(() => {
                             const isPdfFromHistory = uploadedFileName?.toLowerCase().endsWith(".pdf");
                             if (resumeThumbnailUrl) {
-                              return (
-                                <img
-                                  src={resumeThumbnailUrl}
-                                  alt=""
-                                  className="absolute inset-0 w-full h-full object-cover object-top opacity-90"
-                                />
-                              );
+                              return <ResumeBlobThumbnail url={resumeThumbnailUrl} />;
                             }
                             if (lastUploadedPdfFile && lastUploadedPdfFile.name.toLowerCase().endsWith(".pdf")) {
                               return <div className="absolute inset-0 bg-[#F8FAFD] animate-pulse" aria-hidden />;
@@ -2515,14 +2594,24 @@ export default function Optimize() {
                           </div>
                         </div>
                         <span className="text-[#8A94A6] text-xl font-light">+</span>
-                        <div className="w-[72px] sm:w-[84px] shrink-0 rounded bg-white shadow-[0_2px_8px_-4px_rgba(20,25,40,0.12)] border border-[#E8ECF4] flex flex-col relative aspect-[210/297] p-2 text-center justify-center">
-                          <p className="text-[10px] sm:text-[11px] font-semibold text-[#181819] leading-tight line-clamp-4">
-                            {parsedJob?.title?.trim() || jobInput.trim().slice(0, 72) || "—"}
-                            {parsedJob?.title ? "" : jobInput.trim().length > 72 ? "…" : ""}
-                          </p>
-                          <p className="text-[8px] sm:text-[9px] text-[#6B7280] mt-1.5 line-clamp-2">
-                            {parsedJob?.company?.trim() || ""}
-                          </p>
+                        <div className="w-[72px] sm:w-[84px] shrink-0 rounded bg-white shadow-[0_2px_8px_-4px_rgba(20,25,40,0.12)] border border-[#E8ECF4] flex flex-col relative aspect-[210/297] p-2 text-center justify-center min-h-[84px]">
+                          {parsedJob?.title?.trim() || jobInput.trim() ? (
+                            <>
+                              <p className="text-[10px] sm:text-[11px] font-semibold text-[#181819] leading-tight line-clamp-4">
+                                {parsedJob?.title?.trim() || jobInput.trim().slice(0, 72) || "—"}
+                                {parsedJob?.title ? "" : jobInput.trim().length > 72 ? "…" : ""}
+                              </p>
+                              <p className="text-[8px] sm:text-[9px] text-[#6B7280] mt-1.5 line-clamp-2">
+                                {parsedJob?.company?.trim() || ""}
+                              </p>
+                            </>
+                          ) : (
+                            <div className="flex flex-1 flex-col justify-center gap-1.5 px-0.5" aria-hidden>
+                              <div className="h-2 w-full rounded bg-[#e8ecf4] animate-pulse" />
+                              <div className="h-2 w-[80%] mx-auto rounded bg-[#e8ecf4] animate-pulse" />
+                              <div className="h-1.5 w-[60%] mx-auto rounded bg-[#f1f5f9] animate-pulse mt-1" />
+                            </div>
+                          )}
                         </div>
                       </div>
                       <div className="hidden lg:block w-px h-[100px] bg-[#E8ECF4] shrink-0" />
@@ -2768,6 +2857,27 @@ export default function Optimize() {
                 </div>
               ) : (
                 <>
+                  {result.key_changes === undefined && (
+                    <section
+                      className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-4 sm:p-5"
+                      aria-busy="true"
+                      aria-label={t("optimize.keyChanges")}
+                    >
+                      <div className="h-3 w-36 rounded bg-[#e8ecf4] animate-pulse mb-4" />
+                      <div className="space-y-3">
+                        {[0, 1, 2].map((i) => (
+                          <div key={i} className="space-y-2">
+                            <div className="h-3 w-48 rounded bg-[#eef1f6] animate-pulse" />
+                            <div className="h-2.5 w-full max-w-md rounded bg-[#f4f6fa] animate-pulse" />
+                            <div className="flex flex-wrap gap-1.5">
+                              <div className="h-6 w-20 rounded-full bg-[#ecfdf5]/80 animate-pulse" />
+                              <div className="h-6 w-24 rounded-full bg-[#ecfdf5]/60 animate-pulse" />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </section>
+                  )}
                   {result.key_changes && result.key_changes.length > 0 && (
                     <section className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-4 sm:p-5" aria-labelledby="key-changes-heading">
                       <h3 id="key-changes-heading" className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">{t("optimize.keyChanges")}</h3>
