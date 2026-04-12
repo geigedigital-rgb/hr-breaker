@@ -1,6 +1,17 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { getAdminConfig, type AdminConfigResponse } from "../../api";
 import { t } from "../../i18n";
+
+function configShowsLocalhostUrls(c: AdminConfigResponse): boolean {
+  const fe = (c.frontend_url || "").toLowerCase();
+  const eb = (c.email_effective_public_base || "").toLowerCase();
+  return (
+    fe.includes("localhost") ||
+    fe.includes("127.0.0.1") ||
+    eb.includes("localhost") ||
+    eb.includes("127.0.0.1")
+  );
+}
 
 function ConfigRow({
   label,
@@ -43,6 +54,11 @@ export default function AdminConfig() {
     return () => { cancelled = true; };
   }, []);
 
+  const showLocalhostMisconfig = useMemo(() => {
+    if (!config) return false;
+    return configShowsLocalhostUrls(config);
+  }, [config]);
+
   if (error) {
     return (
       <section aria-labelledby="admin-config-error" className="rounded-xl border border-red-200 bg-red-50/80 p-4">
@@ -68,6 +84,18 @@ export default function AdminConfig() {
         <h2 className="text-xl font-bold text-[var(--text)] tracking-tight">{t("admin.config.title")}</h2>
         <p className="mt-0.5 text-sm text-[var(--text-muted)]">{t("admin.config.subtitle")}</p>
       </header>
+
+      {showLocalhostMisconfig ? (
+        <section
+          className="rounded-xl border border-amber-200 bg-amber-50/90 p-4 shadow-sm"
+          aria-labelledby="admin-config-localhost-warn"
+        >
+          <h2 id="admin-config-localhost-warn" className="text-sm font-semibold text-amber-900">
+            {t("admin.config.localUrlWarningTitle")}
+          </h2>
+          <p className="mt-2 text-sm leading-relaxed text-amber-950/90">{t("admin.config.localUrlWarningBody")}</p>
+        </section>
+      ) : null}
 
       <section
         className="rounded-xl border border-[#EBEDF5] bg-[var(--card)] p-5 shadow-sm"

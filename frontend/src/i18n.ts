@@ -786,6 +786,9 @@ const en = {
       frontendUrl: "Frontend URL",
       emailPublicBaseUrl: "EMAIL_PUBLIC_BASE_URL (raw)",
       emailEffectivePublicBase: "Email links base (effective)",
+      localUrlWarningTitle: "URLs still point to this machine (localhost)",
+      localUrlWarningBody:
+        "These values come from the API server’s environment — not from your browser. If you deploy on Railway (or similar), set FRONTEND_URL to your real app origin (https://…) and EMAIL_PUBLIC_BASE_URL to the same or your app subdomain. Then redeploy / restart the API and refresh this page. Until then, email links and OAuth redirects will keep using localhost.",
       adzuna: "Adzuna job search",
       configured: "Configured",
       notConfigured: "Not configured",
