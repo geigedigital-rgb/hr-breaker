@@ -3278,10 +3278,14 @@ async def _run_optimize(
             sub = await user_get_subscription(pool_for_sub, str(user["id"]))
             if (sub.get("plan") or "free") == "free":
                 can_export_pdf = False
-                
-    if optimized and optimized.html:
+
+    async def _extract_schema_json_for_templates() -> str | None:
+        """Second LLM pass for template JSON; runs in parallel with PDF save / post-ATS to shorten wall time."""
+        if not optimized or not optimized.html:
+            return None
         try:
             from hr_breaker.agents.resume_schema_extractor import extract_resume_schema_strict
+
             _put_progress(progress_queue, 90, "Extracting structured data for templates…")
             schema_obj = await extract_resume_schema_strict(
                 optimized.html,
@@ -3292,10 +3296,15 @@ async def _run_optimize(
             extracted_full_name = _compose_person_name(source.first_name, source.last_name)
             if extracted_full_name and _is_placeholder_person_name(schema_obj.basics.name):
                 schema_obj.basics.name = extracted_full_name
-            schema_json = schema_obj.model_dump_json()
+            return schema_obj.model_dump_json()
         except Exception as e:
             logger.warning("Failed to extract schema for templates: %s", e)
-            
+            return None
+
+    schema_extract_task: asyncio.Task[str | None] | None = None
+    if optimized and optimized.html:
+        schema_extract_task = asyncio.create_task(_extract_schema_json_for_templates())
+
     if optimized and optimized.pdf_bytes and can_export_pdf:
         unique_suffix = datetime.now().strftime("%Y%m%d_%H%M%S")
         pdf_path = pdf_storage.generate_path(
@@ -3395,6 +3404,8 @@ async def _run_optimize(
                     "data": {"pdf_bytes": len(optimized.pdf_bytes), "has_text_fallback": bool(txt)},
                 },
             )
+    if schema_extract_task is not None:
+        schema_json = await schema_extract_task
     # Comparable post scores for DB snapshot / response when PDF was not saved to history (free hold) or text-only path
     if post_kw is None and validation.results:
         for r in validation.results:
