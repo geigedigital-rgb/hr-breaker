@@ -1018,6 +1018,50 @@ function pendingTokenInUrl(): boolean {
   return Boolean(new URLSearchParams(window.location.search).get("pending"));
 }
 
+const MAX_SESSION_PHOTO_CHARS = 700_000;
+
+function sessionPayloadForOptimizeRequest(
+  preScores: api.AnalyzeResponse | null,
+  photoDataUrl: string | null,
+  selectedTemplateId: string,
+): {
+  session_template_id?: string;
+  session_photo_data_url?: string;
+  session_analyze?: Record<string, unknown>;
+} {
+  const out: {
+    session_template_id?: string;
+    session_photo_data_url?: string;
+    session_analyze?: Record<string, unknown>;
+  } = {};
+  const tid = selectedTemplateId.trim();
+  if (tid) out.session_template_id = tid;
+  const ph = photoDataUrl?.trim();
+  if (ph && ph.length <= MAX_SESSION_PHOTO_CHARS) out.session_photo_data_url = ph;
+  if (preScores) {
+    try {
+      const raw = JSON.parse(JSON.stringify(preScores)) as Record<string, unknown>;
+      delete raw.admin_pipeline_log;
+      out.session_analyze = raw;
+    } catch {
+      /* ignore */
+    }
+  }
+  return out;
+}
+
+function persistSnapshotJwtFromResponse(res: api.OptimizeResponse) {
+  const url = res.snapshot_url?.trim();
+  if (!url || typeof window === "undefined" || !res.success) return;
+  try {
+    const parsed = new URL(url, window.location.origin);
+    const tok = parsed.searchParams.get(api.OPTIMIZE_RESUME_QUERY_PARAM);
+    if (tok) sessionStorage.setItem(api.OPTIMIZE_LAST_SNAPSHOT_JWT_KEY, tok);
+  } catch {
+    /* ignore */
+  }
+}
+
 function jobTextFromSnapshotForResume(job: api.JobPostingOut, jobUrl: string | null | undefined): string {
   const u = (jobUrl || "").trim();
   if (u) return u;
@@ -1108,6 +1152,8 @@ export default function Optimize() {
   const resumeHydratedTokenRef = useRef<string | null>(null);
   const resumeGuestRedirectStartedRef = useRef(false);
   const [resumeBootstrapping, setResumeBootstrapping] = useState(false);
+  /** Saved-result deep link JWT on device (same key as post–optimize persist). */
+  const [storedSnapshotBannerVisible, setStoredSnapshotBannerVisible] = useState(false);
   const autoImproveGateRef = useRef<{
     preScores: api.AnalyzeResponse | null;
     resumeContent: string;
@@ -1223,24 +1269,36 @@ export default function Optimize() {
       setJobInput(jobLine);
       setJobMode(d.job_url?.trim() ? "url" : "text");
       setParsedJob(d.job);
-      setPreScores({
-        ats_score: d.pre_ats_score ?? 0,
-        keyword_score: d.pre_keyword_score ?? 0,
-        keyword_threshold: 0.6,
-        job: d.job,
-        recommendations: [],
-      });
+      if (d.pre_analyze) {
+        setPreScores(d.pre_analyze);
+      } else {
+        setPreScores({
+          ats_score: d.pre_ats_score ?? 0,
+          keyword_score: d.pre_keyword_score ?? 0,
+          keyword_threshold: 0.6,
+          job: d.job,
+          recommendations: [],
+        });
+      }
       setResult(snapshotDataToOptimizeResponse(d));
       setPostImproveDiagramScore(null);
       setPostResultFlow("main");
-      setSelectedTemplateId("");
-      setPhotoDataUrl(null);
+      setSelectedTemplateId((d.selected_template_id || "").trim());
+      setPhotoDataUrl(d.photo_data_url?.trim() ? d.photo_data_url.trim() : null);
       if (d.pdf_download_available && d.pdf_filename) {
         setUploadedFileName(d.pdf_filename);
-        setResumeSourceWasPdf(true);
+        setResumeSourceWasPdf(
+          d.snapshot_source_was_pdf === true ||
+            (d.snapshot_source_was_pdf == null && Boolean(d.pdf_download_available && d.pdf_filename)),
+        );
       } else {
         setUploadedFileName(null);
-        setResumeSourceWasPdf(false);
+        setResumeSourceWasPdf(Boolean(d.snapshot_source_was_pdf));
+      }
+      try {
+        sessionStorage.setItem(api.OPTIMIZE_LAST_SNAPSHOT_JWT_KEY, resumeTokenParam);
+      } catch {
+        /* ignore */
       }
       setLastUploadedPdfFile(null);
       setClaimGate(false);
@@ -1260,6 +1318,13 @@ export default function Optimize() {
       cancelled = true;
     };
   }, [resumeTokenParam, user, loading, navigate, setSearchParams]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const tok = sessionStorage.getItem(api.OPTIMIZE_LAST_SNAPSHOT_JWT_KEY);
+    const has = Boolean(tok && tok.length > 20 && user && user.id !== "local");
+    setStoredSnapshotBannerVisible(has);
+  }, [user?.id, stage]);
 
   // Restore analyze state after trial checkout (before paint) so data is ready for auto-improve
   useLayoutEffect(() => {
@@ -1760,6 +1825,7 @@ export default function Optimize() {
       pre_keyword_score: preScores?.keyword_score ?? undefined,
       source_was_pdf: resumeSourceWasPdf,
       output_language: api.getOutputLanguage(),
+      ...sessionPayloadForOptimizeRequest(preScores, photoDataUrl, selectedTemplateId),
     };
     try {
       let res: api.OptimizeResponse;
@@ -1778,6 +1844,7 @@ export default function Optimize() {
       sseOptimizeCapRef.current = 100;
       setDisplayLoadProgress(100);
       setLoadProgress(100);
+      persistSnapshotJwtFromResponse(res);
       if (res.error && isOfferPasteAsTextError(res.error)) {
         setError(null);
         setStage("assessment");
@@ -1891,6 +1958,12 @@ export default function Optimize() {
 
   function applyNewJobSameResume() {
     if (!result) return;
+    try {
+      sessionStorage.removeItem(api.OPTIMIZE_LAST_SNAPSHOT_JWT_KEY);
+    } catch {
+      /* ignore */
+    }
+    setStoredSnapshotBannerVisible(false);
     const nextContent = result.optimized_resume_text?.trim() || resumeContent.trim();
     setResumeContent(nextContent);
     setJobInput("");
@@ -1931,6 +2004,7 @@ export default function Optimize() {
       pre_keyword_score: currentKwForRetry ?? undefined,
       source_was_pdf: resumeSourceWasPdf,
       output_language: api.getOutputLanguage(),
+      ...sessionPayloadForOptimizeRequest(preScores, photoDataUrl, selectedTemplateId),
     };
     try {
       let res: api.OptimizeResponse;
@@ -1949,6 +2023,7 @@ export default function Optimize() {
       sseOptimizeCapRef.current = 100;
       setDisplayLoadProgress(100);
       setLoadProgress(100);
+      persistSnapshotJwtFromResponse(res);
       setStage("result");
       await refreshUser();
     } catch (e) {
@@ -2602,6 +2677,42 @@ export default function Optimize() {
         </div>
       ) : stage === "landing" ? (
         <div className="flex flex-col items-center justify-start sm:justify-center pt-2 sm:pt-8 pb-8 sm:pb-16 px-3 sm:px-6 w-full max-w-5xl mx-auto min-h-0 overflow-x-hidden">
+          {storedSnapshotBannerVisible ? (
+            <div className="w-full max-w-[900px] mb-4 rounded-xl border border-[#4578FC]/30 bg-[#f0f4ff] px-4 py-3 text-left shadow-sm">
+              <p className="text-sm font-semibold text-[#1e293b]">{t("optimize.continueLastResultTitle")}</p>
+              <p className="mt-1 text-xs text-[#475569] leading-relaxed">{t("optimize.continueLastResultHint")}</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className="rounded-lg bg-[#1D4ED8] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#1e40af]"
+                  onClick={() => {
+                    const tok = sessionStorage.getItem(api.OPTIMIZE_LAST_SNAPSHOT_JWT_KEY);
+                    if (!tok) return;
+                    navigate(
+                      `/optimize?${api.OPTIMIZE_RESUME_QUERY_PARAM}=${encodeURIComponent(tok)}`,
+                      { replace: false },
+                    );
+                  }}
+                >
+                  {t("optimize.continueLastResultCta")}
+                </button>
+                <button
+                  type="button"
+                  className="rounded-lg border border-[#cbd5e1] bg-white px-3 py-1.5 text-xs font-medium text-[#475569] hover:bg-[#f8fafc]"
+                  onClick={() => {
+                    try {
+                      sessionStorage.removeItem(api.OPTIMIZE_LAST_SNAPSHOT_JWT_KEY);
+                    } catch {
+                      /* ignore */
+                    }
+                    setStoredSnapshotBannerVisible(false);
+                  }}
+                >
+                  {t("optimize.continueLastResultDismiss")}
+                </button>
+              </div>
+            </div>
+          ) : null}
           {/* Main Visual Block */}
           <div className="w-full max-w-[900px] mb-6 sm:mb-12">
             <div className="relative rounded-2xl p-5 sm:p-8 lg:p-12 overflow-hidden flex flex-col justify-center min-h-[320px] sm:min-h-[380px] lg:min-h-[420px]"
@@ -2674,6 +2785,44 @@ export default function Optimize() {
       ) : stage === "idle" ? (
         /* Шаги 1–2 всегда видны; при исчерпанном free scan — модалка поверх (проверка не стартует). */
         <div className="relative flex-1 flex flex-col min-h-[50vh]">
+        {storedSnapshotBannerVisible ? (
+          <div className="mx-auto w-full max-w-6xl px-3 sm:px-4 lg:px-6 pt-3">
+            <div className="rounded-xl border border-[#4578FC]/30 bg-[#f0f4ff] px-4 py-3 text-left shadow-sm">
+              <p className="text-sm font-semibold text-[#1e293b]">{t("optimize.continueLastResultTitle")}</p>
+              <p className="mt-1 text-xs text-[#475569] leading-relaxed">{t("optimize.continueLastResultHint")}</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className="rounded-lg bg-[#1D4ED8] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#1e40af]"
+                  onClick={() => {
+                    const tok = sessionStorage.getItem(api.OPTIMIZE_LAST_SNAPSHOT_JWT_KEY);
+                    if (!tok) return;
+                    navigate(
+                      `/optimize?${api.OPTIMIZE_RESUME_QUERY_PARAM}=${encodeURIComponent(tok)}`,
+                      { replace: false },
+                    );
+                  }}
+                >
+                  {t("optimize.continueLastResultCta")}
+                </button>
+                <button
+                  type="button"
+                  className="rounded-lg border border-[#cbd5e1] bg-white px-3 py-1.5 text-xs font-medium text-[#475569] hover:bg-[#f8fafc]"
+                  onClick={() => {
+                    try {
+                      sessionStorage.removeItem(api.OPTIMIZE_LAST_SNAPSHOT_JWT_KEY);
+                    } catch {
+                      /* ignore */
+                    }
+                    setStoredSnapshotBannerVisible(false);
+                  }}
+                >
+                  {t("optimize.continueLastResultDismiss")}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
         <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 p-3 sm:p-4 lg:p-6 max-w-6xl mx-auto w-full items-stretch content-start">
           {/* Шаг 1 — слева */}
           <section

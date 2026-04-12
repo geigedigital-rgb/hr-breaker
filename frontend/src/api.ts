@@ -11,6 +11,8 @@ const AUTH_TOKEN_KEY = "hr_breaker_token";
 /** Deep-link from email: `/optimize?resume=…` — token stored before redirect to login if needed. */
 export const OPTIMIZE_RESUME_QUERY_PARAM = "resume";
 export const OPTIMIZE_RESUME_SESSION_KEY = "pitchcv_optimize_resume_token_v1";
+/** Last successful optimize snapshot JWT (same as email deep link) for “continue” on /optimize. */
+export const OPTIMIZE_LAST_SNAPSHOT_JWT_KEY = "pitchcv_optimize_last_snapshot_jwt_v1";
 
 export function getStoredToken(): string | null {
   return localStorage.getItem(AUTH_TOKEN_KEY);
@@ -97,6 +99,10 @@ export type OptimizationSnapshotPublic = {
   pending_export_token?: string | null;
   job_url?: string | null;
   optimized_resume_text?: string | null;
+  selected_template_id?: string | null;
+  photo_data_url?: string | null;
+  pre_analyze?: AnalyzeResponse | null;
+  snapshot_source_was_pdf?: boolean | null;
 };
 
 export function optimizationSnapshotPdfUrl(token: string): string {
@@ -422,6 +428,9 @@ export async function optimize(params: {
   pre_keyword_score?: number;
   source_was_pdf?: boolean;
   output_language?: string;
+  session_template_id?: string;
+  session_photo_data_url?: string;
+  session_analyze?: Record<string, unknown>;
 }): Promise<OptimizeResponse> {
   if (isAdminPipelineCaptureEnabled()) {
     appendAdminPipelineLog({
@@ -495,6 +504,9 @@ export async function optimizeStream(
     pre_keyword_score?: number;
     source_was_pdf?: boolean;
     output_language?: string;
+    session_template_id?: string;
+    session_photo_data_url?: string;
+    session_analyze?: Record<string, unknown>;
   },
   onProgress: (percent: number, message: string) => void
 ): Promise<OptimizeResponse> {

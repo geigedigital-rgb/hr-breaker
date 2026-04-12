@@ -468,6 +468,10 @@ class OptimizeRequest(BaseModel):
     pre_keyword_score: float | None = None  # from /analyze, for history
     source_was_pdf: bool = False  # True when user uploaded original as PDF (for Home filter + thumbnail)
     output_language: str | None = None  # e.g. "en", "ru". Default: English for all LLM output
+    # Client session (stored in optimization_snapshots JSON for email / ?resume= restore; not used by optimizer)
+    session_template_id: str | None = Field(None, max_length=200)
+    session_photo_data_url: str | None = Field(None, max_length=900_000)
+    session_analyze: dict[str, Any] | None = None  # AnalyzeResponse-shaped JSON from client
 
 
 class AnalyzeRequest(BaseModel):
@@ -568,6 +572,10 @@ class OptimizationSnapshotPublicOut(BaseModel):
     pending_export_token: str | None = None
     job_url: str | None = None
     optimized_resume_text: str | None = None
+    selected_template_id: str | None = None
+    photo_data_url: str | None = None
+    pre_analyze: AnalyzeResponse | None = None
+    snapshot_source_was_pdf: bool | None = None
 
 
 class HistoryItem(BaseModel):
@@ -3294,6 +3302,9 @@ async def _run_optimize(
     if pool_done and ok and opt_uid and opt_uid != "local":
         try:
             snap_exp = datetime.now(timezone.utc) + timedelta(days=3)
+            tpl_snap = (req.session_template_id or "").strip()[:200] or None
+            photo_snap = _sanitize_photo_for_snapshot(req.session_photo_data_url)
+            analyze_snap = _sanitize_session_analyze_payload(req.session_analyze)
             payload_snap: dict[str, Any] = {
                 "job": job_out.model_dump(),
                 "validation": validation_out.model_dump(),
@@ -3306,6 +3317,10 @@ async def _run_optimize(
                 "pending_export_token": pending_export_token,
                 "job_url": req.job_url,
                 "optimized_resume_text": optimized_resume_text,
+                "selected_template_id": tpl_snap,
+                "photo_data_url": photo_snap,
+                "pre_analyze": analyze_snap,
+                "snapshot_source_was_pdf": bool(req.source_was_pdf),
             }
             snap_id = await optimization_snapshot_insert(
                 pool_done,
@@ -4044,6 +4059,28 @@ async def api_email_unsubscribe(token: str = Query("", min_length=10)) -> Redire
     return RedirectResponse(url=_email_unsubscribe_redirect_url(True), status_code=302)
 
 
+def _sanitize_photo_for_snapshot(raw: str | None, *, max_len: int = 700_000) -> str | None:
+    if not raw:
+        return None
+    s = raw.strip()
+    if len(s) > max_len:
+        logger.warning("Ignoring session_photo_data_url for snapshot: length %s exceeds %s", len(s), max_len)
+        return None
+    return s
+
+
+def _sanitize_session_analyze_payload(raw: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not raw or not isinstance(raw, dict):
+        return None
+    cleaned = {k: v for k, v in raw.items() if k != "admin_pipeline_log"}
+    try:
+        AnalyzeResponse.model_validate(cleaned)
+        return cleaned
+    except Exception:
+        logger.warning("Ignoring invalid session_analyze for optimization snapshot")
+        return None
+
+
 @router.get("/email/open-resume")
 async def api_email_open_resume(token: str = Query("", min_length=10)):
     """Open a specific saved resume from email using signed JWT token."""
@@ -4159,6 +4196,25 @@ async def _build_optimization_snapshot_public_out(row: dict[str, Any], user_id: 
         os_ = str(_ort)
         ort_out = os_ if os_.strip() else None
 
+    pre_analyze_out: AnalyzeResponse | None = None
+    pa_raw = pl.get("pre_analyze")
+    if isinstance(pa_raw, dict):
+        try:
+            pad = {k: v for k, v in pa_raw.items() if k != "admin_pipeline_log"}
+            pre_analyze_out = AnalyzeResponse.model_validate(pad)
+        except Exception:
+            pre_analyze_out = None
+
+    tpl_raw = pl.get("selected_template_id")
+    tpl_out = str(tpl_raw).strip()[:200] if tpl_raw is not None and str(tpl_raw).strip() else None
+    ph_raw = pl.get("photo_data_url")
+    photo_out: str | None = None
+    if isinstance(ph_raw, str) and ph_raw.strip():
+        phs = ph_raw.strip()
+        photo_out = phs if len(phs) <= 700_000 else None
+    swp = pl.get("snapshot_source_was_pdf")
+    snapshot_source_was_pdf: bool | None = bool(swp) if swp is not None else None
+
     return OptimizationSnapshotPublicOut(
         expires_at=exp.isoformat(),
         pdf_filename=pdf_fn or None,
@@ -4174,6 +4230,10 @@ async def _build_optimization_snapshot_public_out(row: dict[str, Any], user_id: 
         pending_export_token=pet_out,
         job_url=job_url_out,
         optimized_resume_text=ort_out,
+        selected_template_id=tpl_out or None,
+        photo_data_url=photo_out,
+        pre_analyze=pre_analyze_out,
+        snapshot_source_was_pdf=snapshot_source_was_pdf,
     )
 
 

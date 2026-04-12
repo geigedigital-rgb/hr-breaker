@@ -221,7 +221,12 @@ const en = {
     filterOk: "OK",
     /** After a successful run when server returns snapshot_url (~3 day TTL). */
     snapshotRetentionHint:
-      "We keep a read-only copy of this result (scores and breakdown) for about 3 days — you can reopen it from reminder emails.",
+      "We keep this result (scores, tips, template & photo if you used them) for about 3 days — reopen from reminder emails or “Continue your last optimization” on this page.",
+    continueLastResultTitle: "Continue your last optimization",
+    continueLastResultHint:
+      "We saved your result for about 3 days on this device and in email links — reopen templates, PDF download, and checkout where you left off.",
+    continueLastResultCta: "Open saved result",
+    continueLastResultDismiss: "Dismiss",
     restoredResumePlaceholder: "(Restored session — resume text from your last run)",
     restoringResumeSession: "Restoring your result…",
     restoreResumeError: "Could not restore this link. It may have expired or does not match your account.",
