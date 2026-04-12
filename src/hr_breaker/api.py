@@ -99,6 +99,7 @@ from hr_breaker.services.db import (
     email_segment_optimized_unpaid_count,
     email_segment_optimized_unpaid_emails,
     email_winback_pending_count,
+    user_set_marketing_emails_opt_in,
 )
 from hr_breaker.services.reviews_repo import (
     reviews_apply_patch,
@@ -3820,6 +3821,28 @@ async def api_admin_email_segment_send(
         failed=failed,
         errors_sample=errors[:5],
     )
+
+
+def _email_unsubscribe_redirect_url(ok: bool) -> str:
+    s = get_settings()
+    base = (s.frontend_url or "http://localhost:5173").rstrip("/")
+    return f"{base}/email/unsubscribed?{'ok' if ok else 'err'}=1"
+
+
+@router.get("/email/unsubscribe")
+async def api_email_unsubscribe(token: str = Query("", min_length=10)) -> RedirectResponse:
+    """Public one-click unsubscribe from marketing email (JWT from outbound message). No login."""
+    pool = await get_pool()
+    if pool is None:
+        return RedirectResponse(url=_email_unsubscribe_redirect_url(False), status_code=302)
+    payload = decode_token(token.strip())
+    if not payload or payload.get("purpose") != "email_unsub":
+        return RedirectResponse(url=_email_unsubscribe_redirect_url(False), status_code=302)
+    uid = str(payload.get("sub") or "").strip()
+    if not uid:
+        return RedirectResponse(url=_email_unsubscribe_redirect_url(False), status_code=302)
+    await user_set_marketing_emails_opt_in(pool, uid, False)
+    return RedirectResponse(url=_email_unsubscribe_redirect_url(True), status_code=302)
 
 
 def _admin_activity_file_kind(filename: str) -> str:

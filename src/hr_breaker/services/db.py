@@ -225,6 +225,9 @@ async def init_table(pool) -> None:
             f"ALTER TABLE {USERS_TABLE} ADD COLUMN IF NOT EXISTS admin_blocked BOOLEAN NOT NULL DEFAULT FALSE"
         )
         await conn.execute(
+            f"ALTER TABLE {USERS_TABLE} ADD COLUMN IF NOT EXISTS marketing_emails_opt_in BOOLEAN NOT NULL DEFAULT TRUE"
+        )
+        await conn.execute(
             f"""
             CREATE TABLE IF NOT EXISTS {USAGE_AUDIT_TABLE} (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -436,7 +439,7 @@ async def user_create(pool, email: str, password_hash: str | None = None, name: 
 USER_SUBSCRIPTION_COLS = (
     "stripe_customer_id, stripe_subscription_id, subscription_status, subscription_plan, "
     "current_period_end, free_analyses_count, free_optimize_count, free_quota_month_start, partner_program_access, "
-    "market_readiness_score, last_visit_date, streak_days, admin_blocked"
+    "market_readiness_score, last_visit_date, streak_days, admin_blocked, marketing_emails_opt_in"
 )
 
 async def user_get_by_email(pool, email: str) -> dict | None:
@@ -1467,6 +1470,18 @@ async def email_winback_mark_skipped_paid(pool, schedule_id: str) -> None:
         )
 
 
+async def email_winback_mark_skipped_marketing(pool, schedule_id: str) -> None:
+    async with pool.acquire() as conn:
+        await conn.execute(
+            f"""
+            UPDATE {EMAIL_WINBACK_SCHEDULE_TABLE}
+            SET status = 'skipped_marketing', sent_at = NOW(), error_message = NULL
+            WHERE id = $1::uuid
+            """,
+            schedule_id,
+        )
+
+
 async def email_winback_mark_failed(pool, schedule_id: str, message: str) -> None:
     async with pool.acquire() as conn:
         await conn.execute(
@@ -1515,6 +1530,20 @@ def _sql_user_is_unpaid() -> str:
     )"""
 
 
+def _sql_user_marketing_opt_in() -> str:
+    return "COALESCE(u.marketing_emails_opt_in, TRUE) = TRUE"
+
+
+async def user_set_marketing_emails_opt_in(pool, user_id: str, opt_in: bool) -> bool:
+    async with pool.acquire() as conn:
+        n = await conn.execute(
+            f"UPDATE {USERS_TABLE} SET marketing_emails_opt_in = $2 WHERE id = $1::uuid",
+            user_id,
+            bool(opt_in),
+        )
+    return "UPDATE 1" in str(n) or (n and "1" in str(n))
+
+
 async def email_segment_optimized_unpaid_count(pool, days: int) -> int:
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
@@ -1532,6 +1561,7 @@ async def email_segment_optimized_unpaid_count(pool, days: int) -> int:
             INNER JOIN recent_opt ro ON ro.uid = u.id
             WHERE {_sql_user_is_unpaid()}
               AND COALESCE(u.admin_blocked, FALSE) = FALSE
+              AND {_sql_user_marketing_opt_in()}
             """,
             days,
         )
@@ -1555,6 +1585,7 @@ async def email_segment_optimized_unpaid_emails(pool, days: int, limit: int) -> 
             INNER JOIN recent_opt ro ON ro.uid = u.id
             WHERE {_sql_user_is_unpaid()}
               AND COALESCE(u.admin_blocked, FALSE) = FALSE
+              AND {_sql_user_marketing_opt_in()}
             ORDER BY u.email
             LIMIT $2
             """,

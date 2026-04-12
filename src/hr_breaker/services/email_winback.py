@@ -7,16 +7,20 @@ import random
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable
+from urllib.parse import quote
 
 from hr_breaker.config import Settings, get_settings
 
+from hr_breaker.services.auth import create_email_unsubscribe_token
 from hr_breaker.services.db import (
     admin_email_settings_get,
     email_winback_claim_due_batch,
     email_winback_mark_failed,
     email_winback_mark_sent,
+    email_winback_mark_skipped_marketing,
     email_winback_mark_skipped_paid,
     email_winback_replace_pending,
+    user_get_by_email,
     user_get_by_id,
     user_get_subscription,
 )
@@ -29,6 +33,13 @@ def public_base_for_email(settings: Settings) -> str:
     """Origin for logo/hero URLs and CTA links in outbound email (must be real HTTPS in production)."""
     raw = (settings.email_public_base_url or settings.frontend_url or "").strip()
     return raw.rstrip("/")
+
+
+def build_unsubscribe_url(settings: Settings, user_id: str) -> str:
+    """One-click link: GET /api/email/unsubscribe — must hit same host that serves the API (see EMAIL_PUBLIC_BASE_URL)."""
+    base = public_base_for_email(settings)
+    token = create_email_unsubscribe_token(user_id)
+    return f"{base}/api/email/unsubscribe?token={quote(token, safe='')}"
 
 
 _TEMPLATE_FILES = {
@@ -51,13 +62,13 @@ def load_email_template_html(template_id: str) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def merge_winback_placeholders(html: str, *, public_base: str) -> str:
-    """Inline HTML path: same merge tags as admin preview (repo HTML files)."""
+def merge_winback_placeholders(html: str, *, public_base: str, unsubscribe_url: str) -> str:
+    """Inline HTML: merge tags; unsubscribe_url is signed one-click URL for this user."""
     base = (public_base or "").rstrip("/")
     logo = f"{base}/logo-color.svg" if base else "{{logo_url}}"
     hero = f"{base}/email/hero-winback.svg" if base else "{{hero_image_url}}"
     download = f"{base}/upgrade" if base else "{{download_url}}"
-    unsub = f"{base}/settings" if base else "{{unsubscribe_url}}"
+    unsub = unsubscribe_url or (f"{base}/settings" if base else "{{unsubscribe_url}}")
     h = html.replace("{{logo_url}}", logo)
     h = h.replace("{{hero_image_url}}", hero)
     h = h.replace("{{download_url}}", download)
@@ -65,11 +76,10 @@ def merge_winback_placeholders(html: str, *, public_base: str) -> str:
     return h
 
 
-def resend_variables_for_send(*, public_base: str) -> dict[str, str]:
+def resend_variables_for_send(*, public_base: str, unsubscribe_url: str) -> dict[str, str]:
     """
-    Variables passed to Resend Dashboard templates (published).
-    Names must match placeholders in the template editor. Do not use reserved names
-    FIRST_NAME, LAST_NAME, EMAIL, UNSUBSCRIBE_URL for custom keys (Resend rules).
+    Variables for Resend Dashboard templates. Do not use Resend-reserved names as custom keys.
+    Use UNSUBSCRIBE_LINK (not UNSUBSCRIBE_URL) for the one-click URL.
     """
     base = (public_base or "").rstrip("/")
     return {
@@ -77,6 +87,7 @@ def resend_variables_for_send(*, public_base: str) -> dict[str, str]:
         "HERO_IMAGE_URL": f"{base}/email/hero-winback.svg",
         "DOWNLOAD_URL": f"{base}/upgrade",
         "SETTINGS_URL": f"{base}/settings",
+        "UNSUBSCRIBE_LINK": unsubscribe_url,
     }
 
 
@@ -101,7 +112,9 @@ async def deliver_winback_email(
     subject: str,
     app_template_id: str,
     public_base: str,
+    user_id: str,
 ) -> None:
+    unsub = build_unsubscribe_url(settings, user_id)
     rid = resend_published_template_id(settings, app_template_id)
     if rid:
         await resend_send_template(
@@ -110,11 +123,11 @@ async def deliver_winback_email(
             to=to,
             subject=subject,
             template_id=rid,
-            variables=resend_variables_for_send(public_base=public_base),
+            variables=resend_variables_for_send(public_base=public_base, unsubscribe_url=unsub),
         )
         return
     raw = load_email_template_html(app_template_id)
-    html = merge_winback_placeholders(raw, public_base=public_base)
+    html = merge_winback_placeholders(raw, public_base=public_base, unsubscribe_url=unsub)
     await resend_send_html(
         api_key=api_key,
         from_addr=from_addr,
@@ -154,6 +167,9 @@ async def maybe_schedule_winback_after_optimize(
         sub = await user_get_subscription(pool, uid)
         if _user_is_paid(sub):
             return
+        urow = await user_get_by_id(pool, uid)
+        if urow is not None and urow.get("marketing_emails_opt_in") is False:
+            return
         lo = int(cfg.get("winback_delay_min_minutes") or 25)
         hi = int(cfg.get("winback_delay_max_minutes") or max(lo, 30))
         if hi < lo:
@@ -176,6 +192,7 @@ async def process_winback_due_batch(pool, *, limit: int = 25) -> dict[str, Any]:
 
     sent = 0
     skipped = 0
+    skipped_marketing = 0
     failed = 0
     errors: list[str] = []
 
@@ -185,6 +202,7 @@ async def process_winback_due_batch(pool, *, limit: int = 25) -> dict[str, Any]:
             "error": "RESEND_API_KEY and RESEND_FROM must be set",
             "sent": 0,
             "skipped_paid": 0,
+            "skipped_marketing": 0,
             "failed": 0,
         }
 
@@ -204,6 +222,10 @@ async def process_winback_due_batch(pool, *, limit: int = 25) -> dict[str, Any]:
                 await email_winback_mark_failed(pool, sid, "no email")
                 failed += 1
                 continue
+            if u.get("marketing_emails_opt_in") is False:
+                await email_winback_mark_skipped_marketing(pool, sid)
+                skipped_marketing += 1
+                continue
             sub = await user_get_subscription(pool, uid)
             if _user_is_paid(sub):
                 await email_winback_mark_skipped_paid(pool, sid)
@@ -217,6 +239,7 @@ async def process_winback_due_batch(pool, *, limit: int = 25) -> dict[str, Any]:
                 subject=subject,
                 app_template_id=tid,
                 public_base=public_base,
+                user_id=uid,
             )
             await email_winback_mark_sent(pool, sid)
             sent += 1
@@ -232,6 +255,7 @@ async def process_winback_due_batch(pool, *, limit: int = 25) -> dict[str, Any]:
         "claimed": len(batch),
         "sent": sent,
         "skipped_paid": skipped,
+        "skipped_marketing": skipped_marketing,
         "failed": failed,
         "errors_sample": errors[:5],
     }
@@ -252,16 +276,14 @@ async def send_winback_to_email(
     if not api_key or not from_addr:
         raise ValueError("RESEND_API_KEY and RESEND_FROM must be set")
 
-    async with pool.acquire() as conn:
-        row = await conn.fetchrow(
-            "SELECT id, admin_blocked FROM users WHERE lower(email) = lower($1) LIMIT 1",
-            to_email.strip(),
-        )
-    if not row:
+    u = await user_get_by_email(pool, to_email.strip())
+    if not u:
         raise ValueError("No user with this email")
-    if row.get("admin_blocked"):
+    if u.get("admin_blocked"):
         raise ValueError("User is admin-blocked")
-    uid = str(row["id"])
+    if u.get("marketing_emails_opt_in") is False:
+        raise ValueError("User opted out of marketing emails")
+    uid = str(u["id"])
     sub = await user_get_subscription(pool, uid)
     if _user_is_paid(sub):
         raise ValueError("User has an active paid/trial subscription — skipped")
@@ -274,4 +296,5 @@ async def send_winback_to_email(
         subject=subject,
         app_template_id=template_id,
         public_base=public_base,
+        user_id=uid,
     )

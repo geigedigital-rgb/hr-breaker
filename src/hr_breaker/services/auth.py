@@ -65,6 +65,29 @@ def create_access_token(user_id: str, email: str) -> str:
     )
 
 
+def create_email_unsubscribe_token(user_id: str) -> str:
+    """Long-lived JWT for one-click unsubscribe from marketing email (no login)."""
+    try:
+        import jwt
+    except ImportError:
+        raise RuntimeError("PyJWT not installed. Install: pip install 'hr-breaker[auth]'")
+    settings = get_settings()
+    if not settings.jwt_secret:
+        raise ValueError("JWT_SECRET not set in .env")
+    now = datetime.utcnow()
+    payload = {
+        "sub": user_id,
+        "purpose": "email_unsub",
+        "exp": now + timedelta(days=365),
+        "iat": now,
+    }
+    return jwt.encode(
+        payload,
+        settings.jwt_secret,
+        algorithm=settings.jwt_algorithm,
+    )
+
+
 def decode_token(token: str) -> dict[str, Any] | None:
     """Decode JWT; return payload or None if invalid."""
     try:

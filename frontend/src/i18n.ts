@@ -19,6 +19,14 @@ const en = {
     streakTooltip: "Days in a row you used the app. Consistency raises readiness.",
     readinessTooltip: "Interview readiness level based on your activity.",
   },
+  emailUnsubscribed: {
+    titleOk: "You’re unsubscribed",
+    titleErr: "Link invalid or expired",
+    bodyOk:
+      "We won’t send you marketing emails from PitchCV. You can turn marketing email back on anytime in Settings.",
+    bodyErr: "Use the unsubscribe link from your latest email, or sign in and update notifications in Settings.",
+    backHome: "Back to PitchCV",
+  },
   partner: {
     title: "Partner program",
     subtitle: "Invite friends and earn from their first payment. You manage your earnings here.",
@@ -542,7 +550,8 @@ const en = {
         assetUrlCopied: "URL copied",
         empty: "No templates yet.",
         demo1Name: "Win-back #1 — optimized, not paid",
-        demo1Desc: "Hero slab + logo/illustration merge tags; footer Privacy/Terms fixed URLs; {{unsubscribe_url}}, {{download_url}}.",
+        demo1Desc:
+          "Hero + merge tags. {{unsubscribe_url}} becomes a signed /api/email/unsubscribe?token=… link per recipient at send time. Resend templates: use UNSUBSCRIBE_LINK variable.",
         demo2Name: "Short nudge — dark",
         demo2Desc: "Minimal follow-up, dark panel.",
       },

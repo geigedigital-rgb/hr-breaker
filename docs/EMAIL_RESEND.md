@@ -69,9 +69,16 @@ RESEND_TEMPLATE_SHORT_NUDGE=
 | `LOGO_URL` | база из `EMAIL_PUBLIC_BASE_URL` (или `FRONTEND_URL`) + `/logo-color.svg` |
 | `HERO_IMAGE_URL` | та же база + `/email/hero-winback.svg` |
 | `DOWNLOAD_URL` | та же база + `/upgrade` |
-| `SETTINGS_URL` | та же база + `/settings` (ссылка «настройки / отказ от рассылок» с вашей стороны) |
+| `SETTINGS_URL` | та же база + `/settings` (настройки аккаунта) |
+| `UNSUBSCRIBE_LINK` | **Одноразовая ссылка отписки** для этого получателя: `GET {база}/api/email/unsubscribe?token=<JWT>` (JWT год, `purpose=email_unsub`). В Resend **нельзя** завести свою переменную с именем `UNSUBSCRIBE_URL` — оно зарезервировано у них; используйте **`UNSUBSCRIBE_LINK`**. |
 
-База в коде: `public_base_for_email()` в `email_winback.py` — для PitchCV задайте `EMAIL_PUBLIC_BASE_URL=https://my.pitchcv.app`, чтобы картинки в письмах совпадали с реальным хостингом приложения ([my.pitchcv.app](https://my.pitchcv.app/)).
+База в коде: `public_base_for_email()` в `email_winback.py` — для PitchCV задайте `EMAIL_PUBLIC_BASE_URL=https://my.pitchcv.app`, чтобы ссылки в письме (в т.ч. отписка и картинки) вели на тот же хост, где доступен `/api` ([my.pitchcv.app](https://my.pitchcv.app/)).
+
+### Отписка из письма (inline HTML)
+
+В шаблоне из репозитория плейсхолдер **`{{unsubscribe_url}}`**: при отправке бэкенд подставляет полный URL с подписанным токеном. Ничего вручную в Resend для этого тега вводить не нужно.
+
+После перехода по ссылке API выставляет `marketing_emails_opt_in = false` и редиректит на страницу **`/email/unsubscribed?ok=1`** (фронт).
 
 В редакторе Resend переменные обычно пишутся как `{{LOGO_URL}}` — ориентируйтесь на их UI.
 

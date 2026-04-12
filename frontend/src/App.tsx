@@ -19,6 +19,7 @@ const Partner = lazy(() => import("./pages/Partner"));
 const Login = lazy(() => import("./pages/Login"));
 const AuthCallback = lazy(() => import("./pages/AuthCallback"));
 const SignupSuccess = lazy(() => import("./pages/SignupSuccess"));
+const EmailUnsubscribed = lazy(() => import("./pages/EmailUnsubscribed"));
 const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
 const AdminUsers = lazy(() => import("./pages/admin/AdminUsers"));
 const AdminUserDetail = lazy(() => import("./pages/admin/AdminUserDetail"));
@@ -124,6 +125,14 @@ function App() {
               element={
                 <LazyShell>
                   <AuthCallback />
+                </LazyShell>
+              }
+            />
+            <Route
+              path="/email/unsubscribed"
+              element={
+                <LazyShell>
+                  <EmailUnsubscribed />
                 </LazyShell>
               }
             />

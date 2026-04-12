@@ -35,6 +35,7 @@ export function prepareEmailHtmlForAdminPreview(html: string): string {
   if (origin) {
     h = h.replace(/\{\{logo_url\}\}/g, `${origin}/logo-color.svg`);
     h = h.replace(/\{\{hero_image_url\}\}/g, `${origin}/email/hero-winback.svg`);
+    h = h.replace(/\{\{unsubscribe_url\}\}/g, `${origin}/api/email/unsubscribe?token=…`);
   } else {
     h = h.replace(/\{\{logo_url\}\}/g, "about:blank");
     h = h.replace(/\{\{hero_image_url\}\}/g, "about:blank");
