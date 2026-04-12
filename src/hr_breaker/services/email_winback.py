@@ -185,22 +185,24 @@ async def latest_resume_open_url_for_user(pool, settings: Settings, user_id: str
 
 
 async def latest_email_cta_url_for_user(pool, settings: Settings, user_id: str) -> str:
-    """Primary CTA for email: latest non-expired optimization deep link; else app home (no raw PDF API)."""
-    row = await optimization_snapshot_get_latest_valid(pool, user_id)
+    """Primary CTA: non-expired optimize snapshot (`/optimize?resume=…`); else one-click saved PDF; else app home."""
     base = public_base_for_email(settings).rstrip("/")
+    row = await optimization_snapshot_get_latest_valid(pool, user_id)
     if row:
         exp = row["expires_at"]
         if isinstance(exp, datetime):
             if exp.tzinfo is None:
                 exp = exp.replace(tzinfo=timezone.utc)
-        else:
-            return f"{base}/"
-        sid = str(row["id"])
-        try:
-            tok = create_optimize_snapshot_token(user_id, sid, exp)
-        except Exception:
-            return f"{base}/"
-        return f"{base}/optimize?resume={quote(tok, safe='')}"
+            sid = str(row["id"])
+            try:
+                tok = create_optimize_snapshot_token(user_id, sid, exp)
+                return f"{base}/optimize?resume={quote(tok, safe='')}"
+            except Exception:
+                pass
+
+    pdf_open = await latest_resume_open_url_for_user(pool, settings, user_id)
+    if pdf_open:
+        return pdf_open
     return f"{base}/"
 
 
