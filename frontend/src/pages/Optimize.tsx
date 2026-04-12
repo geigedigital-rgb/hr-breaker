@@ -1218,8 +1218,6 @@ export default function Optimize() {
   const resumeHydratedTokenRef = useRef<string | null>(null);
   const resumeGuestRedirectStartedRef = useRef(false);
   const [resumeBootstrapping, setResumeBootstrapping] = useState(false);
-  /** Saved-result deep link JWT on device (same key as post–optimize persist). */
-  const [storedSnapshotBannerVisible, setStoredSnapshotBannerVisible] = useState(false);
   const autoImproveGateRef = useRef<{
     preScores: api.AnalyzeResponse | null;
     resumeContent: string;
@@ -1451,13 +1449,6 @@ export default function Optimize() {
       cancelled = true;
     };
   }, [resumeTokenParam, user, loading, navigate, setSearchParams]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const tok = sessionStorage.getItem(api.OPTIMIZE_LAST_SNAPSHOT_JWT_KEY);
-    const has = Boolean(tok && tok.length > 20 && user && user.id !== "local");
-    setStoredSnapshotBannerVisible(has);
-  }, [user?.id, stage]);
 
   // Restore analyze state after trial checkout (before paint) so data is ready for auto-improve
   useLayoutEffect(() => {
@@ -2109,7 +2100,6 @@ export default function Optimize() {
     } catch {
       /* ignore */
     }
-    setStoredSnapshotBannerVisible(false);
     const nextContent = result.optimized_resume_text?.trim() || resumeContent.trim();
     setResumeContent(nextContent);
     setJobInput("");
@@ -2764,11 +2754,6 @@ export default function Optimize() {
                 </div>
               ) : (
                 <>
-                  {result.snapshot_url && (
-                    <div className="mb-4 rounded-xl border border-sky-200/90 bg-sky-50/90 px-4 py-3 text-[13px] leading-relaxed text-sky-950">
-                      {t("optimize.snapshotRetentionHint")}
-                    </div>
-                  )}
                   {result.key_changes && result.key_changes.length > 0 && (
                     <section className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-4 sm:p-5" aria-labelledby="key-changes-heading">
                       <h3 id="key-changes-heading" className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">{t("optimize.keyChanges")}</h3>
@@ -2823,42 +2808,6 @@ export default function Optimize() {
         </div>
       ) : stage === "landing" ? (
         <div className="flex flex-col items-center justify-start sm:justify-center pt-2 sm:pt-8 pb-8 sm:pb-16 px-3 sm:px-6 w-full max-w-5xl mx-auto min-h-0 overflow-x-hidden">
-          {storedSnapshotBannerVisible ? (
-            <div className="w-full max-w-[900px] mb-4 rounded-xl border border-[#4578FC]/30 bg-[#f0f4ff] px-4 py-3 text-left shadow-sm">
-              <p className="text-sm font-semibold text-[#1e293b]">{t("optimize.continueLastResultTitle")}</p>
-              <p className="mt-1 text-xs text-[#475569] leading-relaxed">{t("optimize.continueLastResultHint")}</p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  className="rounded-lg bg-[#1D4ED8] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#1e40af]"
-                  onClick={() => {
-                    const tok = sessionStorage.getItem(api.OPTIMIZE_LAST_SNAPSHOT_JWT_KEY);
-                    if (!tok) return;
-                    navigate(
-                      `/optimize?${api.OPTIMIZE_RESUME_QUERY_PARAM}=${encodeURIComponent(tok)}`,
-                      { replace: false },
-                    );
-                  }}
-                >
-                  {t("optimize.continueLastResultCta")}
-                </button>
-                <button
-                  type="button"
-                  className="rounded-lg border border-[#cbd5e1] bg-white px-3 py-1.5 text-xs font-medium text-[#475569] hover:bg-[#f8fafc]"
-                  onClick={() => {
-                    try {
-                      sessionStorage.removeItem(api.OPTIMIZE_LAST_SNAPSHOT_JWT_KEY);
-                    } catch {
-                      /* ignore */
-                    }
-                    setStoredSnapshotBannerVisible(false);
-                  }}
-                >
-                  {t("optimize.continueLastResultDismiss")}
-                </button>
-              </div>
-            </div>
-          ) : null}
           {/* Main Visual Block */}
           <div className="w-full max-w-[900px] mb-6 sm:mb-12">
             <div className="relative rounded-2xl p-5 sm:p-8 lg:p-12 overflow-hidden flex flex-col justify-center min-h-[320px] sm:min-h-[380px] lg:min-h-[420px]"
@@ -2931,44 +2880,6 @@ export default function Optimize() {
       ) : stage === "idle" ? (
         /* Шаги 1–2 всегда видны; при исчерпанном free scan — модалка поверх (проверка не стартует). */
         <div className="relative flex-1 flex flex-col min-h-[50vh]">
-        {storedSnapshotBannerVisible ? (
-          <div className="mx-auto w-full max-w-6xl px-3 sm:px-4 lg:px-6 pt-3">
-            <div className="rounded-xl border border-[#4578FC]/30 bg-[#f0f4ff] px-4 py-3 text-left shadow-sm">
-              <p className="text-sm font-semibold text-[#1e293b]">{t("optimize.continueLastResultTitle")}</p>
-              <p className="mt-1 text-xs text-[#475569] leading-relaxed">{t("optimize.continueLastResultHint")}</p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  className="rounded-lg bg-[#1D4ED8] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#1e40af]"
-                  onClick={() => {
-                    const tok = sessionStorage.getItem(api.OPTIMIZE_LAST_SNAPSHOT_JWT_KEY);
-                    if (!tok) return;
-                    navigate(
-                      `/optimize?${api.OPTIMIZE_RESUME_QUERY_PARAM}=${encodeURIComponent(tok)}`,
-                      { replace: false },
-                    );
-                  }}
-                >
-                  {t("optimize.continueLastResultCta")}
-                </button>
-                <button
-                  type="button"
-                  className="rounded-lg border border-[#cbd5e1] bg-white px-3 py-1.5 text-xs font-medium text-[#475569] hover:bg-[#f8fafc]"
-                  onClick={() => {
-                    try {
-                      sessionStorage.removeItem(api.OPTIMIZE_LAST_SNAPSHOT_JWT_KEY);
-                    } catch {
-                      /* ignore */
-                    }
-                    setStoredSnapshotBannerVisible(false);
-                  }}
-                >
-                  {t("optimize.continueLastResultDismiss")}
-                </button>
-              </div>
-            </div>
-          </div>
-        ) : null}
         <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 p-3 sm:p-4 lg:p-6 max-w-6xl mx-auto w-full items-stretch content-start">
           {/* Шаг 1 — слева */}
           <section
