@@ -1,14 +1,4 @@
-"""
-Catalog of email automations (code-defined). Admin UI lists these; DB stores per-id flags in admin_email_settings.automation_states.
-
-Adding a new flow (until DB-driven editor exists):
-1. Append to AUTOMATION_DEFINITIONS with a stable `id` and set `wired` when backend logic exists.
-2. Implement scheduling / sending in Python (see email_winback.maybe_schedule_* and process_winback_due_batch).
-3. If the flow needs Resend template ids editable in admin, add columns or JSON on admin_email_settings (or a new table) + PATCH in api.py.
-4. In frontend AdminEmailSend, add the `id` to AUTOMATION_MAIN_EDITOR_IDS when this flow gets a full settings form on Main.
-
-Extend AUTOMATION_DEFINITIONS when adding new flows — keep `id` stable for API PATCH /admin/email/automations/{id}.
-"""
+"""Catalog of currently active email automations (code-defined)."""
 
 from __future__ import annotations
 
@@ -31,44 +21,20 @@ AUTOMATION_DEFINITIONS: list[AutomationDef] = [
         "id": "post_optimize_winback",
         "name": "Post-optimize win-back",
         "description": (
-            "After a successful optimize, schedules one delayed email for users who are still on the free plan "
-            "and have not opted out of marketing. Uses the win-back template (Resend or inline HTML)."
+            "After a successful optimize with a saved snapshot, schedule one delayed email for users who are still "
+            "on the free plan and have not opted out of marketing."
         ),
         "channel": "queue",
         "dedupe_summary": (
-            "At most one pending row per user in email_winback_schedule. A new successful optimize replaces "
-            "the previous pending slot (same run_at window recalculated)."
+            "At most one pending row per user in email_winback_schedule; once a reminder was sent, later optimizes "
+            "do not schedule the same automatic reminder again."
         ),
         "conditions_code": (
-            "maybe_schedule_winback_after_optimize() in email_winback.py: DB configured, winback enabled, "
-            "not paused, user not admin, not paid/trial active, marketing_emails_opt_in is not False."
+            "Run only after optimization_snapshot_insert() succeeds, win-back is enabled, not paused, user is not "
+            "admin, user is unpaid, and reminder-no-download has not already been sent."
         ),
         "wired": True,
-    },
-    {
-        "id": "segment_optimized_unpaid",
-        "name": "Segment: optimized, unpaid (manual blast)",
-        "description": (
-            "Admin-triggered sends from Automation & send — not a background cron. Preview / dry-run / send "
-            "with explicit limits."
-        ),
-        "channel": "manual_segment",
-        "dedupe_summary": "Each run is explicit; dry-run logs to admin_email_campaign_log. No automatic re-send.",
-        "conditions_code": "email_segment_optimized_unpaid_emails() in db.py — optimize_complete in window, unpaid.",
-        "wired": True,
-    },
-    {
-        "id": "draft_analyze_followup",
-        "name": "Abandoned flow after analyze (planned)",
-        "description": (
-            "Future: delayed transactional email when a user saved analyze (stage 2) but did not finish optimize. "
-            "Will reuse optimize_session_drafts + dedicated schedule or template."
-        ),
-        "channel": "planned",
-        "dedupe_summary": "Not wired — design: one pending job per user per automation key; skip if snapshot stage≥4.",
-        "conditions_code": "Planned — hook after optimize_session_draft_upsert stage 2; send only if still draft.",
-        "wired": False,
-    },
+    }
 ]
 
 

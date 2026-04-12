@@ -56,7 +56,7 @@ def test_process_winback_due_batch_skips_duplicate_rows(monkeypatch) -> None:
             frontend_url="https://my.pitchcv.app",
         ),
     )
-    monkeypatch.setattr(ew, "admin_email_settings_get", lambda pool: _awaitable({}))
+    monkeypatch.setattr(ew, "admin_email_settings_get", lambda pool: _awaitable({"winback_auto_enabled": True}))
     monkeypatch.setattr(ew, "is_post_optimize_winback_paused", lambda cfg: False)
     monkeypatch.setattr(
         ew,

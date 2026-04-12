@@ -1,5 +1,6 @@
 import asyncio
 import json
+import math
 from datetime import datetime, timezone
 
 from hr_breaker.services.db import optimization_snapshot_insert, optimize_session_draft_upsert
@@ -74,3 +75,36 @@ def test_optimization_snapshot_insert_serializes_payload_for_jsonb() -> None:
     assert snap_id == "snap-123"
     assert isinstance(args[3], str)
     assert json.loads(args[3]) == payload
+
+
+def test_optimization_snapshot_insert_sanitizes_nan_in_payload() -> None:
+    """NaN/Infinity in payload must NOT raise; they are replaced with null."""
+    conn = _FakeConn()
+    pool = _FakePool(conn)
+
+    payload = {
+        "stage": 4,
+        "pre_ats_score": float("nan"),
+        "post_keyword_score": float("inf"),
+        "nested": {"score": float("-inf"), "label": "ok"},
+        "scores": [float("nan"), 0.5],
+    }
+    snap_id = asyncio.run(
+        optimization_snapshot_insert(
+            pool,
+            user_id="11111111-1111-1111-1111-111111111111",
+            pdf_filename=None,
+            payload=payload,
+            expires_at=datetime.now(timezone.utc),
+        )
+    )
+
+    _, args = conn.calls[0]
+    assert snap_id == "snap-123"
+    parsed = json.loads(args[3])
+    assert parsed["pre_ats_score"] is None
+    assert parsed["post_keyword_score"] is None
+    assert parsed["nested"]["score"] is None
+    assert parsed["nested"]["label"] == "ok"
+    assert parsed["scores"][0] is None
+    assert parsed["scores"][1] == 0.5

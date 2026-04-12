@@ -370,6 +370,19 @@ async def process_winback_due_batch(pool, *, limit: int = 25) -> dict[str, Any]:
         }
 
     cfg = await admin_email_settings_get(pool)
+    if not cfg.get("winback_auto_enabled"):
+        return {
+            "ok": True,
+            "disabled": True,
+            "message": "Post-optimize win-back is disabled in admin; no rows processed.",
+            "claimed": 0,
+            "sent": 0,
+            "skipped_paid": 0,
+            "skipped_marketing": 0,
+            "skipped_duplicate": 0,
+            "failed": 0,
+            "errors_sample": [],
+        }
     db_r = str(cfg.get("resend_template_reminder_no_download") or "")
     db_n = str(cfg.get("resend_template_short_nudge") or "")
 

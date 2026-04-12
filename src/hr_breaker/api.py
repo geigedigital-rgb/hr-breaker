@@ -3414,6 +3414,7 @@ async def _run_optimize(
 
     pool_done = await get_pool()
     ok = validation.passed and bool(optimized and optimized.pdf_bytes)
+    snapshot_saved = False
     if audit_uid and pool_done:
         opt_fail_reason: str | None = None
         if not ok:
@@ -3440,16 +3441,6 @@ async def _run_optimize(
             error_message=opt_fail_reason,
             metadata=oc_meta,
         )
-        if ok:
-            from hr_breaker.services.email_winback import maybe_schedule_winback_after_optimize
-
-            try:
-                await maybe_schedule_winback_after_optimize(
-                    pool_done, user, optimize_succeeded=True, is_admin_user_fn=_is_admin_user
-                )
-            except Exception as e:
-                logger.warning("Win-back schedule skipped: %s", e)
-
     if pool_done and ok and opt_uid and opt_uid != "local":
         try:
             snap_exp = datetime.now(timezone.utc) + timedelta(days=3)
@@ -3482,6 +3473,7 @@ async def _run_optimize(
                 expires_at=snap_exp,
             )
             if snap_id:
+                snapshot_saved = True
                 tok = create_optimize_snapshot_token(opt_uid, snap_id, snap_exp)
                 base_pub = (settings.email_public_base_url or settings.frontend_url or "").strip().rstrip("/")
                 snapshot_url_out = f"{base_pub}/optimize?resume={quote(tok, safe='')}"
@@ -3492,6 +3484,18 @@ async def _run_optimize(
                     logger.warning("optimize_session_draft_delete: %s", e)
         except Exception:
             logger.exception("optimization_snapshot_insert failed for user_id=%s", opt_uid)
+    else:
+        snapshot_saved = False
+
+    if pool_done and ok and snapshot_saved:
+        from hr_breaker.services.email_winback import maybe_schedule_winback_after_optimize
+
+        try:
+            await maybe_schedule_winback_after_optimize(
+                pool_done, user, optimize_succeeded=True, is_admin_user_fn=_is_admin_user
+            )
+        except Exception as e:
+            logger.warning("Win-back schedule skipped: %s", e)
 
     return OptimizeResponse(
         success=ok,
@@ -4123,24 +4127,13 @@ def _build_admin_automation_list_out(cfg: dict[str, Any], pending_global: int) -
     items: list[AdminEmailAutomationItemOut] = []
     for a in AUTOMATION_DEFINITIONS:
         aid = a["id"]
-        enabled = False
-        paused = False
-        pend: int | None = None
-        sup_en = False
-        sup_pause = False
-        sup_clear = False
-        if aid == "post_optimize_winback":
-            enabled = bool(cfg.get("winback_auto_enabled"))
-            row = states.get(aid)
-            paused = bool((row or {}).get("paused")) if isinstance(row, dict) else False
-            pend = pending_global
-            sup_en = True
-            sup_pause = True
-            sup_clear = True
-        elif aid == "segment_optimized_unpaid":
-            enabled = True
-        elif aid == "draft_analyze_followup":
-            enabled = False
+        enabled = bool(cfg.get("winback_auto_enabled"))
+        row = states.get(aid)
+        paused = bool((row or {}).get("paused")) if isinstance(row, dict) else False
+        pend: int | None = pending_global
+        sup_en = True
+        sup_pause = True
+        sup_clear = True
         items.append(
             AdminEmailAutomationItemOut(
                 id=aid,
@@ -4183,10 +4176,6 @@ async def api_admin_email_automations_patch(
     aid = (automation_id or "").strip()
     if automation_def_by_id(aid) is None:
         raise HTTPException(404, "Unknown automation")
-    if aid == "segment_optimized_unpaid":
-        raise HTTPException(400, "This flow is manual only — use the segment section below (no enable/pause).")
-    if aid == "draft_analyze_followup":
-        raise HTTPException(400, "Automation is planned but not wired yet.")
     if aid != "post_optimize_winback":
         raise HTTPException(400, "Unsupported automation for PATCH")
     if body.enabled is None and body.paused is None:

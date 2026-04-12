@@ -9,6 +9,7 @@ Requires: pip install 'hr-breaker[db]'
 
 import json
 import logging
+import math
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -19,6 +20,22 @@ from hr_breaker.models import GeneratedPDF
 from hr_breaker.services.reviews_repo import ensure_reviews_schema
 
 logger = logging.getLogger(__name__)
+
+
+def _sanitize_for_jsonb(obj: Any) -> Any:
+    """Recursively replace NaN/±Infinity floats with None so json.dumps never raises."""
+    if isinstance(obj, float):
+        return None if (math.isnan(obj) or math.isinf(obj)) else obj
+    if isinstance(obj, dict):
+        return {k: _sanitize_for_jsonb(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_sanitize_for_jsonb(v) for v in obj]
+    return obj
+
+
+def _to_jsonb_str(payload: Any) -> str:
+    return json.dumps(_sanitize_for_jsonb(payload or {}), ensure_ascii=False)
+
 
 USERS_TABLE = "users"
 RESUMES_TABLE = "generated_resumes"
@@ -1420,7 +1437,7 @@ async def optimize_session_draft_upsert(
                 updated_at = NOW()
             """,
             user_id,
-            json.dumps(payload or {}, ensure_ascii=False, allow_nan=False),
+            _to_jsonb_str(payload),
             expires_at,
         )
 
@@ -1564,7 +1581,7 @@ async def optimization_snapshot_insert(
             user_id,
             expires_at,
             pdf_filename,
-            json.dumps(payload or {}, ensure_ascii=False, allow_nan=False),
+            _to_jsonb_str(payload),
         )
     return str(row["id"]) if row else ""
 
