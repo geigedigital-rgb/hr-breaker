@@ -21,6 +21,8 @@ export default function AdminEmailSend() {
   const [auto, setAuto] = useState(false);
   const [dMin, setDMin] = useState(25);
   const [dMax, setDMax] = useState(30);
+  const [tmplReminder, setTmplReminder] = useState("");
+  const [tmplNudge, setTmplNudge] = useState("");
 
   const [days, setDays] = useState(30);
   const [limit, setLimit] = useState(15);
@@ -41,6 +43,8 @@ export default function AdminEmailSend() {
       setAuto(c.winback_auto_enabled);
       setDMin(c.winback_delay_min_minutes);
       setDMax(c.winback_delay_max_minutes);
+      setTmplReminder(c.resend_template_reminder_no_download ?? "");
+      setTmplNudge(c.resend_template_short_nudge ?? "");
     } catch (e) {
       setLoadErr(e instanceof Error ? e.message : String(e));
     }
@@ -58,6 +62,8 @@ export default function AdminEmailSend() {
         winback_auto_enabled: auto,
         winback_delay_min_minutes: dMin,
         winback_delay_max_minutes: dMax,
+        resend_template_reminder_no_download: tmplReminder,
+        resend_template_short_nudge: tmplNudge,
       });
       setControl(c);
       setSaveMsg("ok");
@@ -207,6 +213,33 @@ export default function AdminEmailSend() {
               onChange={(e) => setDMax(Number(e.target.value) || 30)}
               className="mt-1 w-full rounded-lg border border-[#EBEDF5] px-3 py-2 text-sm"
             />
+          </div>
+        </div>
+        <div className="mt-4 space-y-3">
+          <div>
+            <label className="text-xs font-medium text-[var(--text-muted)]">{t("admin.email.send.resendTmplReminderLabel")}</label>
+            <input
+              type="text"
+              value={tmplReminder}
+              onChange={(e) => setTmplReminder(e.target.value)}
+              placeholder="e.g. df66fcff-c452-43e3-82ee-d4fb58b7a638"
+              autoComplete="off"
+              spellCheck={false}
+              className="mt-1 w-full rounded-lg border border-[#EBEDF5] px-3 py-2 font-mono text-sm"
+            />
+            <p className="mt-1 text-xs leading-relaxed text-[var(--text-muted)]">{t("admin.email.send.resendTmplReminderHint")}</p>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-[var(--text-muted)]">{t("admin.email.send.resendTmplNudgeLabel")}</label>
+            <input
+              type="text"
+              value={tmplNudge}
+              onChange={(e) => setTmplNudge(e.target.value)}
+              autoComplete="off"
+              spellCheck={false}
+              className="mt-1 w-full rounded-lg border border-[#EBEDF5] px-3 py-2 font-mono text-sm"
+            />
+            <p className="mt-1 text-xs leading-relaxed text-[var(--text-muted)]">{t("admin.email.send.resendTmplNudgeHint")}</p>
           </div>
         </div>
         <button

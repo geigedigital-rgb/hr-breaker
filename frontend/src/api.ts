@@ -1117,6 +1117,9 @@ export type AdminEmailControl = {
   pending_queue_count: number;
   resend_template_reminder_configured: boolean;
   resend_template_short_nudge_configured: boolean;
+  /** Published template id/alias from Resend (stored in DB). */
+  resend_template_reminder_no_download: string;
+  resend_template_short_nudge: string;
 };
 
 export async function getAdminEmailControl(): Promise<AdminEmailControl> {
@@ -1130,6 +1133,8 @@ export async function patchAdminEmailControl(body: {
   winback_auto_enabled?: boolean;
   winback_delay_min_minutes?: number;
   winback_delay_max_minutes?: number;
+  resend_template_reminder_no_download?: string;
+  resend_template_short_nudge?: string;
 }): Promise<AdminEmailControl> {
   const r = await fetch(`${API}/admin/email/control`, {
     method: "PATCH",

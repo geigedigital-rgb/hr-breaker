@@ -44,7 +44,9 @@ EMAIL_PUBLIC_BASE_URL=https://my.pitchcv.app
 
 Если `EMAIL_PUBLIC_BASE_URL` не задан, используется `FRONTEND_URL` (старое поведение).
 
-Опционально — **шаблоны из дашборда Resend** (см. шаг 3):
+**Id опубликованных шаблонов Resend** (рекомендуется): задавайте в админке **Email → Automation & send** — поля сохраняются в Postgres (`admin_email_settings`), **не нужно** пихать каждый id в Railway.
+
+Опционально в `.env` / Railway — **fallback**, если поле в БД пусто (удобно для локалки без админки):
 
 ```env
 RESEND_TEMPLATE_REMINDER_NO_DOWNLOAD=
@@ -86,19 +88,16 @@ RESEND_TEMPLATE_SHORT_NUDGE=
 
 ### 3.2 Привязать к приложению
 
-В `.env`:
+1. **Прод:** админка **Email → Automation & send** — два поля «Resend template id» (win-back и short nudge). Сохраняется в БД, редеплой не нужен.
+
+2. **Либо** в `.env` / Railway (если поле в БД пустое — подставится env; иначе приоритет у значения из БД):
 
 ```env
 RESEND_TEMPLATE_REMINDER_NO_DOWNLOAD=ваш_id_или_alias
-```
-
-Для второго макета (короткий nudge):
-
-```env
 RESEND_TEMPLATE_SHORT_NUDGE=другой_id
 ```
 
-Если переменная **пустая**, для этого типа письма бэкенд шлёт **inline HTML** из файла `src/hr_breaker/email_templates/reminder_no_download.html` (или `short_nudge.html`) — удобно для dev без настройки шаблона в Resend.
+Если **и** в БД, **и** в env пусто, для этого типа письма бэкенд шлёт **inline HTML** из `src/hr_breaker/email_templates/reminder_no_download.html` или `short_nudge.html` — удобно для dev без шаблона в Resend.
 
 ---
 
@@ -135,7 +134,7 @@ RESEND_TEMPLATE_SHORT_NUDGE=другой_id
 ## Краткая шпаргалка
 
 1. Resend: домен, ключ, шаблон(ы), publish.  
-2. `.env`: `RESEND_*`, `FRONTEND_URL`, при необходимости `RESEND_TEMPLATE_*`.  
-3. Перезапуск API.  
-4. Админка: включить авто при необходимости, настроить cron на `queue/process`.  
-5. Прод: шаблоны и переменные — в Resend; сценарии «после оптимизации / сегмент» — в PitchCV.
+2. `.env` / Railway: секреты `RESEND_API_KEY`, `RESEND_FROM`, плюс `FRONTEND_URL`, `EMAIL_PUBLIC_BASE_URL`, `JWT_SECRET`, `DATABASE_URL`. Id шаблонов — в админке (БД), не обязательно в Railway.  
+3. Перезапуск API после смены env.  
+4. Админка: вписать id шаблонов Resend, включить авто при необходимости, cron на `queue/process`.  
+5. Прод: макет — в Resend; сценарии «после оптимизации / сегмент» — в PitchCV.

@@ -91,14 +91,20 @@ def resend_variables_for_send(*, public_base: str, unsubscribe_url: str) -> dict
     }
 
 
-def resend_published_template_id(settings: Settings, app_template_id: str) -> str | None:
-    """Return Resend template id/alias if configured for this app template key; else None → inline HTML."""
+def resend_published_template_id(
+    settings: Settings,
+    app_template_id: str,
+    *,
+    db_reminder: str = "",
+    db_nudge: str = "",
+) -> str | None:
+    """Return Resend template id/alias: admin DB first, then env (optional dev / legacy). Else None → inline HTML."""
     tid = (app_template_id or "").strip()
     if tid == "reminder-no-download":
-        x = (settings.resend_template_reminder_no_download or "").strip()
+        x = (db_reminder or "").strip() or (settings.resend_template_reminder_no_download or "").strip()
         return x or None
     if tid == "short-nudge":
-        x = (settings.resend_template_short_nudge or "").strip()
+        x = (db_nudge or "").strip() or (settings.resend_template_short_nudge or "").strip()
         return x or None
     return None
 
@@ -113,9 +119,16 @@ async def deliver_winback_email(
     app_template_id: str,
     public_base: str,
     user_id: str,
+    db_resend_template_reminder: str = "",
+    db_resend_template_short_nudge: str = "",
 ) -> None:
     unsub = build_unsubscribe_url(settings, user_id)
-    rid = resend_published_template_id(settings, app_template_id)
+    rid = resend_published_template_id(
+        settings,
+        app_template_id,
+        db_reminder=db_resend_template_reminder,
+        db_nudge=db_resend_template_short_nudge,
+    )
     if rid:
         await resend_send_template(
             api_key=api_key,
@@ -206,6 +219,10 @@ async def process_winback_due_batch(pool, *, limit: int = 25) -> dict[str, Any]:
             "failed": 0,
         }
 
+    cfg = await admin_email_settings_get(pool)
+    db_r = str(cfg.get("resend_template_reminder_no_download") or "")
+    db_n = str(cfg.get("resend_template_short_nudge") or "")
+
     batch = await email_winback_claim_due_batch(pool, min(limit, 100))
     for row in batch:
         sid = str(row["id"])
@@ -240,6 +257,8 @@ async def process_winback_due_batch(pool, *, limit: int = 25) -> dict[str, Any]:
                 app_template_id=tid,
                 public_base=public_base,
                 user_id=uid,
+                db_resend_template_reminder=db_r,
+                db_resend_template_short_nudge=db_n,
             )
             await email_winback_mark_sent(pool, sid)
             sent += 1
@@ -276,6 +295,10 @@ async def send_winback_to_email(
     if not api_key or not from_addr:
         raise ValueError("RESEND_API_KEY and RESEND_FROM must be set")
 
+    cfg = await admin_email_settings_get(pool)
+    db_r = str(cfg.get("resend_template_reminder_no_download") or "")
+    db_n = str(cfg.get("resend_template_short_nudge") or "")
+
     u = await user_get_by_email(pool, to_email.strip())
     if not u:
         raise ValueError("No user with this email")
@@ -297,4 +320,6 @@ async def send_winback_to_email(
         app_template_id=template_id,
         public_base=public_base,
         user_id=uid,
+        db_resend_template_reminder=db_r,
+        db_resend_template_short_nudge=db_n,
     )

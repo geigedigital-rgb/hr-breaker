@@ -562,16 +562,23 @@ const en = {
         resendOk: "Resend is configured (API key + From).",
         resendMissing: "Set RESEND_API_KEY and RESEND_FROM on the server to send real email.",
         deliveryDocHint: "Full setup (Resend templates vs inline HTML, variables, cron): see docs/EMAIL_RESEND.md in the repo.",
-        deliveryInlineWinback: "Win-back: sending inline HTML from the API (no RESEND_TEMPLATE_REMINDER_NO_DOWNLOAD).",
-        deliveryTemplateWinback: "Win-back: sending via Resend published template id (Dashboard).",
-        deliveryInlineNudge: "Short nudge: inline HTML from API.",
-        deliveryTemplateNudge: "Short nudge: Resend template id configured.",
+        deliveryInlineWinback:
+          "Win-back: inline HTML from the API (no Resend template id — add it in the fields below or set optional RESEND_TEMPLATE_REMINDER_NO_DOWNLOAD on the server).",
+        deliveryTemplateWinback: "Win-back: sending via Resend published template id (Dashboard or optional env fallback).",
+        deliveryInlineNudge:
+          "Short nudge: inline HTML (no template id below and no optional RESEND_TEMPLATE_SHORT_NUDGE on the server).",
+        deliveryTemplateNudge: "Short nudge: Resend template id configured (database or optional env).",
         autoTitle: "Automatic win-back after optimize",
         autoHint:
           "When enabled, each successful optimization for a non-paying user schedules one email between the min and max delay (minutes). If they subscribe before send time, the queued email is removed.",
         autoToggle: "Enable automatic scheduling",
         delayMin: "Min delay (minutes)",
         delayMax: "Max delay (minutes)",
+        resendTmplReminderLabel: "Resend template id — win-back (reminder)",
+        resendTmplReminderHint:
+          "Published template id or alias from Resend → Templates. Saved in the database (no Railway redeploy). If empty, optional server env RESEND_TEMPLATE_REMINDER_NO_DOWNLOAD is used.",
+        resendTmplNudgeLabel: "Resend template id — short nudge",
+        resendTmplNudgeHint: "Second template in Resend. If empty, optional env RESEND_TEMPLATE_SHORT_NUDGE is used.",
         save: "Save settings",
         saveOk: "Settings saved",
         saveErr: "Could not save settings",

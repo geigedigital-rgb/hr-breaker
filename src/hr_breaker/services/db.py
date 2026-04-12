@@ -266,6 +266,12 @@ async def init_table(pool) -> None:
             "INSERT INTO admin_email_settings (id) VALUES (1) ON CONFLICT (id) DO NOTHING"
         )
         await conn.execute(
+            "ALTER TABLE admin_email_settings ADD COLUMN IF NOT EXISTS resend_template_reminder_no_download TEXT NOT NULL DEFAULT ''"
+        )
+        await conn.execute(
+            "ALTER TABLE admin_email_settings ADD COLUMN IF NOT EXISTS resend_template_short_nudge TEXT NOT NULL DEFAULT ''"
+        )
+        await conn.execute(
             f"""
             CREATE TABLE IF NOT EXISTS email_winback_schedule (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1344,12 +1350,16 @@ async def admin_email_settings_get(pool) -> dict[str, Any]:
             "winback_auto_enabled": False,
             "winback_delay_min_minutes": 25,
             "winback_delay_max_minutes": 30,
+            "resend_template_reminder_no_download": "",
+            "resend_template_short_nudge": "",
         }
     d = dict(row)
     return {
         "winback_auto_enabled": bool(d.get("winback_auto_enabled")),
         "winback_delay_min_minutes": int(d.get("winback_delay_min_minutes") or 25),
         "winback_delay_max_minutes": int(d.get("winback_delay_max_minutes") or 30),
+        "resend_template_reminder_no_download": str(d.get("resend_template_reminder_no_download") or "")[:200],
+        "resend_template_short_nudge": str(d.get("resend_template_short_nudge") or "")[:200],
     }
 
 
@@ -1359,11 +1369,23 @@ async def admin_email_settings_update(
     winback_auto_enabled: bool | None = None,
     winback_delay_min_minutes: int | None = None,
     winback_delay_max_minutes: int | None = None,
+    resend_template_reminder_no_download: str | None = None,
+    resend_template_short_nudge: str | None = None,
 ) -> dict[str, Any]:
     cur = await admin_email_settings_get(pool)
     n_auto = cur["winback_auto_enabled"] if winback_auto_enabled is None else bool(winback_auto_enabled)
     n_min = cur["winback_delay_min_minutes"] if winback_delay_min_minutes is None else int(winback_delay_min_minutes)
     n_max = cur["winback_delay_max_minutes"] if winback_delay_max_minutes is None else int(winback_delay_max_minutes)
+    n_tr = (
+        cur["resend_template_reminder_no_download"]
+        if resend_template_reminder_no_download is None
+        else (resend_template_reminder_no_download or "").strip()[:200]
+    )
+    n_tn = (
+        cur["resend_template_short_nudge"]
+        if resend_template_short_nudge is None
+        else (resend_template_short_nudge or "").strip()[:200]
+    )
     if n_min < 5:
         n_min = 5
     if n_min > 120:
@@ -1379,6 +1401,8 @@ async def admin_email_settings_update(
             SET winback_auto_enabled = $2,
                 winback_delay_min_minutes = $3,
                 winback_delay_max_minutes = $4,
+                resend_template_reminder_no_download = $5,
+                resend_template_short_nudge = $6,
                 updated_at = NOW()
             WHERE id = $1
             """,
@@ -1386,6 +1410,8 @@ async def admin_email_settings_update(
             n_auto,
             n_min,
             n_max,
+            n_tr,
+            n_tn,
         )
     return await admin_email_settings_get(pool)
 

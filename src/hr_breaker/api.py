@@ -1114,12 +1114,17 @@ class AdminEmailControlOut(BaseModel):
     # If true, Resend published template id is set for that app template (send uses template + variables).
     resend_template_reminder_configured: bool
     resend_template_short_nudge_configured: bool
+    # Stored in Postgres (admin); optional env RESEND_TEMPLATE_* still works as fallback.
+    resend_template_reminder_no_download: str = ""
+    resend_template_short_nudge: str = ""
 
 
 class AdminEmailControlPatchBody(BaseModel):
     winback_auto_enabled: bool | None = None
     winback_delay_min_minutes: int | None = Field(None, ge=5, le=120)
     winback_delay_max_minutes: int | None = Field(None, ge=5, le=180)
+    resend_template_reminder_no_download: str | None = Field(None, max_length=200)
+    resend_template_short_nudge: str | None = Field(None, max_length=200)
 
 
 class AdminEmailSegmentPreviewBody(BaseModel):
@@ -3677,8 +3682,12 @@ async def api_admin_email_control(_admin: dict = Depends(get_admin_user)) -> Adm
     pending = await email_winback_pending_count(pool)
     rk = bool((settings.resend_api_key or "").strip())
     rf = bool((settings.resend_from or "").strip())
-    tr = bool((settings.resend_template_reminder_no_download or "").strip())
-    tn = bool((settings.resend_template_short_nudge or "").strip())
+    r_db = (cfg.get("resend_template_reminder_no_download") or "").strip()
+    r_env = (settings.resend_template_reminder_no_download or "").strip()
+    n_db = (cfg.get("resend_template_short_nudge") or "").strip()
+    n_env = (settings.resend_template_short_nudge or "").strip()
+    tr = bool(r_db or r_env)
+    tn = bool(n_db or n_env)
     return AdminEmailControlOut(
         winback_auto_enabled=bool(cfg.get("winback_auto_enabled")),
         winback_delay_min_minutes=int(cfg.get("winback_delay_min_minutes") or 25),
@@ -3688,6 +3697,8 @@ async def api_admin_email_control(_admin: dict = Depends(get_admin_user)) -> Adm
         pending_queue_count=pending,
         resend_template_reminder_configured=tr,
         resend_template_short_nudge_configured=tn,
+        resend_template_reminder_no_download=str(cfg.get("resend_template_reminder_no_download") or ""),
+        resend_template_short_nudge=str(cfg.get("resend_template_short_nudge") or ""),
     )
 
 
@@ -3704,14 +3715,20 @@ async def api_admin_email_control_patch(
         winback_auto_enabled=body.winback_auto_enabled,
         winback_delay_min_minutes=body.winback_delay_min_minutes,
         winback_delay_max_minutes=body.winback_delay_max_minutes,
+        resend_template_reminder_no_download=body.resend_template_reminder_no_download,
+        resend_template_short_nudge=body.resend_template_short_nudge,
     )
     settings = get_settings()
     cfg = await admin_email_settings_get(pool)
     pending = await email_winback_pending_count(pool)
     rk = bool((settings.resend_api_key or "").strip())
     rf = bool((settings.resend_from or "").strip())
-    tr = bool((settings.resend_template_reminder_no_download or "").strip())
-    tn = bool((settings.resend_template_short_nudge or "").strip())
+    r_db = (cfg.get("resend_template_reminder_no_download") or "").strip()
+    r_env = (settings.resend_template_reminder_no_download or "").strip()
+    n_db = (cfg.get("resend_template_short_nudge") or "").strip()
+    n_env = (settings.resend_template_short_nudge or "").strip()
+    tr = bool(r_db or r_env)
+    tn = bool(n_db or n_env)
     return AdminEmailControlOut(
         winback_auto_enabled=bool(cfg.get("winback_auto_enabled")),
         winback_delay_min_minutes=int(cfg.get("winback_delay_min_minutes") or 25),
@@ -3721,6 +3738,8 @@ async def api_admin_email_control_patch(
         pending_queue_count=pending,
         resend_template_reminder_configured=tr,
         resend_template_short_nudge_configured=tn,
+        resend_template_reminder_no_download=str(cfg.get("resend_template_reminder_no_download") or ""),
+        resend_template_short_nudge=str(cfg.get("resend_template_short_nudge") or ""),
     )
 
 
