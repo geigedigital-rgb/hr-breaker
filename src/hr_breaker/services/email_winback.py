@@ -157,7 +157,7 @@ def winback_plain_text(*, resume_url: str, unsubscribe_url: str, settings_url: s
         lines.extend(["Account settings:", su, ""])
     if uu:
         lines.extend(["Unsubscribe from these messages:", uu, ""])
-    lines.append("— PitchCV")
+    lines.extend(["", "With best wishes,", "Anna", "The PitchCV team"])
     return "\n".join(lines)
 
 

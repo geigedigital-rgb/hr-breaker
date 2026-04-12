@@ -579,7 +579,7 @@ const en = {
         empty: "No templates yet.",
         demo1Name: "Win-back #1 — optimized, not paid",
         demo1Desc:
-          "Simple transactional layout (white background, text-first) to reduce Gmail “Promotions” tabbing; merge tags same as API. Resend: use {{{UNSUBSCRIBE_LINK}}} or {{unsubscribe_url}} — not reserved UNSUBSCRIBE_URL.",
+          "Hero + illustration + CTA ({{download_url}}, {{unsubscribe_url}}); same merge tags as API / Resend {{{DOWNLOAD_URL}}}, {{{UNSUBSCRIBE_LINK}}}.",
         demo2Name: "Short nudge — plain follow-up",
         demo2Desc: "Light follow-up without newsletter styling; optional second touch.",
       },
