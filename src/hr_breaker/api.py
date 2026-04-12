@@ -51,6 +51,7 @@ from hr_breaker.services import (
     wrap_full_html,
 )
 from hr_breaker.services.job_scraper import extract_company_logo_url
+from hr_breaker.services.email_winback import public_base_for_email
 from hr_breaker.services.auth import (
     create_access_token,
     create_optimize_snapshot_token,
@@ -1132,6 +1133,10 @@ class AdminConfigResponse(BaseModel):
     landing_pending_ttl_seconds: int
     max_iterations: int
     frontend_url: str
+    # Raw EMAIL_PUBLIC_BASE_URL; empty if unset (see email_effective_public_base).
+    email_public_base_url: str
+    # Origin for CTA/logo/unsubscribe: email_public_base_url or frontend_url.
+    email_effective_public_base: str
     adzuna_configured: bool
     partner_program_enabled: bool
 
@@ -3763,6 +3768,8 @@ async def api_admin_config(
         landing_pending_ttl_seconds=settings.landing_pending_ttl_seconds,
         max_iterations=settings.max_iterations,
         frontend_url=settings.frontend_url or "",
+        email_public_base_url=(settings.email_public_base_url or "").strip(),
+        email_effective_public_base=public_base_for_email(settings),
         adzuna_configured=bool((settings.adzuna_app_id or "").strip() and (settings.adzuna_app_key or "").strip()),
         partner_program_enabled=bool(settings.partner_program_enabled),
     )

@@ -96,6 +96,14 @@ export default function AdminConfig() {
           />
           <ConfigRow label={t("admin.config.maxIterations")} value={config.max_iterations} />
           <ConfigRow label={t("admin.config.frontendUrl")} value={config.frontend_url || "—"} />
+          <ConfigRow
+            label={t("admin.config.emailPublicBaseUrl")}
+            value={config.email_public_base_url || "—"}
+          />
+          <ConfigRow
+            label={t("admin.config.emailEffectivePublicBase")}
+            value={config.email_effective_public_base || "—"}
+          />
         </div>
       </section>
     </div>

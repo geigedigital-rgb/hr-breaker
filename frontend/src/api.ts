@@ -899,7 +899,10 @@ export type AdminConfigResponse = {
   landing_pending_ttl_seconds: number;
   max_iterations: number;
   frontend_url: string;
+  email_public_base_url: string;
+  email_effective_public_base: string;
   adzuna_configured: boolean;
+  partner_program_enabled?: boolean;
 };
 
 export type AdminActivityItem = {

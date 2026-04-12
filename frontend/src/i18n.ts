@@ -784,6 +784,8 @@ const en = {
       landingPendingTtl: "Pending token TTL (sec)",
       maxIterations: "Max iterations",
       frontendUrl: "Frontend URL",
+      emailPublicBaseUrl: "EMAIL_PUBLIC_BASE_URL (raw)",
+      emailEffectivePublicBase: "Email links base (effective)",
       adzuna: "Adzuna job search",
       configured: "Configured",
       notConfigured: "Not configured",

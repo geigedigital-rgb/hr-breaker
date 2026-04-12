@@ -16,6 +16,11 @@ const FREE_ANALYSES_PER_MONTH = 10;
 const FREE_OPTIMIZES_PER_MONTH = 10;
 /** Independent rotation for scan/analyze/improve “Fact” lines (not tied to progress ticks). */
 const LOADING_FACT_ROTATE_MS = 15_000;
+/** Optimize wall time is typically ~60–80s; loader targets this so the bar does not sprint ahead of reality. */
+const OPTIMIZE_LOAD_TARGET_MS = 72_000;
+const OPTIMIZE_LOAD_TICK_MS = 300;
+/** Do not show backend “done” percent from SSE until the stream returns (avoids instant 100%). */
+const OPTIMIZE_LOAD_SSE_CAP_BEFORE_DONE = 98;
 
 /** Backend message when URL is a job search page, not a single job */
 const JOB_LIST_URL_MARKER = "job search page";
@@ -1068,8 +1073,9 @@ export default function Optimize() {
   const [preScores, setPreScores] = useState<api.AnalyzeResponse | null>(null);
   const [_isAnalyzing, setIsAnalyzing] = useState(false);
   const [loadProgress, setLoadProgress] = useState(0);
-  const loadProgressRef = useRef(0);
-  loadProgressRef.current = loadProgress;
+  const optimizeLoadStartedAtRef = useRef(0);
+  /** Max percent reported by SSE during this run (capped until stream completes). */
+  const sseOptimizeCapRef = useRef(0);
   const [displayLoadProgress, setDisplayLoadProgress] = useState(0);
   const [_isImprovingMore, setIsImprovingMore] = useState(false);
   /** After result: full-screen step before clearing session for another vacancy (not a modal). */
@@ -1738,8 +1744,11 @@ export default function Optimize() {
 
   async function runOptimizeResumeMax() {
     setError(null);
+    optimizeLoadStartedAtRef.current = Date.now();
+    sseOptimizeCapRef.current = 0;
     setStage("loading");
     setLoadProgress(0);
+    setDisplayLoadProgress(0);
     const params = {
       resume_content: resumeContent.trim(),
       job_text: jobMode === "text" ? jobInput.trim() : undefined,
@@ -1756,12 +1765,18 @@ export default function Optimize() {
       let res: api.OptimizeResponse;
       try {
         res = await api.optimizeStream(params, (percent) => {
-          setLoadProgress((prev) => Math.max(prev, clampPercent(percent)));
+          const c = clampPercent(percent);
+          sseOptimizeCapRef.current = Math.max(
+            sseOptimizeCapRef.current,
+            Math.min(OPTIMIZE_LOAD_SSE_CAP_BEFORE_DONE, c),
+          );
         });
       } catch {
         res = await api.optimize(params);
       }
       setResult(res);
+      sseOptimizeCapRef.current = 100;
+      setDisplayLoadProgress(100);
       setLoadProgress(100);
       if (res.error && isOfferPasteAsTextError(res.error)) {
         setError(null);
@@ -1781,6 +1796,8 @@ export default function Optimize() {
       } else if (!isOfferPasteAsTextError(msg)) {
         setError(msg);
       }
+      sseOptimizeCapRef.current = 100;
+      setDisplayLoadProgress(100);
       setLoadProgress(100);
       setStage("assessment");
       if (isOfferPasteAsTextError(msg)) {
@@ -1895,8 +1912,11 @@ export default function Optimize() {
     }
     setError(null);
     setIsImprovingMore(true);
+    optimizeLoadStartedAtRef.current = Date.now();
+    sseOptimizeCapRef.current = 0;
     setStage("loading");
     setLoadProgress(0);
+    setDisplayLoadProgress(0);
     const improvedContent = result.optimized_resume_text?.trim() || resumeContent.trim();
     const currentAtsForRetry = atsValue ?? preScores?.ats_score;
     const currentKwForRetry = keywordsValue?.score ?? preScores?.keyword_score;
@@ -1916,17 +1936,26 @@ export default function Optimize() {
       let res: api.OptimizeResponse;
       try {
         res = await api.optimizeStream(params, (percent) => {
-          setLoadProgress((prev) => Math.max(prev, clampPercent(percent)));
+          const c = clampPercent(percent);
+          sseOptimizeCapRef.current = Math.max(
+            sseOptimizeCapRef.current,
+            Math.min(OPTIMIZE_LOAD_SSE_CAP_BEFORE_DONE, c),
+          );
         });
       } catch {
         res = await api.optimize(params);
       }
       setResult(res);
+      sseOptimizeCapRef.current = 100;
+      setDisplayLoadProgress(100);
       setLoadProgress(100);
       setStage("result");
       await refreshUser();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Optimization failed");
+      sseOptimizeCapRef.current = 100;
+      setDisplayLoadProgress(100);
+      setLoadProgress(100);
       setStage("result");
     } finally {
       setIsImprovingMore(false);
@@ -1998,7 +2027,7 @@ export default function Optimize() {
     t("optimize.loadingImproveUser12"),
   ];
   const activeImproveLoadingHint = improveLoadingHints[improveHintIndex % improveLoadingHints.length];
-  const visibleLoadProgress = stage === "loading" ? Math.max(loadProgress, displayLoadProgress) : loadProgress;
+  const visibleLoadProgress = stage === "loading" ? displayLoadProgress : loadProgress;
 
   useEffect(() => {
     if (!isLoadingAssessment) {
@@ -2015,16 +2044,21 @@ export default function Optimize() {
       setImproveHintIndex(0);
       return;
     }
+    const baseStep = (OPTIMIZE_LOAD_SSE_CAP_BEFORE_DONE * OPTIMIZE_LOAD_TICK_MS) / OPTIMIZE_LOAD_TARGET_MS;
     const progressTimer = setInterval(() => {
       setDisplayLoadProgress((prev) => {
-        const lp = loadProgressRef.current;
-        if (lp >= 100) return 100;
-        const current = Math.max(prev, lp);
-        const step = current < 60 ? 1.4 : current < 85 ? 0.9 : 0.35;
-        const cap = lp >= 92 ? 98 : 96;
-        return Math.min(cap, current + step);
+        if (prev >= 100) return 100;
+        const elapsed = Date.now() - optimizeLoadStartedAtRef.current;
+        const timeFloor = Math.min(
+          OPTIMIZE_LOAD_SSE_CAP_BEFORE_DONE,
+          (elapsed / OPTIMIZE_LOAD_TARGET_MS) * OPTIMIZE_LOAD_SSE_CAP_BEFORE_DONE,
+        );
+        const cap = Math.max(Math.min(OPTIMIZE_LOAD_SSE_CAP_BEFORE_DONE, sseOptimizeCapRef.current), timeFloor);
+        const gap = cap - prev;
+        const step = Math.min(gap, Math.max(baseStep, gap * 0.07));
+        return Math.min(cap, prev + step);
       });
-    }, 700);
+    }, OPTIMIZE_LOAD_TICK_MS);
     const textTimer = setInterval(() => setImproveHintIndex((idx) => idx + 1), LOADING_FACT_ROTATE_MS);
     return () => {
       clearInterval(progressTimer);
