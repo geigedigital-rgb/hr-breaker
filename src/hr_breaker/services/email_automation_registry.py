@@ -1,6 +1,12 @@
 """
 Catalog of email automations (code-defined). Admin UI lists these; DB stores per-id flags in admin_email_settings.automation_states.
 
+Adding a new flow (until DB-driven editor exists):
+1. Append to AUTOMATION_DEFINITIONS with a stable `id` and set `wired` when backend logic exists.
+2. Implement scheduling / sending in Python (see email_winback.maybe_schedule_* and process_winback_due_batch).
+3. If the flow needs Resend template ids editable in admin, add columns or JSON on admin_email_settings (or a new table) + PATCH in api.py.
+4. In frontend AdminEmailSend, add the `id` to AUTOMATION_MAIN_EDITOR_IDS when this flow gets a full settings form on Main.
+
 Extend AUTOMATION_DEFINITIONS when adding new flows — keep `id` stable for API PATCH /admin/email/automations/{id}.
 """
 

@@ -30,7 +30,6 @@ const ui = {
   page: "mx-auto max-w-2xl space-y-6 pb-10",
   panel:
     "rounded-2xl border border-black/[0.07] bg-[var(--card)] p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)] sm:p-6",
-  panelMuted: "rounded-2xl border border-black/[0.06] bg-black/[0.02] p-4 sm:p-5",
   title: "text-lg font-semibold tracking-tight text-[var(--text)]",
   subtitle: "mt-1 text-sm leading-relaxed text-[var(--text-muted)]",
   label: "text-xs font-medium text-[var(--text-tertiary)]",
@@ -58,6 +57,9 @@ const ui = {
         ? "border-amber-200/80 bg-amber-50/90 text-amber-950"
         : "border-black/[0.06] bg-white text-[var(--text-muted)]",
 } as const;
+
+/** Flow ids that render the full settings form on Main — extend when a flow gets API + UI support. */
+const AUTOMATION_MAIN_EDITOR_IDS = new Set(["post_optimize_winback"]);
 
 function formatCtaExpires(iso: string | null): string {
   if (!iso) return "—";
@@ -87,6 +89,20 @@ function automationBadgeClass(it: AdminEmailAutomationItem): string {
     return "bg-zinc-100 text-zinc-600";
   }
   return "bg-zinc-100 text-zinc-600";
+}
+
+function automationFlowLabel(id: string): string {
+  if (id === "post_optimize_winback") return t("admin.email.send.automationsRowWinbackLabel");
+  if (id === "segment_optimized_unpaid") return t("admin.email.send.automationsRowSegmentLabel");
+  if (id === "draft_analyze_followup") return t("admin.email.send.automationsRowDraftLabel");
+  return id;
+}
+
+function automationWhereHint(id: string): string {
+  if (id === "post_optimize_winback") return t("admin.email.send.automationsRowWinbackWhere");
+  if (id === "segment_optimized_unpaid") return t("admin.email.send.automationsRowSegmentWhere");
+  if (id === "draft_analyze_followup") return t("admin.email.send.automationsRowDraftWhere");
+  return "—";
 }
 
 export default function AdminEmailSend() {
@@ -410,146 +426,187 @@ export default function AdminEmailSend() {
             ) : null}
           </div>
 
-          <section className={ui.panel} aria-labelledby="wb-main">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h3 id="wb-main" className={ui.title}>
-                  {t("admin.email.send.autoTitle")}
-                </h3>
-                <p className="mt-1 max-w-prose text-xs text-[var(--text-muted)]">{t("admin.email.send.autoHint")}</p>
-              </div>
-              {postWinback ? (
-                <span
-                  className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${automationBadgeClass(postWinback)}`}
-                >
-                  {automationStatusLabel(postWinback)}
-                </span>
-              ) : null}
-            </div>
-
+          <section className={ui.panel} aria-labelledby="email-main-flows">
+            <h3 id="email-main-flows" className={ui.title}>
+              {t("admin.email.send.mainFlowsTitle")}
+            </h3>
+            <p className={`${ui.subtitle} max-w-prose`}>{t("admin.email.send.mainFlowsSubtitle")}</p>
             {automationsErr ? (
               <p className="mt-3 text-xs text-red-700" role="alert">
                 {automationsErr}
               </p>
             ) : null}
 
-            <div className="mt-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <label className="flex cursor-pointer items-center gap-3">
-                <input
-                  type="checkbox"
-                  className="size-[1.125rem] shrink-0 rounded border-black/20 accent-[var(--accent)]"
-                  checked={postWinback?.enabled ?? auto}
-                  disabled={autoFlowBusy != null || !postWinback}
-                  onChange={(e) => void onAutomationPatch("post_optimize_winback", { enabled: e.target.checked })}
-                />
-                <span className="text-sm text-[var(--text)]">{t("admin.email.send.autoToggle")}</span>
-              </label>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  disabled={autoFlowBusy != null || !postWinback?.enabled || postWinback.paused}
-                  onClick={() => void onAutomationPatch("post_optimize_winback", { paused: true })}
-                  className={ui.btnGhost}
+            <div className="mt-5 space-y-4">
+              {(automations?.items ?? []).map((it) => (
+                <div
+                  key={it.id}
+                  className="overflow-hidden rounded-xl border border-black/[0.08] bg-[var(--card)] shadow-[0_1px_1px_rgba(0,0,0,0.03)]"
                 >
-                  {t("admin.email.send.btnPause")}
-                </button>
-                <button
-                  type="button"
-                  disabled={autoFlowBusy != null || !postWinback?.paused}
-                  onClick={() => void onAutomationPatch("post_optimize_winback", { paused: false })}
-                  className={ui.btnGhost}
-                >
-                  {t("admin.email.send.btnResume")}
-                </button>
-                <button
-                  type="button"
-                  disabled={autoFlowBusy != null}
-                  onClick={() => void onClearPendingQueue("post_optimize_winback")}
-                  className={ui.btnDanger}
-                >
-                  {t("admin.email.send.btnClearQueue")}
-                </button>
-              </div>
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-black/[0.06] bg-black/[0.02] px-4 py-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-[var(--text)]">{automationFlowLabel(it.id)}</p>
+                      <p className="truncate font-mono text-[10px] text-[var(--text-tertiary)]">{it.id}</p>
+                    </div>
+                    <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${automationBadgeClass(it)}`}>
+                      {automationStatusLabel(it)}
+                    </span>
+                  </div>
+
+                  {AUTOMATION_MAIN_EDITOR_IDS.has(it.id) ? (
+                    <div className="space-y-5 px-4 py-4">
+                      <p className="text-xs leading-relaxed text-[var(--text-muted)]">{t("admin.email.send.autoHint")}</p>
+
+                      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                        <label className="flex cursor-pointer items-center gap-3">
+                          <input
+                            type="checkbox"
+                            className="size-[1.125rem] shrink-0 rounded border-black/20 accent-[var(--accent)]"
+                            checked={it.enabled}
+                            disabled={autoFlowBusy != null}
+                            onChange={(e) => void onAutomationPatch(it.id, { enabled: e.target.checked })}
+                          />
+                          <span className="text-sm text-[var(--text)]">{t("admin.email.send.autoToggle")}</span>
+                        </label>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            disabled={autoFlowBusy != null || !it.enabled || it.paused}
+                            onClick={() => void onAutomationPatch(it.id, { paused: true })}
+                            className={ui.btnGhost}
+                          >
+                            {t("admin.email.send.btnPause")}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={autoFlowBusy != null || !it.paused}
+                            onClick={() => void onAutomationPatch(it.id, { paused: false })}
+                            className={ui.btnGhost}
+                          >
+                            {t("admin.email.send.btnResume")}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={autoFlowBusy != null}
+                            onClick={() => void onClearPendingQueue(it.id)}
+                            className={ui.btnDanger}
+                          >
+                            {t("admin.email.send.btnClearQueue")}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div>
+                          <label className={ui.label}>{t("admin.email.send.delayMin")}</label>
+                          <input
+                            type="number"
+                            min={5}
+                            max={120}
+                            value={dMin}
+                            onChange={(e) => setDMin(Number(e.target.value) || 25)}
+                            className={ui.input}
+                          />
+                        </div>
+                        <div>
+                          <label className={ui.label}>{t("admin.email.send.delayMax")}</label>
+                          <input
+                            type="number"
+                            min={5}
+                            max={180}
+                            value={dMax}
+                            onChange={(e) => setDMax(Number(e.target.value) || 30)}
+                            className={ui.input}
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-4">
+                        <div>
+                          <label className={ui.label}>{t("admin.email.send.resendTmplReminderLabel")}</label>
+                          <input
+                            type="text"
+                            value={tmplReminder}
+                            onChange={(e) => setTmplReminder(e.target.value)}
+                            placeholder="Resend template id"
+                            autoComplete="off"
+                            spellCheck={false}
+                            className={`${ui.input} font-mono text-xs`}
+                          />
+                        </div>
+                        <div>
+                          <label className={ui.label}>{t("admin.email.send.resendTmplNudgeLabel")}</label>
+                          <input
+                            type="text"
+                            value={tmplNudge}
+                            onChange={(e) => setTmplNudge(e.target.value)}
+                            autoComplete="off"
+                            spellCheck={false}
+                            className={`${ui.input} font-mono text-xs`}
+                          />
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-3">
+                        <button type="button" disabled={saving} onClick={() => void onSave()} className={ui.btnPrimary}>
+                          {t("admin.email.send.save")}
+                        </button>
+                        <span className="text-sm text-[var(--text-muted)]">
+                          {t("admin.email.send.pendingLabel")}:{" "}
+                          <strong className="tabular-nums text-[var(--text)]">{control?.pending_queue_count ?? "—"}</strong>
+                        </span>
+                        <button
+                          type="button"
+                          disabled={busy === "queue"}
+                          onClick={() => void onProcessQueue()}
+                          className={ui.btnSecondary}
+                        >
+                          {busy === "queue" ? "…" : t("admin.email.send.processQueue")}
+                        </button>
+                      </div>
+                      {saveMsg === "ok" && (
+                        <p className="text-xs font-medium text-emerald-700">{t("admin.email.send.saveOk")}</p>
+                      )}
+                      {saveMsg === "err" && <p className="text-xs font-medium text-red-700">{t("admin.email.send.saveErr")}</p>}
+                      {queueResult ? (
+                        <details className="rounded-xl border border-black/[0.06] bg-black/[0.02] p-3">
+                          <summary className="cursor-pointer text-xs font-medium text-[var(--text-muted)]">
+                            {t("admin.email.send.processResult")}
+                          </summary>
+                          <pre className="mt-2 max-h-36 overflow-auto text-[10px] leading-relaxed text-[var(--text)]">
+                            {JSON.stringify(queueResult, null, 2)}
+                          </pre>
+                        </details>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <div className="space-y-3 px-4 py-4">
+                      <p className="text-xs leading-relaxed text-[var(--text-muted)]">{t("admin.email.send.flowCompactHint")}</p>
+                      {it.id === "segment_optimized_unpaid" ? (
+                        <button
+                          type="button"
+                          className={`${ui.btnSecondary} h-8 px-3 text-xs`}
+                          onClick={() => document.getElementById("email-segment-main")?.scrollIntoView({ behavior: "smooth" })}
+                        >
+                          {t("admin.email.send.flowJumpSegment")}
+                        </button>
+                      ) : null}
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
 
-            <div className="mt-6 grid gap-4 sm:grid-cols-2">
-              <div>
-                <label className={ui.label}>{t("admin.email.send.delayMin")}</label>
-                <input
-                  type="number"
-                  min={5}
-                  max={120}
-                  value={dMin}
-                  onChange={(e) => setDMin(Number(e.target.value) || 25)}
-                  className={ui.input}
-                />
-              </div>
-              <div>
-                <label className={ui.label}>{t("admin.email.send.delayMax")}</label>
-                <input
-                  type="number"
-                  min={5}
-                  max={180}
-                  value={dMax}
-                  onChange={(e) => setDMax(Number(e.target.value) || 30)}
-                  className={ui.input}
-                />
-              </div>
-            </div>
-            <div className="mt-4 space-y-4">
-              <div>
-                <label className={ui.label}>{t("admin.email.send.resendTmplReminderLabel")}</label>
-                <input
-                  type="text"
-                  value={tmplReminder}
-                  onChange={(e) => setTmplReminder(e.target.value)}
-                  placeholder="Resend template id"
-                  autoComplete="off"
-                  spellCheck={false}
-                  className={`${ui.input} font-mono text-xs`}
-                />
-              </div>
-              <div>
-                <label className={ui.label}>{t("admin.email.send.resendTmplNudgeLabel")}</label>
-                <input
-                  type="text"
-                  value={tmplNudge}
-                  onChange={(e) => setTmplNudge(e.target.value)}
-                  autoComplete="off"
-                  spellCheck={false}
-                  className={`${ui.input} font-mono text-xs`}
-                />
-              </div>
-            </div>
-            <div className="mt-5 flex flex-wrap items-center gap-3">
-              <button type="button" disabled={saving} onClick={() => void onSave()} className={ui.btnPrimary}>
-                {t("admin.email.send.save")}
-              </button>
-              <span className="text-sm text-[var(--text-muted)]">
-                {t("admin.email.send.pendingLabel")}:{" "}
-                <strong className="tabular-nums text-[var(--text)]">{control?.pending_queue_count ?? "—"}</strong>
-              </span>
-              <button
-                type="button"
-                disabled={busy === "queue"}
-                onClick={() => void onProcessQueue()}
-                className={ui.btnSecondary}
-              >
-                {busy === "queue" ? "…" : t("admin.email.send.processQueue")}
-              </button>
-            </div>
-            {saveMsg === "ok" && <p className="mt-2 text-xs font-medium text-emerald-700">{t("admin.email.send.saveOk")}</p>}
-            {saveMsg === "err" && <p className="mt-2 text-xs font-medium text-red-700">{t("admin.email.send.saveErr")}</p>}
-            {queueResult ? (
-              <details className="mt-3 rounded-xl border border-black/[0.06] bg-black/[0.02] p-3">
-                <summary className="cursor-pointer text-xs font-medium text-[var(--text-muted)]">
-                  {t("admin.email.send.processResult")}
-                </summary>
-                <pre className="mt-2 max-h-36 overflow-auto text-[10px] leading-relaxed text-[var(--text)]">
-                  {JSON.stringify(queueResult, null, 2)}
-                </pre>
-              </details>
-            ) : null}
+            <details className="mt-6 rounded-xl border border-black/[0.06] bg-black/[0.02] px-4 py-3">
+              <summary className="cursor-pointer text-sm font-medium text-[var(--text-muted)]">
+                {t("admin.email.send.howToAddTitle")}
+              </summary>
+              <p className="mt-3 text-xs leading-relaxed text-[var(--text-muted)]">{t("admin.email.send.howToAddIntro")}</p>
+              <ol className="mt-3 list-decimal space-y-2 pl-4 text-xs leading-relaxed text-[var(--text-muted)]">
+                <li>{t("admin.email.send.howToAdd1")}</li>
+                <li>{t("admin.email.send.howToAdd2")}</li>
+                <li>{t("admin.email.send.howToAdd3")}</li>
+                <li>{t("admin.email.send.howToAdd4")}</li>
+              </ol>
+            </details>
           </section>
 
           <section className={ui.panel} aria-labelledby="email-single">
@@ -618,7 +675,7 @@ export default function AdminEmailSend() {
             ) : null}
           </section>
 
-          <details className={ui.panel}>
+          <details id="email-segment-main" className={ui.panel}>
             <summary className="cursor-pointer text-sm font-semibold text-[var(--text)]">{t("admin.email.send.segmentTitle")}</summary>
             <p className="mt-2 text-xs text-[var(--text-muted)]">{t("admin.email.send.segmentHint")}</p>
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
@@ -710,75 +767,59 @@ export default function AdminEmailSend() {
         </div>
       ) : (
         <div className="space-y-6">
-          <section className={ui.panelMuted} aria-labelledby="email-automations">
-            <h3 id="email-automations" className="text-sm font-semibold text-[var(--text)]">
+          <section className={ui.panel} aria-labelledby="email-automations">
+            <h3 id="email-automations" className={ui.title}>
               {t("admin.email.send.automationsTitle")}
             </h3>
-            <p className="mt-1 text-xs text-[var(--text-muted)]">{t("admin.email.send.automationsSubtitle")}</p>
+            <p className="mt-1 text-xs text-[var(--text-muted)]">{t("admin.email.send.automationsAdvancedHint")}</p>
+            <p className="mt-0.5 font-mono text-[10px] text-[var(--text-tertiary)]">{t("admin.email.send.automationsSubtitle")}</p>
             {automationsErr ? (
               <p className="mt-2 text-xs text-red-700">{t("admin.email.send.automationLoadErr")}: {automationsErr}</p>
             ) : null}
-            <ul className="mt-4 space-y-3">
-              {(automations?.items ?? []).map((it) => (
-                <li key={it.id} className="rounded-xl border border-black/[0.06] bg-[var(--card)] p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <p className="text-sm font-medium text-[var(--text)]">{it.name}</p>
-                      <p className="font-mono text-[10px] text-[var(--text-tertiary)]">{it.id}</p>
-                    </div>
-                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${automationBadgeClass(it)}`}>
-                      {automationStatusLabel(it)}
-                    </span>
-                  </div>
-                  <p className="mt-2 text-xs text-[var(--text-muted)]">{it.description}</p>
-                  <details className="mt-2">
-                    <summary className="cursor-pointer text-xs font-medium text-[var(--accent)]">
-                      {t("admin.email.send.automationDedupe")} / {t("admin.email.send.automationConditions")}
-                    </summary>
-                    <p className="mt-2 text-xs text-[var(--text-muted)]">{it.dedupe_summary}</p>
-                    <p className="mt-1 font-mono text-[10px] text-[var(--text-tertiary)]">{it.conditions_code}</p>
-                  </details>
-                  {it.id !== "post_optimize_winback" ? (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {it.supports_enable_toggle ? (
-                        <>
-                          <button
-                            type="button"
-                            disabled={autoFlowBusy != null || it.enabled}
-                            onClick={() => void onAutomationPatch(it.id, { enabled: true })}
-                            className={`${ui.btnSecondary} h-8 px-3 text-xs`}
-                          >
-                            {t("admin.email.send.btnStart")}
-                          </button>
-                          <button
-                            type="button"
-                            disabled={autoFlowBusy != null || !it.enabled}
-                            onClick={() => void onAutomationPatch(it.id, { enabled: false })}
-                            className={`${ui.btnSecondary} h-8 px-3 text-xs`}
-                          >
-                            {t("admin.email.send.btnStop")}
-                          </button>
-                        </>
-                      ) : it.id === "segment_optimized_unpaid" ? (
-                        <p className="text-xs text-[var(--text-muted)]">{t("admin.email.send.segmentUseBelow")}</p>
-                      ) : null}
-                      {it.supports_clear_queue ? (
-                        <button
-                          type="button"
-                          disabled={autoFlowBusy != null}
-                          onClick={() => void onClearPendingQueue(it.id)}
-                          className={ui.btnDanger}
-                        >
-                          {t("admin.email.send.btnClearQueue")}
-                        </button>
-                      ) : null}
-                    </div>
-                  ) : (
-                    <p className="mt-2 text-xs text-[var(--text-tertiary)]">Use Main tab for this automation.</p>
-                  )}
-                </li>
-              ))}
-            </ul>
+            <div className="mt-4 overflow-hidden rounded-xl border border-black/[0.06]">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-black/[0.06] bg-black/[0.02] text-[10px] font-medium uppercase tracking-wide text-[var(--text-tertiary)]">
+                    <th className="px-3 py-2.5">{t("admin.email.send.automationsTableFlow")}</th>
+                    <th className="px-3 py-2.5">{t("admin.email.send.automationsTableState")}</th>
+                    <th className="px-3 py-2.5">{t("admin.email.send.automationsTableWhere")}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-black/[0.05]">
+                  {(automations?.items ?? []).map((it) => (
+                    <tr key={it.id} className="bg-[var(--card)]">
+                      <td className="px-3 py-3 align-middle">
+                        <span className="font-medium text-[var(--text)]">{automationFlowLabel(it.id)}</span>
+                      </td>
+                      <td className="px-3 py-3 align-middle">
+                        <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${automationBadgeClass(it)}`}>
+                          {automationStatusLabel(it)}
+                        </span>
+                      </td>
+                      <td className="px-3 py-3 align-middle text-xs text-[var(--text-muted)]">{automationWhereHint(it.id)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <details className="mt-4 rounded-xl border border-black/[0.06] bg-black/[0.02] px-3 py-2">
+              <summary className="cursor-pointer list-inside text-xs font-medium text-[var(--text-muted)] marker:text-[var(--text-tertiary)]">
+                {t("admin.email.send.automationsDevNotes")}
+              </summary>
+              <ul className="mt-3 space-y-4 border-t border-black/[0.05] pt-3">
+                {(automations?.items ?? []).map((it) => (
+                  <li key={it.id} className="text-xs">
+                    <p className="font-mono text-[10px] text-[var(--text-tertiary)]">{it.id}</p>
+                    <p className="mt-1 text-[var(--text-muted)]">{it.description}</p>
+                    <p className="mt-2 text-[10px] leading-relaxed text-[var(--text-tertiary)]">
+                      <span className="font-medium text-[var(--text-muted)]">{t("admin.email.send.automationDedupe")}</span>{" "}
+                      {it.dedupe_summary}
+                    </p>
+                    <p className="mt-1 font-mono text-[10px] leading-relaxed text-[var(--text-tertiary)]">{it.conditions_code}</p>
+                  </li>
+                ))}
+              </ul>
+            </details>
           </section>
 
           <section className={ui.panel} aria-labelledby="email-journey">

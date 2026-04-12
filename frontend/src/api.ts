@@ -129,6 +129,11 @@ export type OptimizationResumeFetchResult =
   | { ok: true; data: OptimizationResumeRestore }
   | { ok: false; status: number; detail: string };
 
+/** GET /optimization-snapshot — public completed snapshot only. */
+export type OptimizationSnapshotFetchResult =
+  | { ok: true; data: OptimizationSnapshotPublic }
+  | { ok: false; status: number; detail: string };
+
 export async function fetchOptimizationSnapshotForMe(token: string): Promise<OptimizationResumeFetchResult> {
   const q = new URLSearchParams({ token });
   const r = await fetch(`${API}/optimization-snapshot/for-me?${q.toString()}`, {
