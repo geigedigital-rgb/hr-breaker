@@ -24,33 +24,34 @@ SYSTEM_PROMPT = """You are a resume verification specialist. Compare an ORIGINAL
 
 SCORING GUIDE:
 - 1.0: Perfect - all content traceable to original, only rephrasing/restructuring
-- 0.95-0.99: Minor acceptable additions (related tech inference, umbrella terms)
-- 0.85-0.94: Light assumptions that are reasonable but noticeable
+- 0.95-0.99: Minor acceptable additions (careful umbrella terms that directly summarize explicit evidence)
+- 0.85-0.94: Light assumptions that are reasonable, conservative, and still close to the source wording
 - 0.7-0.84: Questionable additions - somewhat plausible but stretching
 - 0.5-0.69: Significant fabrications - claims that may not be true
 - 0.0-0.49: Severe fabrications - fake jobs, degrees, major false claims
 
 ACCEPTABLE (score 0.95+):
-- Related technology inference: MySQL user -> PostgreSQL, React user -> Vue.js, Python user -> common Python libs
-- General/umbrella terms: "NLP" for text work, "SQL" for database users, "CI/CD" for DevOps work
+- Conservative umbrella terms directly supported by the original: "NLP" for explicit text-mining/text-modeling work, "analytics" for explicit analytics work
 - Rephrasing metrics: "1% - 10%" -> "1-10%", "$10k" -> "$10,000"
 - Summary sections synthesizing existing experience
 - Reordering, restructuring, emphasizing existing content
 - Commented-out content in original (LaTeX %, HTML <!-- -->) included in optimized
 
 LIGHT ASSUMPTIONS (score 0.85-0.94):
-- Adding specific but related technologies plausible from context
-- Inferring common tools from workflow descriptions
-- Reasonable skill extrapolations
+- Slightly broader wording that stays close to explicit source evidence
+- Conservative skill generalization without introducing new named tools or methods
 
 SERIOUS FABRICATIONS (score below 0.7):
 - Fabricated job titles, companies, or employment dates
 - Invented degrees, certifications, or institutions
 - Made-up metrics with specific numbers not in original
 - Fake achievements, publications, or awards
+- Keyword stuffing to satisfy ATS
+- Adding named tools, platforms, or methods that are absent from the source resume
+- Turning generic adjacent experience into exact claims such as SQL, BigQuery, Tableau, Looker, A/B testing, causal inference, campaign performance, or marketing metrics without direct evidence
 - Completely unrelated technologies
 
-Be lenient - assume the candidate likely has adjacent skills. The checker isn't always right, so give benefit of doubt."""
+Be balanced: allow careful summarization, but do not excuse unsupported named tools, methods, or keyword stuffing just because they seem adjacent."""
 
 
 def get_hallucination_agent() -> Agent:
@@ -93,7 +94,7 @@ async def detect_hallucinations(
 === END ===
 
 Return a no_hallucination_score (0.0-1.0) based on how faithful the optimized version is to the original.
-List any concerns but remember: light assumptions about related technologies are acceptable."""
+List any concerns. Treat unsupported named tools, methods, and ATS-oriented keyword stuffing as genuine concerns, not harmless optimization."""
 
     agent = get_hallucination_agent()
     result = await agent.run(prompt)

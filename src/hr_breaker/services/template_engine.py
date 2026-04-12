@@ -24,6 +24,13 @@ class TemplateManifest:
     layout: str = "standard"
 
 
+@dataclass(frozen=True)
+class SkillLayoutConfig:
+    max_groups: int
+    max_items_per_group: int
+    dense: bool = False
+
+
 _TEMPLATES: list[TemplateManifest] = [
     TemplateManifest(
         id="jsonresume-even-inspired",
@@ -167,14 +174,38 @@ def _render_education(schema: UnifiedResumeSchema) -> str:
     return _section("Education", "".join(parts))
 
 
-def _render_skills(schema: UnifiedResumeSchema) -> str:
-    chips: list[str] = []
-    for group in schema.skills:
-        values = [group.name] + group.keywords
-        for value in values:
-            if value.strip():
-                chips.append(f'<span class="chip">{escape(value)}</span>')
-    return _section("Skills", f"<div class='chips'>{''.join(chips)}</div>", section_class="skills-section")
+def _get_skill_layout(layout_key: str) -> SkillLayoutConfig:
+    presets = {
+        "standard-single": SkillLayoutConfig(max_groups=4, max_items_per_group=5),
+        "standard-two": SkillLayoutConfig(max_groups=5, max_items_per_group=5),
+        "rx_chikorita": SkillLayoutConfig(max_groups=4, max_items_per_group=4, dense=True),
+        "rx_ditto": SkillLayoutConfig(max_groups=4, max_items_per_group=4, dense=True),
+        "rx_gengar": SkillLayoutConfig(max_groups=4, max_items_per_group=4, dense=True),
+        "rx_onyx": SkillLayoutConfig(max_groups=5, max_items_per_group=5),
+        "rx_lapras": SkillLayoutConfig(max_groups=4, max_items_per_group=4),
+        "rx_ditgar": SkillLayoutConfig(max_groups=4, max_items_per_group=4, dense=True),
+    }
+    return presets.get(layout_key, SkillLayoutConfig(max_groups=4, max_items_per_group=5))
+
+
+def _render_skills(schema: UnifiedResumeSchema, layout_key: str) -> str:
+    config = _get_skill_layout(layout_key)
+    parts: list[str] = []
+    for group in schema.skills[:config.max_groups]:
+        items = [item for item in group.keywords[:config.max_items_per_group] if item.strip()]
+        if not items:
+            continue
+        items_html = ", ".join(escape(item) for item in items)
+        parts.append(
+            "<div class='skill-group'>"
+            f"<p class='skill-group-title'>{escape(group.name)}</p>"
+            f"<p class='skill-group-items'>{items_html}</p>"
+            "</div>"
+        )
+    if not parts:
+        return ""
+    dense_class = " skill-groups-dense" if config.dense else ""
+    return _section("Skills", f"<div class='skill-groups{dense_class}'>{''.join(parts)}</div>", section_class="skills-section")
 
 
 def _render_projects(schema: UnifiedResumeSchema) -> str:
@@ -198,8 +229,8 @@ def _main_column(schema: UnifiedResumeSchema) -> str:
     return f"{_render_work(schema)}{_render_projects(schema)}{_render_education(schema)}"
 
 
-def _side_column(schema: UnifiedResumeSchema) -> str:
-    return f"{_render_skills(schema)}{_render_languages(schema)}"
+def _side_column(schema: UnifiedResumeSchema, layout_key: str) -> str:
+    return f"{_render_skills(schema, layout_key)}{_render_languages(schema)}"
 
 
 def _contacts_line(schema: UnifiedResumeSchema) -> str:
@@ -225,18 +256,20 @@ def _css_base(accent: str) -> str:
   .contacts, .muted {{ color: var(--muted); }}
   ul {{ margin: 4px 0 8px 18px; padding: 0; }}
   li {{ margin: 2px 0; line-height: 1.3; }}
-  .chips {{ display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }}
-  /* inline-block only: inline-flex on <span> made WeasyPrint paint an inner flex item like a second pill */
-  .chips .chip {{
-    display: inline-block; vertical-align: middle; box-sizing: border-box;
-    line-height: 1.3; margin: 0; outline: none;
-    border: 1px solid #d1d5db; border-radius: 999px; padding: 4px 11px;
+  .skill-groups {{ display: grid; gap: 8px; }}
+  .skill-groups-dense {{ gap: 6px; }}
+  .skill-group {{ break-inside: avoid; }}
+  .skill-group-title {{
+    margin: 0 0 2px; font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .06em; color: var(--accent);
   }}
+  .skill-group-items {{ margin: 0; line-height: 1.35; }}
 """.strip()
 
 
 def _render_standard(schema: UnifiedResumeSchema, accent: str, two_col: bool) -> str:
     body_class = "two-col" if two_col else "one-col"
+    skill_layout = "standard-two" if two_col else "standard-single"
     return f"""
 <style>
 {_css_base(accent)}
@@ -251,7 +284,7 @@ def _render_standard(schema: UnifiedResumeSchema, accent: str, two_col: bool) ->
       {_render_projects(schema)}
     </div>
     <div>
-      {_render_skills(schema)}
+      {_render_skills(schema, skill_layout)}
       {_render_education(schema)}
     </div>
   </div>
@@ -278,15 +311,14 @@ def _render_rx_chikorita(schema: UnifiedResumeSchema, accent: str) -> str:
   .rx-chikorita .rx-side .muted, .rx-chikorita .rx-side .contacts, .rx-chikorita .rx-side p, .rx-chikorita .rx-side li {{
     color: rgba(255,255,255,.92);
   }}
-  /* One visual layer: no pill border on colored sidebar (avoids double frame with section heading rule). */
-  .rx-chikorita .rx-side section.skills-section .chips .chip {{
-    border: none; background: rgba(255,255,255,.2); color: var(--paper);
+  .rx-chikorita .rx-side section.skills-section .skill-group-title {{
+    color: rgba(255,255,255,.85);
   }}
 </style>
 <div class="resume rx-chikorita">
   <div class="rx-row">
     <div class="rx-main">{_render_basics(schema)}{_main_column(schema)}</div>
-    <div class="rx-side">{_side_column(schema)}</div>
+    <div class="rx-side">{_side_column(schema, "rx_chikorita")}</div>
   </div>
 </div>
 """.strip()
@@ -327,7 +359,7 @@ def _render_rx_ditto(schema: UnifiedResumeSchema, accent: str) -> str:
     <div class="rx-hero-text"><h1>{name}</h1>{label}{summary}{contacts}</div>
   </div>
   <div class="rx-row">
-    <div class="rx-side">{_side_column(schema)}</div>
+    <div class="rx-side">{_side_column(schema, "rx_ditto")}</div>
     <div class="rx-main">{_main_column(schema)}</div>
   </div>
 </div>
@@ -377,7 +409,7 @@ def _render_rx_gengar(schema: UnifiedResumeSchema, accent: str) -> str:
   <div class="rx-row">
     <div class="rx-side">
       <div class="rx-sidehead">{photo_html}<h1>{name}</h1>{label}{contacts}</div>
-      {_side_column(schema)}
+      {_side_column(schema, "rx_gengar")}
     </div>
     <div class="rx-main">{summary_band}{_main_column(schema)}</div>
   </div>
@@ -409,7 +441,7 @@ def _render_rx_onyx(schema: UnifiedResumeSchema, accent: str) -> str:
   </header>
   <div class="rx-stack">
     <main>{_main_column(schema)}</main>
-    <aside>{_side_column(schema)}</aside>
+    <aside>{_side_column(schema, "rx_onyx")}</aside>
   </div>
 </div>
 """.strip()
@@ -435,15 +467,14 @@ def _render_rx_lapras(schema: UnifiedResumeSchema, accent: str) -> str:
     margin-top: 0; background: var(--paper); display: inline-block; padding: 0 6px;
     position: relative; top: -22px; margin-bottom: -10px;
   }}
-  /* Card already has a border — chips use fill only (no nested outline / uneven padding). */
-  .rx-lapras section.skills-section .chips .chip {{
-    border: none; background: #f1f5f9; color: var(--text);
+  .rx-lapras section.skills-section .skill-group {{
+    padding-top: 2px;
   }}
 </style>
 <div class="resume rx-lapras">
   <header class="rx-head"><h1>{name}</h1>{label}{contacts}{summary}</header>
   {_main_column(schema)}
-  {_side_column(schema)}
+  {_side_column(schema, "rx_lapras")}
 </div>
 """.strip()
 
@@ -486,7 +517,7 @@ def _render_rx_ditgar(schema: UnifiedResumeSchema, accent: str) -> str:
   <div class="rx-row">
     <div class="rx-side">
       <div class="rx-sidehead">{photo_html}<h1>{name}</h1>{label}{contacts}</div>
-      <div class="rx-sidebody">{_side_column(schema)}</div>
+      <div class="rx-sidebody">{_side_column(schema, "rx_ditgar")}</div>
     </div>
     <div class="rx-main">{summary}{_main_column(schema)}</div>
   </div>

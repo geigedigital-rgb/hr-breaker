@@ -15,7 +15,11 @@ Rules:
 - Never invent companies, dates, degrees, tools, or metrics.
 - Keep text concise.
 - Use ISO-like date strings when available (YYYY-MM or YYYY-MM-DD). If unknown, keep null.
-- Prefer splitting skills into groups by domain.
+- Skills must be grouped into clear resume categories, not emitted as one flat list.
+- Prefer standard skill categories such as Languages, Frameworks & Libraries, Databases, Data & Analytics, BI & Visualization, Cloud & Infrastructure, Marketing & Experimentation, Tools.
+- Keep skills compact and ATS-friendly: 4-6 categories maximum, usually 3-6 items per category.
+- Do not output noisy or ambiguous standalone skill labels such as a bare "R", "tools", "technologies", "other", or duplicate variants of the same skill.
+- Prefer exact concrete skills over vague labels, and keep category names separate from skill items.
 - Place profile links in basics.profiles with network names (LinkedIn, GitHub, etc).
 - Keep output language same as source resume.
 - Output must be directly consumable by resume templates (no extra fields, no markdown, no comments).
@@ -32,6 +36,8 @@ Rules:
 - The original text is the ONLY source of truth. Remove employers, dates, degrees, skills, bullets, or metrics not clearly present in the text.
 - You may rephrase for clarity inside existing facts, but do not add new factual claims.
 - Preserve valid structure: basics, work, education, skills, etc.
+- Ensure `skills` is grouped into clean categories rather than a flat or noisy list.
+- Remove ambiguous or low-value skill labels such as bare one-letter entries, duplicates, generic placeholders, and category names repeated as skills.
 - Output must be a complete UnifiedResumeSchema (all required sections present; use empty strings/lists where appropriate).
 - Keep the same language as the original resume for free text.
 """

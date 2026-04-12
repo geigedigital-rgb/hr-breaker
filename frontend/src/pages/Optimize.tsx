@@ -152,6 +152,88 @@ function ResumeSheetPreview({ name }: { name: string }) {
   );
 }
 
+function stripFactPrefix(value: string): string {
+  return value.replace(/^Fact:\s*/i, "").trim();
+}
+
+function LoaderFactCard({ fact }: { fact: string }) {
+  const body = stripFactPrefix(fact);
+  if (!body) return null;
+  return (
+    <div className="w-full max-w-md rounded-2xl border border-[#D9E5FF] bg-[linear-gradient(180deg,rgba(255,255,255,0.96)_0%,rgba(245,248,255,0.98)_100%)] p-4 shadow-[0_14px_40px_rgba(69,120,252,0.10)]">
+      <div className="inline-flex items-center gap-2 rounded-full border border-[#D9E5FF] bg-white/90 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#4578FC]">
+        <SparklesIcon className="h-3.5 w-3.5" />
+        <span>{t("optimize.quickFactLabel")}</span>
+      </div>
+      <p className="mt-3 text-sm leading-6 text-[#181819] text-center">
+        {body}
+      </p>
+    </div>
+  );
+}
+
+function OptimizeLoaderCard({
+  eyebrow,
+  title,
+  subtitle,
+  progress,
+  progressAriaLabel,
+  fact,
+}: {
+  eyebrow: string;
+  title: string;
+  subtitle: string;
+  progress?: number;
+  progressAriaLabel?: string;
+  fact?: string;
+}) {
+  const safeProgress = progress == null ? undefined : Math.max(0, Math.min(100, Math.round(progress)));
+  return (
+    <div className="rounded-[28px] border border-white/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.98)_0%,rgba(247,250,255,0.98)_100%)] p-6 sm:p-8 shadow-[0_24px_70px_rgba(69,120,252,0.10)]">
+      <div className="mx-auto flex max-w-md flex-col items-center gap-4 text-center">
+        <div className="inline-flex items-center gap-2 rounded-full border border-[#D9E5FF] bg-[#EEF4FF] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#4578FC]">
+          <span className="relative flex h-2.5 w-2.5">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#4578FC]/45" />
+            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[#4578FC]" />
+          </span>
+          <span>{eyebrow}</span>
+        </div>
+
+        <div className="relative flex h-16 w-16 items-center justify-center rounded-[20px] bg-[linear-gradient(135deg,#4578FC_0%,#6D5EF8_55%,#8B5CF6_100%)] shadow-[0_18px_40px_rgba(69,120,252,0.24)]">
+          <div className="absolute inset-[1px] rounded-[19px] bg-[linear-gradient(180deg,rgba(255,255,255,0.22)_0%,rgba(255,255,255,0.06)_100%)]" />
+          <ArrowPathIcon className="relative h-8 w-8 animate-spin text-white" />
+        </div>
+
+        <div className="space-y-2">
+          <p className="text-lg font-semibold tracking-[-0.01em] text-[#181819]">{title}</p>
+          <p className="mx-auto max-w-sm text-sm leading-6 text-[var(--text-muted)]">{subtitle}</p>
+        </div>
+
+        {safeProgress != null ? (
+          <div className="w-full max-w-xs space-y-2">
+            <div className="h-2.5 overflow-hidden rounded-full bg-[#E8EDF9]">
+              <div
+                className="relative h-full rounded-full bg-[linear-gradient(90deg,#4578FC_0%,#6D5EF8_55%,#8B5CF6_100%)] transition-all duration-300 ease-out"
+                style={{ width: `${safeProgress}%` }}
+                role="progressbar"
+                aria-valuenow={safeProgress}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-label={progressAriaLabel}
+              >
+                <div className="absolute inset-y-0 right-0 w-10 bg-[linear-gradient(90deg,rgba(255,255,255,0)_0%,rgba(255,255,255,0.42)_55%,rgba(255,255,255,0)_100%)]" />
+              </div>
+            </div>
+            <p className="text-sm font-semibold tabular-nums text-[#181819]">{safeProgress}%</p>
+          </div>
+        ) : null}
+
+        {fact ? <LoaderFactCard fact={fact} /> : null}
+      </div>
+    </div>
+  );
+}
+
 type Stage = "landing" | "idle" | "scanning" | "assessment" | "loading" | "result";
 
 /** Контент предпросмотра: вакансия структурирована — заголовки, требования, описание абзацами */
@@ -3242,96 +3324,41 @@ export default function Optimize() {
           (hasResume && hasJob || awaitingLandingClaim) && (
           <>
             {(stage === "scanning" || (stage === "assessment" && preScores == null)) && (
-              <div className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-8 flex flex-col items-center justify-center gap-4">
-                <div className="w-14 h-14 rounded-2xl bg-[#EBEDF5] flex items-center justify-center" aria-hidden>
-                  {stage === "scanning" || awaitingLandingClaim ? (
-                    <SparklesIcon className="w-7 h-7 text-[#4578FC]" />
-                  ) : (
-                    <span
-                      className="inline-block w-8 h-8 border-2 border-[#4578FC] border-t-transparent rounded-full animate-spin"
-                      aria-hidden
-                    />
-                  )}
-                </div>
-                <p className="text-[#181819] font-medium">
-                  {awaitingLandingClaim
+              <OptimizeLoaderCard
+                eyebrow={
+                  awaitingLandingClaim
+                    ? t("optimize.loadingStatusPreparing")
+                    : t("optimize.loadingStatusAnalyze")
+                }
+                title={
+                  awaitingLandingClaim
                     ? t("optimize.preparingLandingCheck")
                     : stage === "scanning"
                       ? t("optimize.scanningLabel")
-                      : t("optimize.analysisLabel")}
-                </p>
-                <p className="text-sm text-[var(--text-tertiary)] text-center max-w-sm">
-                  {awaitingLandingClaim
+                      : t("optimize.analysisLabel")
+                }
+                subtitle={
+                  awaitingLandingClaim
                     ? t("optimize.preparingLandingCheckSub")
                     : stage === "scanning"
-                      ? t("optimize.analyzingResume")
-                      : t("optimize.analysisSubLabel")}
-                </p>
-                {!awaitingLandingClaim && (
-                  <p className="text-[12px] text-[#9CA3AF] text-center max-w-sm">{t("optimize.doNotClosePage")}</p>
-                )}
-                {awaitingLandingClaim ? (
-                  <div className="w-full max-w-xs h-2 rounded-full bg-[#EBEDF5] overflow-hidden" aria-hidden>
-                    <div className="h-full w-2/5 rounded-full bg-[#4578FC]" />
-                  </div>
-                ) : stage === "scanning" ? (
-                  <div className="w-full max-w-xs space-y-2">
-                    <div className="h-2 rounded-full bg-[#EBEDF5] overflow-hidden">
-                      <div
-                        className="h-full rounded-full bg-[#4578FC] transition-all duration-150 ease-linear"
-                        style={{ width: `${Math.round(scanProgress)}%` }}
-                        role="progressbar"
-                        aria-valuenow={Math.round(scanProgress)}
-                        aria-valuemin={0}
-                        aria-valuemax={100}
-                        aria-label={t("optimize.scanProgressAria")}
-                      />
-                    </div>
-                    <p className="text-center text-sm font-medium text-[#181819]">{Math.round(scanProgress)}%</p>
-                  </div>
-                ) : (
-                  <p className="text-sm text-[var(--text-tertiary)] text-center">{t("optimize.waitingResponse")}</p>
-                )}
-              </div>
-            )}
-            {(stage === "scanning" || (stage === "assessment" && preScores == null)) && !awaitingLandingClaim && (
-              <p className="mt-1 text-[12px] text-[#9CA3AF] text-center px-2">
-                {activeLoadingHint}
-              </p>
+                      ? `${t("optimize.analyzingResume")}. ${t("optimize.doNotClosePage")}`
+                      : `${t("optimize.analysisSubLabel")}. ${t("optimize.doNotClosePage")}`
+                }
+                progress={awaitingLandingClaim ? 40 : stage === "scanning" ? scanProgress : undefined}
+                progressAriaLabel={awaitingLandingClaim ? t("optimize.scanProgressAria") : stage === "scanning" ? t("optimize.scanProgressAria") : undefined}
+                fact={!awaitingLandingClaim ? activeLoadingHint : undefined}
+              />
             )}
 
             {stage === "loading" && (
-              <>
-              <div className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-8 flex flex-col items-center justify-center gap-4">
-                <div className="w-14 h-14 rounded-2xl bg-[#EBEDF5] flex items-center justify-center" aria-hidden>
-                  <span
-                    className="inline-block w-8 h-8 border-2 border-[#4578FC] border-t-transparent rounded-full animate-spin"
-                    aria-hidden
-                  />
-                </div>
-                <p className="text-[#181819] font-medium">{t("optimize.improvingResume")}</p>
-                <p className="text-[12px] text-[#9CA3AF] text-center max-w-sm">
-                  {t("optimize.doNotClosePage")} {t("optimize.doNotClosePageHint")}
-                </p>
-                <div className="w-full max-w-xs space-y-2">
-                  <div className="h-2 rounded-full bg-[#EBEDF5] overflow-hidden">
-                    <div
-                      className="h-full rounded-full bg-[#4578FC] transition-all duration-300 ease-out"
-                      style={{ width: `${Math.round(visibleLoadProgress)}%` }}
-                      role="progressbar"
-                      aria-valuenow={Math.round(visibleLoadProgress)}
-                      aria-valuemin={0}
-                      aria-valuemax={100}
-                      aria-label={t("optimize.improveProgressAria")}
-                    />
-                  </div>
-                  <p className="text-center text-sm font-medium text-[#181819]">{Math.round(visibleLoadProgress)}%</p>
-                </div>
-              </div>
-              <p className="mt-1 text-[12px] text-[#9CA3AF] text-center px-2">
-                {activeImproveLoadingHint}
-              </p>
-              </>
+              <OptimizeLoaderCard
+                eyebrow={t("optimize.loadingStatusImprove")}
+                title={t("optimize.improvingResume")}
+                subtitle={`${t("optimize.doNotClosePage")} ${t("optimize.doNotClosePageHint")}`}
+                progress={visibleLoadProgress}
+                progressAriaLabel={t("optimize.improveProgressAria")}
+                fact={activeImproveLoadingHint}
+              />
             )}
 
             {/* При showSummaryBlocks контент (Режим улучшения + результат) рендерится в сетке выше */}

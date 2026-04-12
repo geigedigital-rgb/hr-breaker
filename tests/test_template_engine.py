@@ -24,7 +24,10 @@ def _sample_schema() -> UnifiedResumeSchema:
                 "highlights": ["Improved latency by 34%", "Led migration to event-driven architecture"],
             }
         ],
-        skills=[{"name": "Backend", "keywords": ["Python", "FastAPI", "PostgreSQL"]}],
+        skills=[
+            {"name": "Backend", "keywords": ["Python", "FastAPI", "PostgreSQL", "R"]},
+            {"name": "Analytics", "keywords": ["BigQuery", "Tableau", "Looker", "SQL", "A/B Testing", "Campaign Performance"]},
+        ],
     )
 
 
@@ -54,3 +57,14 @@ def test_template_render_smoke_pdf_stability():
         second = renderer.render(html)
         assert first.pdf_bytes[:4] == b"%PDF"
         assert first.page_count == second.page_count
+
+
+def test_template_skills_render_with_categories_and_without_noise():
+    schema = _sample_schema()
+    html = render_template_html(schema, "reactive-onyx")
+
+    assert "skill-group-title" in html
+    assert "Languages" in html
+    assert "Databases" in html
+    assert "BI &amp; Visualization" in html
+    assert ">R<" not in html

@@ -42,7 +42,8 @@ OUTPUT: Generate HTML for the <body> of a resume PDF. Do NOT include <html>, <he
 CONTENT RULES:
 - When describing job experiences, show concrete results: focus on impact, not tasks.
 - Include specific technologies within achievement descriptions.
-- Feature keywords matching job requirements IF they exist in the original resume. You can add umbrella terms if relevant (e.g. if user was making transformer LLM models you can add "NLP")
+- Feature keywords matching job requirements only when they are directly supported by the original resume.
+- If a keyword is not clearly evidenced in the source resume, use broader truthful wording or omit it.
 - Prioritize and highlight experiences most relevant to the role
 - If going over the one page limit: remove unrelated content to save space.
 - Remove obvious skills (Excel, VS Code, Jupyter, GitHub, Jira) unless specifically required by the job or very relevant fot it.
@@ -50,6 +51,8 @@ CONTENT RULES:
 - Add a summary section highlighting the most relevant experiences.
 - Try to preserve the original writing style if possible.
 - Avoid leaving an empty space at the bottom of the page if you have useful content to fill.
+- The Skills section must summarize demonstrated strengths, not echo the vacancy keyword list.
+- Do not add named tools, platforms, methods, or metrics terminology just because they appear in the job posting.
 - PROJECTS: Only include projects directly relevant to this job. Skip projects already listed under Publications. If no projects are relevant, omit the section entirely.
 - PUBLICATIONS: Always use "PUBLICATIONS" (plural) as the section title, even for a single item.
 - EDUCATION: By default include only the most recent / highest degree. Include multiple degrees only if they are both relevant to the role.
@@ -66,7 +69,8 @@ TOOLS:
   - Also returns character/word estimates (rough guidance only)
   - If page_count > 1, trim content and call again until fits_one_page=true
 - REQUIRED: call check_keywords_tool(html) with your final HTML before returning — check keyword coverage
-  - If score < 0.40 — add the returned missing_keywords into the Skills section where truthful, then call again
+  - If score < 0.40 — improve wording, prioritization, and section emphasis using only source-backed evidence, then call again
+  - You may add a missing keyword only when the original resume clearly supports it; it is better to leave a keyword missing than fabricate a skill
 - OPTIONAL: validate_structure(html) - Check HTML has proper headers/sections. Use after major structural changes.
 - OPTIONAL: preview_resume(html) - Renders PDF preview image. Use to visually check layout.
 
@@ -94,15 +98,16 @@ PROFILE SOURCE (when input contains "## Contact" or "## Source documents ranked 
 
 OPTIMIZER_STRICT_RULES = """
 ALLOWED:
-- You CAN add related technologies plausible from context (e.g. Python user likely knows pip, venv; React user likely knows npm, webpack)
-- General/umbrella terms inferable from context: "NLP" if they did text processing, "SQL" if they used databases
+- You CAN use broader umbrella terms only when the original resume contains direct evidence for them (e.g. "NLP" for explicit text-modeling or text-mining work)
 - Rephrasing metrics with same values: "1% - 10%" -> "1-10%"
 - Reordering and emphasizing existing content
 - Using content that is commented out and making it visible
 - You CAN use <style> tags if you need custom styling beyond the provided classes
 
 STRICT RULES - NEVER VIOLATE:
-- NEVER add specific named products or platforms absent from the original (e.g. "Amazon Bedrock", "LangChain", "Pinecone") unless they are a direct, obvious companion to something explicitly present (e.g. PostgreSQL user → may know MySQL) AND there is no other way to improve fit
+- NEVER add specific named products, tools, methods, or platforms absent from the original, even if they appear in the job posting or seem adjacent
+- NEVER turn generic experience into specific claims (e.g. data work -> SQL/BigQuery/Tableau/Looker, experimentation work -> A/B testing/causal inference, marketing work -> campaign performance/marketing metrics) unless the source resume clearly supports that exact terminology
+- NEVER create a keyword-dump Skills section made mostly of vacancy terms without matching evidence elsewhere in the resume
 - NEVER fabricate job titles, companies, degrees, certifications, or achievements
 - NEVER invent metrics, numbers and achievements not in original
 - DO NOT drop work experience or achievements (publications, patents, awards, etc.) unless they decrease fit
@@ -113,16 +118,16 @@ STRICT RULES - NEVER VIOLATE:
 
 OPTIMIZER_LENIENT_RULES = """
 ALLOWED:
-- You CAN add related technologies plausible from context (e.g. Python user likely knows pip, venv; React user likely knows npm, webpack)
-- You CAN extrapolate skills from adjacent experience
-- You CAN make light assumptions about the candidate
-- General/umbrella terms inferable from context: "NLP" if they did text processing, "SQL" if they used databases
+- You CAN make light assumptions only when a concrete experience in the source strongly supports them
+- You CAN add a broader umbrella term if it is a conservative summary of explicit source evidence
 - Rephrasing metrics with same values: "1% - 10%" -> "1-10%"
 - Reordering and emphasizing existing content
 - Using content that is commented out and making it visible
 - You CAN use <style> tags if you need custom styling beyond the provided classes
 
 STRICT RULES - NEVER VIOLATE:
+- NEVER paste job-posting keywords into Skills unless the original resume clearly supports them
+- NEVER add specific named tools, platforms, analytics methods, or domain phrases absent from the original unless the source resume already names an essentially identical concept
 - NEVER fabricate job titles, companies, degrees, certifications, or achievements
 - NEVER invent metrics, numbers and achievements not in original
 - Never use the em dash symbol, the word "delve" or other common markers of LLM-generated text.
@@ -296,7 +301,7 @@ LANGUAGE OVERRIDE: Write ALL output (HTML body text, key changes categories, des
         lang_override = f"\n\nLANGUAGE: Write ALL output in this language only: {out_lang}. Do not use the job posting language for output.\n"
     _pre_kw = check_keywords(context.original_resume, job)
     _missing_kw_hint = (
-        f"- Top missing keywords (vs original resume): {', '.join(_pre_kw.missing_keywords[:8])}\n"
+        f"- Top missing keywords (vs original resume, use only if source-backed): {', '.join(_pre_kw.missing_keywords[:8])}\n"
         if _pre_kw.missing_keywords
         else ""
     )
@@ -317,6 +322,8 @@ Description: {job.description}
   1) list explicit requirements and keywords from the posting,
   2) match them to evidence from the original resume,
   3) update wording/ordering so the strongest matches are easy for ATS and recruiter scans.
+- Only surface a requirement or keyword prominently if you can point to concrete source evidence for it.
+- Prefer precise overlap from the source resume over broader "close enough" substitutions.
 - Keep every claim truthful to source resume content.
 """
     if pre_ats_score is not None or pre_keyword_score is not None:
@@ -336,7 +343,7 @@ Optimization target for this single deep pass:
 """
     if no_shame:
         prompt += """
-NOTE: The user has chosen "aggressive tailoring". You MAY add skills and technologies from the job posting (Requirements/Keywords above) into the resume where they are plausible given the candidate's experience (e.g. data/analytics role + job asks for SQL, Power BI → add them to skills). Still do not fabricate job titles, companies, or achievements. The user will verify the result before sending.
+NOTE: The user has chosen "aggressive tailoring". You MAY strengthen alignment with the job posting, but only through wording and terminology that remain clearly grounded in the source resume. Do not paste unsupported job-posting skills into the resume, and do not turn generic adjacent experience into exact tool or methodology claims unless the source resume already supports them. The user will verify the result before sending.
 """
 
     if context.last_attempt:
@@ -376,11 +383,13 @@ KEY CHANGES — TONE (critical):
 - Write short outcome-focused lines: what got better for screening/ATS, not what was inserted.
 - Good (adapt to job language): "Optimized for ATS screening", "Stronger keyword alignment with the role", "Clearer impact metrics", "Tighter structure for parsers", "Improved section hierarchy for recruiters".
 - Bad: "Added contact block", "Included phone number", "Added LinkedIn link".
+- Also bad: "Integrated explicitly requested technologies", "Added requested keywords", "Inserted SQL / Python / Tableau".
 - Prefer meaning like: optimized / strengthened / clarified / aligned for ATS (and natural equivalents in German, Russian, etc.).
 
 FINAL SELF-CHECK BEFORE RETURN:
 - check_content_length says fits_one_page=true.
-- check_keywords_tool score must be >= 0.40. If below — add missing_keywords into Skills section where truthful, then call check_keywords_tool again.
+- Use check_keywords_tool to find wording gaps, but improve score only through truthful, source-backed terminology.
+- Never stuff missing_keywords into the Skills section as a bare list just to raise ATS matching.
 - Key changes reflect real matching improvements against requirements and keywords.
 
 Output ONLY valid JSON. The html field should contain the raw HTML string.
