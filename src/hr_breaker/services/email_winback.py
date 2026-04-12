@@ -21,13 +21,15 @@ from hr_breaker.services.email_automation_registry import is_post_optimize_winba
 from hr_breaker.services.db import (
     admin_email_settings_get,
     db_list_all,
-    optimization_snapshot_get_latest_valid,
     email_winback_claim_due_batch,
     email_winback_mark_failed,
     email_winback_mark_sent,
+    email_winback_mark_skipped_duplicate,
     email_winback_mark_skipped_marketing,
     email_winback_mark_skipped_paid,
+    email_winback_has_sent,
     email_winback_replace_pending,
+    optimization_snapshot_get_latest_valid,
     user_get_by_email,
     user_get_by_id,
     user_get_subscription,
@@ -323,6 +325,9 @@ async def maybe_schedule_winback_after_optimize(
         sub = await user_get_subscription(pool, uid)
         if _user_is_paid(sub):
             return
+        if await email_winback_has_sent(pool, uid, "reminder-no-download"):
+            logger.info("Skip scheduling win-back for user %s: reminder-no-download already sent", uid)
+            return
         urow = await user_get_by_id(pool, uid)
         if urow is not None and urow.get("marketing_emails_opt_in") is False:
             return
@@ -349,6 +354,7 @@ async def process_winback_due_batch(pool, *, limit: int = 25) -> dict[str, Any]:
     sent = 0
     skipped = 0
     skipped_marketing = 0
+    skipped_duplicate = 0
     failed = 0
     errors: list[str] = []
 
@@ -359,6 +365,7 @@ async def process_winback_due_batch(pool, *, limit: int = 25) -> dict[str, Any]:
             "sent": 0,
             "skipped_paid": 0,
             "skipped_marketing": 0,
+            "skipped_duplicate": 0,
             "failed": 0,
         }
 
@@ -375,6 +382,7 @@ async def process_winback_due_batch(pool, *, limit: int = 25) -> dict[str, Any]:
             "sent": 0,
             "skipped_paid": 0,
             "skipped_marketing": 0,
+            "skipped_duplicate": 0,
             "failed": 0,
             "errors_sample": [],
         }
@@ -403,6 +411,10 @@ async def process_winback_due_batch(pool, *, limit: int = 25) -> dict[str, Any]:
             if _user_is_paid(sub):
                 await email_winback_mark_skipped_paid(pool, sid)
                 skipped += 1
+                continue
+            if await email_winback_has_sent(pool, uid, tid, exclude_schedule_id=sid):
+                await email_winback_mark_skipped_duplicate(pool, sid)
+                skipped_duplicate += 1
                 continue
             resume_url = await latest_email_cta_url_for_user(pool, settings, uid)
             await deliver_winback_email(
@@ -433,6 +445,7 @@ async def process_winback_due_batch(pool, *, limit: int = 25) -> dict[str, Any]:
         "sent": sent,
         "skipped_paid": skipped,
         "skipped_marketing": skipped_marketing,
+        "skipped_duplicate": skipped_duplicate,
         "failed": failed,
         "errors_sample": errors[:5],
     }

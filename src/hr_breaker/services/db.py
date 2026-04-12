@@ -1420,7 +1420,7 @@ async def optimize_session_draft_upsert(
                 updated_at = NOW()
             """,
             user_id,
-            payload,
+            json.dumps(payload or {}, ensure_ascii=False, allow_nan=False),
             expires_at,
         )
 
@@ -1564,7 +1564,7 @@ async def optimization_snapshot_insert(
             user_id,
             expires_at,
             pdf_filename,
-            payload,
+            json.dumps(payload or {}, ensure_ascii=False, allow_nan=False),
         )
     return str(row["id"]) if row else ""
 
@@ -1618,6 +1618,28 @@ async def email_winback_replace_pending(
                 run_at,
                 template_id,
             )
+
+
+async def email_winback_has_sent(
+    pool, user_id: str, template_id: str = "reminder-no-download", *, exclude_schedule_id: str | None = None
+) -> bool:
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            f"""
+            SELECT EXISTS(
+                SELECT 1
+                FROM {EMAIL_WINBACK_SCHEDULE_TABLE}
+                WHERE user_id = $1::uuid
+                  AND template_id = $2
+                  AND status = 'sent'
+                  AND ($3::uuid IS NULL OR id <> $3::uuid)
+            ) AS ok
+            """,
+            user_id,
+            template_id,
+            exclude_schedule_id,
+        )
+    return bool(row["ok"]) if row else False
 
 
 async def email_winback_claim_due_batch(pool, limit: int) -> list[dict[str, Any]]:
@@ -1686,6 +1708,18 @@ async def email_winback_mark_skipped_marketing(pool, schedule_id: str) -> None:
             f"""
             UPDATE {EMAIL_WINBACK_SCHEDULE_TABLE}
             SET status = 'skipped_marketing', sent_at = NOW(), error_message = NULL
+            WHERE id = $1::uuid
+            """,
+            schedule_id,
+        )
+
+
+async def email_winback_mark_skipped_duplicate(pool, schedule_id: str) -> None:
+    async with pool.acquire() as conn:
+        await conn.execute(
+            f"""
+            UPDATE {EMAIL_WINBACK_SCHEDULE_TABLE}
+            SET status = 'skipped_duplicate', sent_at = NOW(), error_message = NULL
             WHERE id = $1::uuid
             """,
             schedule_id,

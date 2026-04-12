@@ -3490,8 +3490,8 @@ async def _run_optimize(
                     await optimize_session_draft_delete(pool_done, opt_uid)
                 except Exception as e:
                     logger.warning("optimize_session_draft_delete: %s", e)
-        except Exception as e:
-            logger.warning("optimization_snapshot_insert: %s", e)
+        except Exception:
+            logger.exception("optimization_snapshot_insert failed for user_id=%s", opt_uid)
 
     return OptimizeResponse(
         success=ok,
