@@ -127,6 +127,8 @@ class Settings(BaseModel):
     # Resend (https://resend.com/) — win-back and admin manual send
     resend_api_key: str = ""
     resend_from: str = ""  # e.g. PitchCV <onboarding@resend.dev>
+    # Optional: replies go to support (more “real mail” than noreply-only; helps inbox placement).
+    resend_reply_to: str = ""
     resend_winback_subject: str = "Your resume is ready"
     # Optional: published template id or alias from Resend Dashboard → Templates.
     # If set, API sends with template + variables (no inline HTML). See docs/EMAIL_RESEND.md
@@ -211,6 +213,7 @@ def get_settings() -> Settings:
         reviews_rate_limit_email_per_day=int(os.getenv("REVIEWS_RATE_LIMIT_EMAIL_PER_DAY", "3")),
         resend_api_key=os.getenv("RESEND_API_KEY", ""),
         resend_from=os.getenv("RESEND_FROM", ""),
+        resend_reply_to=os.getenv("RESEND_REPLY_TO", "").strip(),
         resend_winback_subject=os.getenv("RESEND_WINBACK_SUBJECT", "Your resume is ready"),
         resend_template_reminder_no_download=os.getenv("RESEND_TEMPLATE_REMINDER_NO_DOWNLOAD", ""),
         resend_template_short_nudge=os.getenv("RESEND_TEMPLATE_SHORT_NUDGE", ""),

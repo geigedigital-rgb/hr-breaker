@@ -20,9 +20,18 @@ async def resend_send_html(
     to: str,
     subject: str,
     html: str,
+    text: str | None = None,
+    reply_to: list[str] | None = None,
+    headers: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """POST one message. Raises httpx.HTTPStatusError on 4xx/5xx."""
-    payload = {"from": from_addr, "to": [to], "subject": subject, "html": html}
+    payload: dict[str, Any] = {"from": from_addr, "to": [to], "subject": subject, "html": html}
+    if text is not None:
+        payload["text"] = text
+    if reply_to:
+        payload["reply_to"] = reply_to
+    if headers:
+        payload["headers"] = headers
     async with httpx.AsyncClient(timeout=45.0) as client:
         r = await client.post(
             RESEND_API,
@@ -44,6 +53,8 @@ async def resend_send_template(
     subject: str,
     template_id: str,
     variables: dict[str, str],
+    reply_to: list[str] | None = None,
+    headers: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Send using a published Resend Dashboard template (id or alias). Variables: see docs/EMAIL_RESEND.md."""
     payload: dict[str, Any] = {
@@ -52,6 +63,10 @@ async def resend_send_template(
         "subject": subject,
         "template": {"id": template_id.strip(), "variables": variables},
     }
+    if reply_to:
+        payload["reply_to"] = reply_to
+    if headers:
+        payload["headers"] = headers
     async with httpx.AsyncClient(timeout=45.0) as client:
         r = await client.post(
             RESEND_API,

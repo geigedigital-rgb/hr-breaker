@@ -12,7 +12,7 @@ export type AdminEmailTemplateDemo = {
 const DEFAULT_EMAIL_ASSET_ORIGIN_PROD = "https://my.pitchcv.app";
 
 /**
- * Public origin for static email assets (logo, hero).
+ * Public origin for static email assets (logo; optional hero in legacy templates).
  * 1) VITE_EMAIL_ASSET_ORIGIN — явно при build.
  * 2) Vite dev server (localhost) — по умолчанию прод-оригин, чтобы превью и «Copy URL» не вели на :5173.
  * 3) Иначе — текущий origin (прод-админка на том же хосте, что и SPA).
@@ -28,6 +28,7 @@ export function getEmailAssetOrigin(): string {
 /**
  * Admin iframe preview: resolve asset merge tags to this origin, other {{tags}} → # for valid hrefs.
  * At send time the API uses EMAIL_PUBLIC_BASE_URL (or FRONTEND_URL). Privacy/Terms in template are fixed links.
+ * Keep in sync with `src/hr_breaker/email_templates/*.html` (inline send path when no Resend template id).
  */
 export function prepareEmailHtmlForAdminPreview(html: string): string {
   const origin = getEmailAssetOrigin();
@@ -53,134 +54,101 @@ export function prepareEmailHtmlForAdminPreview(html: string): string {
   return h;
 }
 
-const EMAIL_WINBACK_NO_PAY_HTML = `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+/** Mirrors `src/hr_breaker/email_templates/reminder_no_download.html` (transactional-style layout). */
+const EMAIL_WINBACK_NO_PAY_HTML = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <meta name="x-apple-disable-message-reformatting"/>
   <title>Your resume is ready</title>
-  <style type="text/css">
-    body { margin:0; padding:0; background-color:#f3f4f6; }
-    table { border-collapse:collapse; }
-    @media only screen and (max-width:560px) {
-      .hero-title .hero-line { display:block !important; }
-      .hero-title { font-size:19px !important; line-height:1.22 !important; }
-      .hero-outer { padding:24px !important; }
-      .hero-logo-img { height:28px !important; max-width:104px !important; width:auto !important; }
-      .hero-wordmark { font-size:14px !important; }
-      .hero-logo-row { padding:6px 14px 8px 14px !important; }
-      .hero-inner { display:block !important; width:100% !important; max-width:100% !important; box-sizing:border-box !important; padding:4px 14px 2px 14px !important; text-align:left !important; }
-      .hero-illus-cell { display:block !important; width:100% !important; max-width:100% !important; box-sizing:border-box !important; text-align:right !important; vertical-align:bottom !important; padding:4px 0 0 0 !important; }
-      .hero-illus-cell .illus { margin-left:auto !important; margin-right:0 !important; display:block !important; }
-      .illus { width:150px !important; max-width:55vw !important; }
-      .body-cell { padding:24px !important; }
-      .footer-cell { padding:20px 24px !important; }
-    }
-  </style>
 </head>
-<body style="margin:0;padding:0;background-color:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<body style="margin:0;padding:0;background:#ffffff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#1f2937;">
 
-  <div style="display:none;max-height:0;overflow:hidden;">Your optimized resume is waiting. One click to download.</div>
+  <!-- Short factual preheader (long promo-style lines often land in Gmail Promotions). -->
+  <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">
+    Your tailored resume is available in PitchCV.
+  </div>
 
-  <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+  <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background:#ffffff;">
     <tr>
-      <td align="center" style="padding:32px 16px;">
-        <table width="560" cellpadding="0" cellspacing="0" role="presentation" style="max-width:560px;width:100%;">
-
-          <!-- HERO: white outer (same inset as body) + rounded #F8F9FF slab -->
+      <td style="padding:28px 16px 40px 16px;">
+        <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="max-width:520px;margin:0 auto;">
           <tr>
-            <td class="hero-outer" style="background-color:#ffffff;padding:22px 36px;border:0.5px solid #e5e7eb;border-radius:16px 16px 0 0;border-bottom:none;">
-              <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
-                <tr>
-                  <td class="hero-slab" style="background-color:#F8F9FF;border-radius:12px;padding:0;overflow:hidden;">
-                    <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
-                      <tr>
-                        <td class="hero-logo-row" colspan="2" style="padding:8px 18px 10px 18px;text-align:left;vertical-align:top;">
-                          <table cellpadding="0" cellspacing="0" role="presentation">
-                            <tr>
-                              <td style="padding:0 8px 0 0;vertical-align:middle;">
-                                <img class="hero-logo-img" src="{{logo_url}}" width="132" height="132" alt="" style="display:block;height:36px;width:auto;max-width:140px;border:0;outline:none;text-decoration:none;" />
-                              </td>
-                              <td style="vertical-align:middle;padding:0;">
-                                <span class="hero-wordmark" style="font-size:16px;font-weight:700;color:#1a1f36;letter-spacing:-0.02em;line-height:1.1;">PitchCV</span>
-                              </td>
-                            </tr>
-                          </table>
-                        </td>
-                      </tr>
-                      <tr>
-                        <td class="hero-inner" style="padding:10px 14px 10px 18px;vertical-align:middle;width:52%;text-align:left;">
-
-                          <p class="hero-title" style="margin:0;font-size:26px;font-weight:600;line-height:1.18;color:#2d3348;">
-                            <span class="hero-line" style="display:block;">You've built a</span>
-                            <span class="hero-line" style="display:block;">strong resume —</span>
-                            <span class="hero-line" style="display:block;">now use it</span>
-                          </p>
-
-                        </td>
-
-                        <td class="hero-illus-cell" align="right" style="width:48%;vertical-align:middle;padding:0 12px 0 0;text-align:right;line-height:0;">
-                          <img class="illus" src="{{hero_image_url}}" width="175" alt="" style="display:block;width:175px;max-width:100%;height:auto;margin-left:auto;" />
-                        </td>
-                      </tr>
-                    </table>
-                  </td>
-                </tr>
-              </table>
+            <td style="padding:0 0 18px 0;">
+              <img src="{{logo_url}}" width="120" height="32" alt="PitchCV" style="display:block;height:28px;width:auto;max-width:132px;border:0;outline:none;text-decoration:none;"/>
             </td>
           </tr>
-
-          <!-- BODY -->
           <tr>
-            <td class="body-cell" style="background-color:#ffffff;padding:36px;border:0.5px solid #e5e7eb;border-top:none;">
-
-              <p style="margin:0 0 16px 0;font-size:16px;line-height:1.7;color:#6b7280;">
-                Your resume is now stronger, clearer, and aligned with your target role — <strong style="font-weight:700;color:#1f2937;">ready to send</strong>.
+            <td style="padding:0;">
+              <p style="margin:0 0 10px 0;font-size:18px;font-weight:600;line-height:1.35;color:#111827;">
+                Your resume is ready
               </p>
-
-              <p style="margin:0 0 32px 0;font-size:16px;line-height:1.7;color:#6b7280;">
-                Don't leave it sitting here.
+              <p style="margin:0 0 22px 0;font-size:15px;line-height:1.6;color:#4b5563;">
+                Your latest tailored version is saved. Open it below when you are ready to continue.
               </p>
-
-              <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
-                <tr>
-                  <td align="center" style="padding:0;">
-                    <a href="{{download_url}}" style="display:inline-block;padding:14px 28px;background-color:#1D4ED8;color:#ffffff;text-align:center;border-radius:10px;font-size:15px;font-weight:600;text-decoration:none;">
-                      Get your resume →
-                    </a>
-                  </td>
-                </tr>
-              </table>
-
-              <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="margin:32px 0;">
-                <tr><td style="height:1px;background-color:#e5e7eb;font-size:0;line-height:0;">&nbsp;</td></tr>
-              </table>
-
-              <p style="margin:0;font-size:12px;color:#9ca3af;line-height:1.6;">
-                This result is saved for your current session. Once it expires, you'll need to start over.
+              <p style="margin:0 0 22px 0;">
+                <a href="{{download_url}}" style="display:inline-block;padding:12px 22px;background:#1d4ed8;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;border-radius:8px;">
+                  View resume
+                </a>
               </p>
-
+              <p style="margin:0;font-size:13px;line-height:1.55;color:#6b7280;">
+                Link not working? Paste this into your browser:<br/>
+                <span style="word-break:break-all;color:#374151;">{{download_url}}</span>
+              </p>
+              <p style="margin:28px 0 0 0;padding-top:20px;border-top:1px solid #e5e7eb;font-size:12px;line-height:1.6;color:#9ca3af;">
+                <a href="{{unsubscribe_url}}" style="color:#6b7280;text-decoration:underline;">Unsubscribe</a>
+                &nbsp;·&nbsp;
+                <a href="https://www.pitchcv.app/privacy" style="color:#6b7280;text-decoration:underline;">Privacy</a>
+                &nbsp;·&nbsp;
+                <a href="https://www.pitchcv.app/terms" style="color:#6b7280;text-decoration:underline;">Terms</a>
+              </p>
+              <p style="margin:10px 0 0 0;font-size:12px;color:#9ca3af;">PitchCV · 71-75 Shelton Street, London WC2H 9FE, United Kingdom</p>
             </td>
           </tr>
-
-          <!-- FOOTER -->
-          <tr>
-            <td class="footer-cell" style="background-color:#f9fafb;border-radius:0 0 16px 16px;padding:24px 36px;border:0.5px solid #e5e7eb;border-top:none;">
-              <p style="margin:0 0 10px 0;font-size:12px;color:#9ca3af;">
-                <a href="{{unsubscribe_url}}" style="color:#9ca3af;text-decoration:none;margin-right:20px;">Unsubscribe</a>
-                <a href="https://www.pitchcv.app/privacy" style="color:#9ca3af;text-decoration:none;margin-right:20px;">Privacy</a>
-                <a href="https://www.pitchcv.app/terms" style="color:#9ca3af;text-decoration:none;">Terms</a>
-              </p>
-              <p style="margin:0;font-size:12px;color:#9ca3af;">PitchCV · 71-75 Shelton Street, London WC2H 9FE, United Kingdom</p>
-            </td>
-          </tr>
-
         </table>
       </td>
     </tr>
   </table>
 
+</body>
+</html>`;
+
+/** Mirrors `src/hr_breaker/email_templates/short_nudge.html`. */
+const EMAIL_SHORT_NUDGE_HTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PitchCV</title>
+</head>
+<body style="margin:0;padding:0;background:#ffffff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#1f2937;">
+
+  <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">
+    Your saved resume is still available in PitchCV.
+  </div>
+
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#ffffff;">
+    <tr>
+      <td style="padding:28px 16px 36px 16px;">
+        <table role="presentation" width="100%" style="max-width:480px;margin:0 auto;">
+          <tr>
+            <td>
+              <p style="margin:0 0 14px 0;font-size:15px;line-height:1.6;color:#374151;">
+                Your tailored resume is still saved in your PitchCV account. You can open it whenever you want to pick up where you left off.
+              </p>
+              <p style="margin:0 0 20px 0;">
+                <a href="{{download_url}}" style="color:#1d4ed8;font-size:15px;font-weight:600;text-decoration:underline;">Open PitchCV</a>
+              </p>
+              <p style="margin:0;font-size:12px;line-height:1.6;color:#9ca3af;">
+                <a href="{{unsubscribe_url}}" style="color:#6b7280;text-decoration:underline;">Unsubscribe</a>
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
 </body>
 </html>`;
 
@@ -195,32 +163,6 @@ export const ADMIN_EMAIL_DEMO_TEMPLATES: AdminEmailTemplateDemo[] = [
     id: "short-nudge",
     nameKey: "admin.email.templates.demo2Name",
     descriptionKey: "admin.email.templates.demo2Desc",
-    html: `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>One step left</title>
-</head>
-<body style="margin:0;padding:0;background:#0f172a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="padding:32px 12px;">
-    <tr>
-      <td align="center">
-        <table role="presentation" width="100%" style="max-width:480px;background:#1e293b;border-radius:14px;border:1px solid #334155;">
-          <tr>
-            <td style="padding:24px;">
-              <p style="margin:0 0 8px;font-size:13px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:0.06em;">PitchCV</p>
-              <p style="margin:0;font-size:17px;line-height:1.5;color:#f1f5f9;">Still thinking? Your optimized resume is one click away — open the app and finish checkout when it suits you.</p>
-              <p style="margin:20px 0 0;">
-                <a href="#" style="color:#93c5fd;font-weight:600;text-decoration:none;">Open PitchCV →</a>
-              </p>
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>
-  </table>
-</body>
-</html>`,
+    html: EMAIL_SHORT_NUDGE_HTML,
   },
 ];

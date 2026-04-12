@@ -141,6 +141,38 @@ def resend_variables_for_send(*, public_base: str, unsubscribe_url: str, resume_
     return {k: (v if v is not None else "") for k, v in core.items()}
 
 
+def winback_plain_text(*, resume_url: str, unsubscribe_url: str, settings_url: str) -> str:
+    """Explicit text/plain part so clients see a simple message (not only HTML-to-text heuristics)."""
+    ru = (resume_url or "").strip()
+    uu = (unsubscribe_url or "").strip()
+    su = (settings_url or "").strip()
+    lines = [
+        "Your tailored resume is available in PitchCV.",
+        "",
+        "Open your resume:",
+        ru or "(link unavailable)",
+        "",
+    ]
+    if su:
+        lines.extend(["Account settings:", su, ""])
+    if uu:
+        lines.extend(["Unsubscribe from these messages:", uu, ""])
+    lines.append("— PitchCV")
+    return "\n".join(lines)
+
+
+def resend_transactional_extras(settings: Settings, *, unsubscribe_url: str) -> dict[str, Any]:
+    """Reply-To and List-Unsubscribe header (RFC 2369) when HTTPS — common for legitimate service mail."""
+    extra: dict[str, Any] = {}
+    rt = (settings.resend_reply_to or "").strip()
+    if rt:
+        extra["reply_to"] = [rt]
+    u = (unsubscribe_url or "").strip()
+    if u.lower().startswith("https://"):
+        extra["headers"] = {"List-Unsubscribe": f"<{u}>"}
+    return extra
+
+
 async def latest_resume_open_url_for_user(pool, settings: Settings, user_id: str) -> str:
     """Return one-click URL to newest saved resume for user; empty when no record exists."""
     records = await db_list_all(pool, settings.output_dir, user_id=user_id)
@@ -205,6 +237,10 @@ async def deliver_winback_email(
     resume_url: str = "",
 ) -> None:
     unsub = build_unsubscribe_url(settings, user_id)
+    base = (public_base or "").rstrip("/")
+    download = (resume_url or "").strip() or (f"{base}/upgrade" if base else "")
+    settings_url = f"{base}/settings" if base else ""
+    extras = resend_transactional_extras(settings, unsubscribe_url=unsub)
     rid = resend_published_template_id(
         settings,
         app_template_id,
@@ -223,6 +259,8 @@ async def deliver_winback_email(
                 unsubscribe_url=unsub,
                 resume_url=resume_url,
             ),
+            reply_to=extras.get("reply_to"),
+            headers=extras.get("headers"),
         )
         return
     raw = load_email_template_html(app_template_id)
@@ -232,12 +270,20 @@ async def deliver_winback_email(
         unsubscribe_url=unsub,
         resume_url=resume_url,
     )
+    text_body = winback_plain_text(
+        resume_url=download,
+        unsubscribe_url=unsub,
+        settings_url=settings_url,
+    )
     await resend_send_html(
         api_key=api_key,
         from_addr=from_addr,
         to=to,
         subject=subject,
         html=html,
+        text=text_body,
+        reply_to=extras.get("reply_to"),
+        headers=extras.get("headers"),
     )
 
 
@@ -451,6 +497,7 @@ async def send_resend_template_to_email(
         raise ValueError("User has an active paid/trial subscription — skipped")
     resume_url = await latest_email_cta_url_for_user(pool, settings, uid)
     unsub = build_unsubscribe_url(settings, uid)
+    extras = resend_transactional_extras(settings, unsubscribe_url=unsub)
     await resend_send_template(
         api_key=api_key,
         from_addr=from_addr,
@@ -462,4 +509,6 @@ async def send_resend_template_to_email(
             unsubscribe_url=unsub,
             resume_url=resume_url,
         ),
+        reply_to=extras.get("reply_to"),
+        headers=extras.get("headers"),
     )

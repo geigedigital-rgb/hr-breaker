@@ -579,9 +579,9 @@ const en = {
         empty: "No templates yet.",
         demo1Name: "Win-back #1 — optimized, not paid",
         demo1Desc:
-          "Hero + merge tags. {{unsubscribe_url}} becomes a signed /api/email/unsubscribe?token=… link per recipient at send time. Resend templates: use UNSUBSCRIBE_LINK variable.",
-        demo2Name: "Short nudge — dark",
-        demo2Desc: "Minimal follow-up, dark panel.",
+          "Simple transactional layout (white background, text-first) to reduce Gmail “Promotions” tabbing; merge tags same as API. Resend: use {{{UNSUBSCRIBE_LINK}}} or {{unsubscribe_url}} — not reserved UNSUBSCRIBE_URL.",
+        demo2Name: "Short nudge — plain follow-up",
+        demo2Desc: "Light follow-up without newsletter styling; optional second touch.",
       },
       send: {
         title: "Automation & send",
