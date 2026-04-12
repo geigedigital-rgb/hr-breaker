@@ -331,6 +331,103 @@ async def deliver_winback_email(
     )
 
 
+async def deliver_winback_or_resend_template(
+    *,
+    settings: Settings,
+    api_key: str,
+    from_addr: str,
+    to: str,
+    subject: str,
+    template_ref: str,
+    public_base: str,
+    user_id: str,
+    pool: Any,
+    db_resend_template_reminder: str = "",
+    db_resend_template_short_nudge: str = "",
+) -> None:
+    """
+    Send win-back style email: mapped Resend template, repo HTML by app id, or raw Resend template id.
+    """
+    resume_url = await latest_email_cta_url_for_user(pool, settings, user_id)
+    app_template_id = (template_ref or "").strip()
+    if not app_template_id:
+        raise ValueError("template_ref is empty")
+
+    unsub = build_unsubscribe_url(settings, user_id)
+    base = (public_base or "").rstrip("/")
+    download = (resume_url or "").strip() or (f"{base}/upgrade" if base else "")
+    settings_url = f"{base}/settings" if base else ""
+    plain_headline: str | None = None
+    primary_plain_link: str | None = None
+    if app_template_id == "ahead-of-candidates" and base:
+        plain_headline = "You're already ahead of most candidates."
+        primary_plain_link = _optimize_entry_url_for_email(public_base)
+    extras = resend_transactional_extras(settings, unsubscribe_url=unsub)
+    rid = resend_published_template_id(
+        settings,
+        app_template_id,
+        db_reminder=db_resend_template_reminder,
+        db_nudge=db_resend_template_short_nudge,
+    )
+    if rid:
+        await resend_send_template(
+            api_key=api_key,
+            from_addr=from_addr,
+            to=to,
+            subject=subject,
+            template_id=rid,
+            variables=resend_variables_for_send(
+                public_base=public_base,
+                unsubscribe_url=unsub,
+                resume_url=resume_url,
+            ),
+            reply_to=extras.get("reply_to"),
+            headers=extras.get("headers"),
+        )
+        return
+    if app_template_id in _TEMPLATE_FILES:
+        raw = load_email_template_html(app_template_id)
+        html = merge_winback_placeholders(
+            raw,
+            public_base=public_base,
+            unsubscribe_url=unsub,
+            resume_url=resume_url,
+        )
+        text_body = winback_plain_text(
+            resume_url=download,
+            unsubscribe_url=unsub,
+            settings_url=settings_url,
+            plain_headline=plain_headline,
+            primary_link=primary_plain_link,
+        )
+        await resend_send_html(
+            api_key=api_key,
+            from_addr=from_addr,
+            to=to,
+            subject=subject,
+            html=html,
+            text=text_body,
+            reply_to=extras.get("reply_to"),
+            headers=extras.get("headers"),
+        )
+        return
+
+    await resend_send_template(
+        api_key=api_key,
+        from_addr=from_addr,
+        to=to,
+        subject=subject,
+        template_id=app_template_id,
+        variables=resend_variables_for_send(
+            public_base=public_base,
+            unsubscribe_url=unsub,
+            resume_url=resume_url,
+        ),
+        reply_to=extras.get("reply_to"),
+        headers=extras.get("headers"),
+    )
+
+
 def _user_is_paid(sub: dict[str, Any] | None) -> bool:
     if not sub:
         return False

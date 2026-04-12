@@ -115,6 +115,7 @@ from hr_breaker.services.db import (
     email_winback_pending_count,
     email_winback_delete_all_pending,
     email_winback_pending_list_for_user,
+    email_stagger_pending_count,
     optimization_snapshot_get_by_id_for_user,
     optimization_snapshot_get_latest_valid,
     optimization_snapshot_insert,
@@ -1103,6 +1104,7 @@ class AdminUserOut(BaseModel):
     created_at: str
     subscription_status: str | None = None
     subscription_plan: str | None = None
+    stripe_subscription_id: str | None = None
     partner_program_access: bool = False
     admin_blocked: bool = False
 
@@ -1329,6 +1331,39 @@ class AdminEmailAutomationPatchBody(BaseModel):
 
 class AdminEmailClearQueueOut(BaseModel):
     deleted: int
+
+
+class AdminEmailStaggerPreviewOut(BaseModel):
+    campaign_kind: str
+    eligible_count: int
+    sample_user_ids: list[str]
+    has_active_queue_for_kind: bool
+    pending_count: int
+
+
+class AdminEmailStaggerSnapshotBody(BaseModel):
+    template_id: str = Field(..., min_length=1, max_length=200)
+
+
+class AdminEmailStaggerSnapshotOut(BaseModel):
+    run_id: str | None = None
+    enqueued: int
+    campaign_kind: str
+    template_id: str
+    first_run_at: str | None = None
+    last_run_at: str | None = None
+
+
+class AdminEmailStaggerProcessOut(BaseModel):
+    ok: bool
+    processed: bool = False
+    paused: bool = False
+    message: str | None = None
+    error: str | None = None
+    recipient_id: str | None = None
+    result: str | None = None
+    detail: str | None = None
+    email: str | None = None
 
 
 class AdminActivityItem(BaseModel):
@@ -3880,6 +3915,7 @@ async def api_admin_users(
             created_at=u["created_at"].isoformat() if u.get("created_at") else "",
             subscription_status=(u.get("subscription_status") or "free").lower() if u.get("subscription_status") is not None else "free",
             subscription_plan=(u.get("subscription_plan") or "free").lower() if u.get("subscription_plan") is not None else "free",
+            stripe_subscription_id=(str(u["stripe_subscription_id"]).strip() if u.get("stripe_subscription_id") else None),
             partner_program_access=bool(u.get("partner_program_access")),
             admin_blocked=bool(u.get("admin_blocked")),
         )
@@ -4157,18 +4193,36 @@ def _admin_dt_iso(v: Any) -> str | None:
     return str(v)
 
 
-def _build_admin_automation_list_out(cfg: dict[str, Any], pending_global: int) -> AdminEmailAutomationsListOut:
+def _build_admin_automation_list_out(
+    cfg: dict[str, Any],
+    *,
+    pending_winback: int,
+    pending_stagger: int,
+) -> AdminEmailAutomationsListOut:
     states = parse_automation_states(cfg.get("automation_states"))
     items: list[AdminEmailAutomationItemOut] = []
     for a in AUTOMATION_DEFINITIONS:
         aid = a["id"]
-        enabled = bool(cfg.get("winback_auto_enabled"))
         row = states.get(aid)
         paused = bool((row or {}).get("paused")) if isinstance(row, dict) else False
-        pend: int | None = pending_global
-        sup_en = True
-        sup_pause = True
-        sup_clear = True
+        if aid == "post_optimize_winback":
+            enabled = bool(cfg.get("winback_auto_enabled"))
+            pend: int | None = pending_winback
+            sup_en = True
+            sup_pause = True
+            sup_clear = True
+        elif aid == "analyze_optimize_stagger_campaign":
+            enabled = pending_stagger > 0
+            pend = pending_stagger
+            sup_en = False
+            sup_pause = True
+            sup_clear = False
+        else:
+            enabled = False
+            pend = None
+            sup_en = False
+            sup_pause = False
+            sup_clear = False
         items.append(
             AdminEmailAutomationItemOut(
                 id=aid,
@@ -4186,7 +4240,7 @@ def _build_admin_automation_list_out(cfg: dict[str, Any], pending_global: int) -
                 supports_clear_queue=sup_clear,
             )
         )
-    return AdminEmailAutomationsListOut(items=items, global_pending_queue_count=pending_global)
+    return AdminEmailAutomationsListOut(items=items, global_pending_queue_count=pending_winback + pending_stagger)
 
 
 @router.get("/admin/email/automations", response_model=AdminEmailAutomationsListOut)
@@ -4195,8 +4249,9 @@ async def api_admin_email_automations(_admin: dict = Depends(get_admin_user)) ->
     if pool is None:
         raise HTTPException(503, "Database not configured")
     cfg = await admin_email_settings_get(pool)
-    pending = await email_winback_pending_count(pool)
-    return _build_admin_automation_list_out(cfg, pending)
+    pending_w = await email_winback_pending_count(pool)
+    pending_s = await email_stagger_pending_count(pool, campaign_kind=None)
+    return _build_admin_automation_list_out(cfg, pending_winback=pending_w, pending_stagger=pending_s)
 
 
 @router.patch("/admin/email/automations/{automation_id}", response_model=AdminEmailAutomationsListOut)
@@ -4211,21 +4266,27 @@ async def api_admin_email_automations_patch(
     aid = (automation_id or "").strip()
     if automation_def_by_id(aid) is None:
         raise HTTPException(404, "Unknown automation")
-    if aid != "post_optimize_winback":
+    if aid not in ("post_optimize_winback", "analyze_optimize_stagger_campaign"):
         raise HTTPException(400, "Unsupported automation for PATCH")
     if body.enabled is None and body.paused is None:
         raise HTTPException(400, "Provide enabled and/or paused")
     st_patch: dict[str, Any] | None = None
     if body.paused is not None:
-        st_patch = {"post_optimize_winback": {"paused": body.paused}}
-    await admin_email_settings_update(
-        pool,
-        winback_auto_enabled=body.enabled,
-        automation_states=st_patch,
-    )
+        st_patch = {aid: {"paused": body.paused}}
+    if aid == "post_optimize_winback":
+        await admin_email_settings_update(
+            pool,
+            winback_auto_enabled=body.enabled,
+            automation_states=st_patch,
+        )
+    else:
+        if body.enabled is not None:
+            raise HTTPException(400, "This flow has no enable toggle; use pause only.")
+        await admin_email_settings_update(pool, automation_states=st_patch)
     cfg = await admin_email_settings_get(pool)
-    pending = await email_winback_pending_count(pool)
-    return _build_admin_automation_list_out(cfg, pending)
+    pending_w = await email_winback_pending_count(pool)
+    pending_s = await email_stagger_pending_count(pool, campaign_kind=None)
+    return _build_admin_automation_list_out(cfg, pending_winback=pending_w, pending_stagger=pending_s)
 
 
 @router.post("/admin/email/automations/{automation_id}/clear-pending-queue", response_model=AdminEmailClearQueueOut)
@@ -4241,6 +4302,51 @@ async def api_admin_email_automations_clear_queue(
         raise HTTPException(400, "Only post_optimize_winback uses the shared pending queue today.")
     n = await email_winback_delete_all_pending(pool)
     return AdminEmailClearQueueOut(deleted=n)
+
+
+@router.get("/admin/email/stagger-campaign/preview", response_model=AdminEmailStaggerPreviewOut)
+async def api_admin_email_stagger_preview(_admin: dict = Depends(get_admin_user)) -> AdminEmailStaggerPreviewOut:
+    pool = await get_pool()
+    if pool is None:
+        raise HTTPException(503, "Database not configured")
+    from hr_breaker.services.email_stagger_campaign import CAMPAIGN_KIND_ANALYZE_OPTIMIZE_UNPAID, preview_stagger_campaign
+
+    d = await preview_stagger_campaign(pool, campaign_kind=CAMPAIGN_KIND_ANALYZE_OPTIMIZE_UNPAID)
+    return AdminEmailStaggerPreviewOut(**d)
+
+
+@router.post("/admin/email/stagger-campaign/snapshot", response_model=AdminEmailStaggerSnapshotOut)
+async def api_admin_email_stagger_snapshot(
+    body: AdminEmailStaggerSnapshotBody,
+    admin: dict = Depends(get_admin_user),
+) -> AdminEmailStaggerSnapshotOut:
+    pool = await get_pool()
+    if pool is None:
+        raise HTTPException(503, "Database not configured")
+    from hr_breaker.services.email_stagger_campaign import CAMPAIGN_KIND_ANALYZE_OPTIMIZE_UNPAID, snapshot_enqueue_campaign
+
+    admin_email = (admin.get("email") or "").strip() or None
+    try:
+        out = await snapshot_enqueue_campaign(
+            pool,
+            template_id=body.template_id.strip(),
+            created_by_email=admin_email,
+            campaign_kind=CAMPAIGN_KIND_ANALYZE_OPTIMIZE_UNPAID,
+        )
+    except ValueError as e:
+        raise HTTPException(409, str(e)) from e
+    return AdminEmailStaggerSnapshotOut(**out)
+
+
+@router.post("/admin/email/stagger-campaign/process", response_model=AdminEmailStaggerProcessOut)
+async def api_admin_email_stagger_process(_admin: dict = Depends(get_admin_user)) -> AdminEmailStaggerProcessOut:
+    pool = await get_pool()
+    if pool is None:
+        raise HTTPException(503, "Database not configured")
+    from hr_breaker.services.email_stagger_campaign import process_stagger_next_send
+
+    raw = await process_stagger_next_send(pool)
+    return AdminEmailStaggerProcessOut(**raw)
 
 
 @router.get("/admin/email/user-journey", response_model=AdminUserJourneyOut)

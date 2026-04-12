@@ -10,10 +10,15 @@ import {
   postAdminEmailClearPendingQueue,
   postAdminEmailSendOne,
   postAdminEmailQueueProcess,
+  getAdminEmailStaggerPreview,
+  postAdminEmailStaggerSnapshot,
+  postAdminEmailStaggerProcess,
   type AdminEmailAutomationItem,
   type AdminEmailAutomationsList,
   type AdminEmailControl,
   type AdminEmailCtaInfo,
+  type AdminEmailStaggerPreview,
+  type AdminEmailStaggerProcess,
   type AdminResendTemplate,
   type AdminEmailSendOneResult,
   type AdminUserJourney,
@@ -67,6 +72,10 @@ function automationStatusLabel(it: AdminEmailAutomationItem): string {
     if (it.paused) return t("admin.email.send.statusPaused");
     return it.enabled ? t("admin.email.send.statusRunning") : t("admin.email.send.statusStopped");
   }
+  if (it.id === "analyze_optimize_stagger_campaign") {
+    if (it.paused) return t("admin.email.send.statusPaused");
+    return it.enabled ? t("admin.email.send.staggerStatusDraining") : t("admin.email.send.staggerStatusIdle");
+  }
   return "—";
 }
 
@@ -76,16 +85,23 @@ function automationBadgeClass(it: AdminEmailAutomationItem): string {
     if (it.enabled) return "bg-emerald-100 text-emerald-900";
     return "bg-zinc-100 text-zinc-600";
   }
+  if (it.id === "analyze_optimize_stagger_campaign") {
+    if (it.paused) return "bg-amber-100 text-amber-900";
+    if (it.enabled) return "bg-emerald-100 text-emerald-900";
+    return "bg-zinc-100 text-zinc-600";
+  }
   return "bg-zinc-100 text-zinc-600";
 }
 
 function automationFlowLabel(id: string): string {
   if (id === "post_optimize_winback") return t("admin.email.send.automationsRowWinbackLabel");
+  if (id === "analyze_optimize_stagger_campaign") return t("admin.email.send.automationsRowStaggerLabel");
   return id;
 }
 
 function automationWhereHint(id: string): string {
   if (id === "post_optimize_winback") return t("admin.email.send.automationsRowWinbackWhere");
+  if (id === "analyze_optimize_stagger_campaign") return t("admin.email.send.automationsRowStaggerWhere");
   return "—";
 }
 
@@ -118,7 +134,15 @@ export default function AdminEmailSend() {
   const [journeyErr, setJourneyErr] = useState<string | null>(null);
   const [journeyBusy, setJourneyBusy] = useState(false);
 
+  const [staggerTmpl, setStaggerTmpl] = useState("ahead-of-candidates");
+  const [staggerPreview, setStaggerPreview] = useState<AdminEmailStaggerPreview | null>(null);
+  const [staggerErr, setStaggerErr] = useState<string | null>(null);
+  const [staggerBusy, setStaggerBusy] = useState<string | null>(null);
+  const [staggerProcessResult, setStaggerProcessResult] = useState<AdminEmailStaggerProcess | null>(null);
+  const [staggerInfo, setStaggerInfo] = useState<string | null>(null);
+
   const postWinback = automations?.items.find((i) => i.id === "post_optimize_winback");
+  const staggerFlow = automations?.items.find((i) => i.id === "analyze_optimize_stagger_campaign");
 
   const reload = useCallback(async () => {
     setLoadErr(null);
@@ -258,7 +282,7 @@ export default function AdminEmailSend() {
   };
 
   const onClearPendingQueue = async (id: string) => {
-    const n = automations?.global_pending_queue_count ?? 0;
+    const n = id === "post_optimize_winback" ? (postWinback?.pending_queue_count ?? 0) : (automations?.global_pending_queue_count ?? 0);
     if (!window.confirm(t("admin.email.send.clearQueueConfirm").replace("{n}", String(n)))) return;
     if (!window.confirm(t("admin.email.send.clearQueueConfirmFinal"))) return;
     setAutoFlowBusy("clear-" + id);
@@ -286,6 +310,61 @@ export default function AdminEmailSend() {
       setJourneyErr(e instanceof Error ? e.message : t("admin.email.send.journeyErr"));
     } finally {
       setJourneyBusy(false);
+    }
+  };
+
+  const onStaggerPreview = async () => {
+    setStaggerBusy("preview");
+    setStaggerErr(null);
+    setStaggerInfo(null);
+    try {
+      const p = await getAdminEmailStaggerPreview();
+      setStaggerPreview(p);
+    } catch (e) {
+      setStaggerErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setStaggerBusy(null);
+    }
+  };
+
+  const onStaggerSnapshot = async () => {
+    const tid = staggerTmpl.trim();
+    if (!tid) {
+      setStaggerErr(t("admin.email.send.staggerTemplateMissing"));
+      return;
+    }
+    if (!window.confirm(t("admin.email.send.staggerSnapshotConfirm"))) return;
+    setStaggerBusy("snapshot");
+    setStaggerErr(null);
+    setStaggerInfo(null);
+    try {
+      const out = await postAdminEmailStaggerSnapshot({ template_id: tid });
+      setStaggerPreview(null);
+      setStaggerProcessResult(null);
+      setStaggerInfo(
+        t("admin.email.send.staggerSnapshotOk")
+          .replace("{n}", String(out.enqueued))
+          .replace("{run}", out.run_id || "—"),
+      );
+      void reload();
+    } catch (e) {
+      setStaggerErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setStaggerBusy(null);
+    }
+  };
+
+  const onStaggerProcess = async () => {
+    setStaggerBusy("process");
+    setStaggerErr(null);
+    try {
+      const out = await postAdminEmailStaggerProcess();
+      setStaggerProcessResult(out);
+      void reload();
+    } catch (e) {
+      setStaggerErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setStaggerBusy(null);
     }
   };
 
@@ -473,6 +552,90 @@ export default function AdminEmailSend() {
                   </details>
                 ) : null}
               </div>
+            </div>
+          </section>
+
+          <section className={ui.panel} aria-labelledby="email-stagger">
+            <h3 id="email-stagger" className={ui.title}>
+              {t("admin.email.send.staggerTitle")}
+            </h3>
+            <p className={`${ui.subtitle} max-w-prose`}>{t("admin.email.send.staggerHint")}</p>
+            <p className="mt-1 font-mono text-[10px] text-[var(--text-tertiary)]">analyze_optimize_stagger_campaign</p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${staggerFlow ? automationBadgeClass(staggerFlow) : ui.badge("neutral")}`}>
+                {staggerFlow ? automationStatusLabel(staggerFlow) : "—"}
+              </span>
+              <span className="text-xs text-[var(--text-muted)]">
+                {t("admin.email.send.pendingLabel")}:{" "}
+                <strong className="tabular-nums text-[var(--text)]">{staggerFlow?.pending_queue_count ?? "—"}</strong>
+              </span>
+            </div>
+            {staggerErr ? (
+              <p className="mt-2 text-xs text-red-700" role="alert">
+                {staggerErr}
+              </p>
+            ) : null}
+            <div className="mt-4 space-y-4">
+              <div>
+                <label className={ui.label}>{t("admin.email.send.staggerTemplateLabel")}</label>
+                <input
+                  type="text"
+                  value={staggerTmpl}
+                  onChange={(e) => setStaggerTmpl(e.target.value)}
+                  placeholder="ahead-of-candidates or Resend template id"
+                  autoComplete="off"
+                  spellCheck={false}
+                  className={`${ui.input} font-mono text-xs`}
+                />
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button type="button" disabled={staggerBusy != null} onClick={() => void onStaggerPreview()} className={ui.btnSecondary}>
+                  {staggerBusy === "preview" ? "…" : t("admin.email.send.staggerPreview")}
+                </button>
+                <button
+                  type="button"
+                  disabled={staggerBusy != null || !!(staggerPreview?.has_active_queue_for_kind)}
+                  onClick={() => void onStaggerSnapshot()}
+                  className={ui.btnPrimary}
+                >
+                  {staggerBusy === "snapshot" ? "…" : t("admin.email.send.staggerSnapshot")}
+                </button>
+                <button type="button" disabled={staggerBusy != null} onClick={() => void onStaggerProcess()} className={ui.btnSecondary}>
+                  {staggerBusy === "process" ? "…" : t("admin.email.send.staggerProcess")}
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={autoFlowBusy != null || !!staggerFlow?.paused}
+                  onClick={() => void onAutomationPatch("analyze_optimize_stagger_campaign", { paused: true })}
+                  className={ui.btnGhost}
+                >
+                  {t("admin.email.send.btnPause")}
+                </button>
+                <button
+                  type="button"
+                  disabled={autoFlowBusy != null || !staggerFlow?.paused}
+                  onClick={() => void onAutomationPatch("analyze_optimize_stagger_campaign", { paused: false })}
+                  className={ui.btnGhost}
+                >
+                  {t("admin.email.send.btnResume")}
+                </button>
+              </div>
+              {staggerInfo ? <p className="text-xs font-medium text-emerald-800">{staggerInfo}</p> : null}
+              {staggerPreview ? (
+                <p className="text-xs text-[var(--text-muted)]">
+                  {t("admin.email.send.staggerPreviewSummary")
+                    .replace("{n}", String(staggerPreview.eligible_count))
+                    .replace("{p}", String(staggerPreview.pending_count))
+                    .replace("{a}", String(staggerPreview.has_active_queue_for_kind))}
+                </p>
+              ) : null}
+              {staggerProcessResult ? (
+                <pre className="max-h-28 overflow-auto rounded-lg border border-black/[0.06] bg-black/[0.02] p-2 text-[10px] text-[var(--text)]">
+                  {JSON.stringify(staggerProcessResult, null, 2)}
+                </pre>
+              ) : null}
             </div>
           </section>
 

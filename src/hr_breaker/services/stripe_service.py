@@ -221,10 +221,14 @@ async def handle_checkout_session_completed(
     current_period_end_ts = getattr(sub, "current_period_end", None)
     current_period_end = datetime.fromtimestamp(current_period_end_ts, tz=timezone.utc) if current_period_end_ts else None
     status = getattr(sub, "status", None)
+    trial_end_dt = (
+        datetime.fromtimestamp(trial_end_ts, tz=timezone.utc) if trial_end_ts else None
+    )
+    in_trial_window = bool(trial_end_dt and trial_end_dt > datetime.now(timezone.utc))
 
     # DB: trialing or active
-    if status == "trialing":
-        period_end = datetime.fromtimestamp(trial_end_ts, tz=timezone.utc) if trial_end_ts else current_period_end
+    if status == "trialing" or (status == "active" and in_trial_window and price_key == PRICE_KEY_TRIAL):
+        period_end = trial_end_dt if trial_end_ts else current_period_end
         await user_update_subscription(
             pool,
             user_id,
@@ -336,7 +340,13 @@ async def handle_subscription_updated(
     if not user_id:
         logger.warning("subscription.updated: no user for customer %s", customer_id)
         return
-    if status == "trialing":
+    trial_end_ts = getattr(subscription, "trial_end", None)
+    trial_end_dt = (
+        datetime.fromtimestamp(trial_end_ts, tz=timezone.utc) if trial_end_ts else None
+    )
+    in_trial_window = bool(trial_end_dt and trial_end_dt > datetime.now(timezone.utc))
+
+    if status == "trialing" or (status == "active" and in_trial_window):
         plan, sub_status = "trial", "trial"
     elif status in ("active",):
         plan, sub_status = "monthly", "active"

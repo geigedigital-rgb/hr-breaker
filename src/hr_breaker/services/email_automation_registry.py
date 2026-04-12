@@ -34,7 +34,27 @@ AUTOMATION_DEFINITIONS: list[AutomationDef] = [
             "admin, user is unpaid, and reminder-no-download has not already been sent."
         ),
         "wired": True,
-    }
+    },
+    {
+        "id": "analyze_optimize_stagger_campaign",
+        "name": "Analyze + optimize (unpaid) — staggered one-shot",
+        "description": (
+            "Manual snapshot: all users who ever completed a successful analyze and optimize, still unpaid, "
+            "marketing OK. Queue is built once with random 3–8 minutes between sends; each user receives at most "
+            "one email for this campaign kind. Process one send per cron or admin call until the queue is empty."
+        ),
+        "channel": "queue",
+        "dedupe_summary": (
+            "Rows in email_stagger_campaign_recipient + email_stagger_sent_log (per user, campaign_kind). "
+            "No second snapshot while pending/processing rows exist for the same kind."
+        ),
+        "conditions_code": (
+            "Eligible: usage_audit_log has successful analyze_ats_score or analyze_insights AND optimize_complete; "
+            "unpaid; not admin_blocked; marketing_emails_opt_in. Template: app id (e.g. ahead-of-candidates) or "
+            "Resend published template id."
+        ),
+        "wired": True,
+    },
 ]
 
 
@@ -63,4 +83,9 @@ def parse_automation_states(raw: Any) -> dict[str, Any]:
 
 def is_post_optimize_winback_paused(cfg: dict[str, Any]) -> bool:
     st = parse_automation_states(cfg.get("automation_states")).get("post_optimize_winback") or {}
+    return bool(st.get("paused"))
+
+
+def is_analyze_optimize_stagger_paused(cfg: dict[str, Any]) -> bool:
+    st = parse_automation_states(cfg.get("automation_states")).get("analyze_optimize_stagger_campaign") or {}
     return bool(st.get("paused"))

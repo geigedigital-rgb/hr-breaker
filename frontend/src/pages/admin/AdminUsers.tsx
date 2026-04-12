@@ -136,7 +136,24 @@ export default function AdminUsers() {
                       </div>
                     </td>
                     <td className="px-4 py-3 text-[var(--text-muted)] align-top">{u.name ?? "—"}</td>
-                    <td className="px-4 py-3 text-[var(--text)] align-top">{u.subscription_plan ?? "free"}</td>
+                    <td className="px-4 py-3 align-top">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="text-[var(--text)]">{u.subscription_plan ?? "free"}</span>
+                        {(u.subscription_plan ?? "").toLowerCase() === "trial" ? (
+                          <span className="text-[10px] font-semibold uppercase text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded">
+                            {t("admin.users.badgeTrial")}
+                          </span>
+                        ) : null}
+                        {u.stripe_subscription_id ? (
+                          <span
+                            className="text-[10px] font-semibold uppercase text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded"
+                            title={u.stripe_subscription_id}
+                          >
+                            {t("admin.users.badgeStripe")}
+                          </span>
+                        ) : null}
+                      </div>
+                    </td>
                     <td className="px-4 py-3 align-top">
                       <span
                         className={

@@ -875,6 +875,8 @@ export type AdminUserOut = {
   created_at: string;
   subscription_status?: string | null;
   subscription_plan?: string | null;
+  /** Present when Stripe subscription exists (trial or monthly). */
+  stripe_subscription_id?: string | null;
   partner_program_access?: boolean;
   admin_blocked?: boolean;
 };
@@ -1388,6 +1390,64 @@ export async function postAdminEmailClearPendingQueue(automationId: string): Pro
   const data = await parseJsonOrThrow<{ deleted: number; detail?: string }>(r);
   if (!r.ok) throw new Error(data.detail || r.statusText);
   return { deleted: data.deleted };
+}
+
+export type AdminEmailStaggerPreview = {
+  campaign_kind: string;
+  eligible_count: number;
+  sample_user_ids: string[];
+  has_active_queue_for_kind: boolean;
+  pending_count: number;
+};
+
+export async function getAdminEmailStaggerPreview(): Promise<AdminEmailStaggerPreview> {
+  const r = await fetch(`${API}/admin/email/stagger-campaign/preview`, { headers: authHeaders() });
+  const data = await parseJsonOrThrow<AdminEmailStaggerPreview & { detail?: string }>(r);
+  if (!r.ok) throw new Error((data as { detail?: string }).detail || r.statusText);
+  return data;
+}
+
+export type AdminEmailStaggerSnapshot = {
+  run_id: string | null;
+  enqueued: number;
+  campaign_kind: string;
+  template_id: string;
+  first_run_at?: string | null;
+  last_run_at?: string | null;
+};
+
+export async function postAdminEmailStaggerSnapshot(body: { template_id: string }): Promise<AdminEmailStaggerSnapshot> {
+  const r = await fetch(`${API}/admin/email/stagger-campaign/snapshot`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(body),
+  });
+  const data = await parseJsonOrThrow<AdminEmailStaggerSnapshot & { detail?: string }>(r);
+  if (!r.ok) throw new Error((data as { detail?: string }).detail || r.statusText);
+  return data;
+}
+
+export type AdminEmailStaggerProcess = {
+  ok: boolean;
+  processed?: boolean;
+  paused?: boolean;
+  message?: string | null;
+  error?: string | null;
+  recipient_id?: string | null;
+  result?: string | null;
+  detail?: string | null;
+  email?: string | null;
+};
+
+export async function postAdminEmailStaggerProcess(): Promise<AdminEmailStaggerProcess> {
+  const r = await fetch(`${API}/admin/email/stagger-campaign/process`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({}),
+  });
+  const data = await parseJsonOrThrow<AdminEmailStaggerProcess & { detail?: string }>(r);
+  if (!r.ok) throw new Error((data as { detail?: string }).detail || r.statusText);
+  return data;
 }
 
 export type AdminWinbackPendingItem = {

@@ -385,6 +385,52 @@ async def init_table(pool) -> None:
         await conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_uploaded_source_pdfs_user ON uploaded_source_pdfs (user_id)"
         )
+        await conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS email_stagger_campaign_run (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                campaign_kind TEXT NOT NULL,
+                template_id TEXT NOT NULL,
+                recipient_count INT NOT NULL DEFAULT 0,
+                created_by_email TEXT,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+            """
+        )
+        await conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS email_stagger_campaign_recipient (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                run_id UUID NOT NULL REFERENCES email_stagger_campaign_run(id) ON DELETE CASCADE,
+                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                template_id TEXT NOT NULL,
+                run_at TIMESTAMPTZ NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                error_message TEXT,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                claimed_at TIMESTAMPTZ,
+                sent_at TIMESTAMPTZ,
+                UNIQUE (run_id, user_id)
+            )
+            """
+        )
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_email_stagger_due ON email_stagger_campaign_recipient (status, run_at) WHERE status = 'pending'"
+        )
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_email_stagger_run ON email_stagger_campaign_recipient (run_id)"
+        )
+        await conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS email_stagger_sent_log (
+                user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                campaign_kind TEXT NOT NULL,
+                run_id UUID REFERENCES email_stagger_campaign_run(id) ON DELETE SET NULL,
+                sent_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                PRIMARY KEY (user_id, campaign_kind)
+            )
+            """
+        )
 
 
 async def uploaded_pdf_upsert(
@@ -835,7 +881,7 @@ async def user_list_all(pool, limit: int = 500) -> list[dict]:
     async with pool.acquire() as conn:
         rows = await conn.fetch(
             f"""
-            SELECT id, email, name, created_at, subscription_status, subscription_plan, partner_program_access
+            SELECT id, email, name, created_at, subscription_status, subscription_plan, stripe_subscription_id, partner_program_access
             FROM {USERS_TABLE} ORDER BY created_at DESC LIMIT $1
             """,
             limit,
@@ -850,7 +896,7 @@ async def user_list_paginated(pool, *, limit: int, offset: int) -> tuple[list[di
         total = int(count_row["c"]) if count_row else 0
         rows = await conn.fetch(
             f"""
-            SELECT id, email, name, created_at, subscription_status, subscription_plan, partner_program_access, admin_blocked
+            SELECT id, email, name, created_at, subscription_status, subscription_plan, stripe_subscription_id, partner_program_access, admin_blocked
             FROM {USERS_TABLE} ORDER BY created_at DESC LIMIT $1 OFFSET $2
             """,
             limit,
@@ -1469,6 +1515,9 @@ EMAIL_WINBACK_SCHEDULE_TABLE = "email_winback_schedule"
 ADMIN_EMAIL_CAMPAIGN_LOG_TABLE = "admin_email_campaign_log"
 OPTIMIZATION_SNAPSHOTS_TABLE = "optimization_snapshots"
 OPTIMIZE_SESSION_DRAFTS_TABLE = "optimize_session_drafts"
+EMAIL_STAGGER_RUN_TABLE = "email_stagger_campaign_run"
+EMAIL_STAGGER_RECIPIENT_TABLE = "email_stagger_campaign_recipient"
+EMAIL_STAGGER_SENT_LOG_TABLE = "email_stagger_sent_log"
 
 
 async def optimize_session_draft_upsert(
@@ -1965,3 +2014,240 @@ async def email_winback_delete_pending_for_user(pool, user_id: str) -> None:
             f"DELETE FROM {EMAIL_WINBACK_SCHEDULE_TABLE} WHERE user_id = $1::uuid AND status = 'pending'",
             user_id,
         )
+
+
+# --- One-shot stagger email campaign (snapshot queue, 3–8 min spacing) ---
+
+
+async def email_stagger_active_recipient_exists(pool, *, campaign_kind: str) -> bool:
+    """True if any row for this kind is still pending or processing (blocks a new snapshot)."""
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            f"""
+            SELECT EXISTS(
+                SELECT 1
+                FROM {EMAIL_STAGGER_RECIPIENT_TABLE} r
+                INNER JOIN {EMAIL_STAGGER_RUN_TABLE} run ON r.run_id = run.id
+                WHERE run.campaign_kind = $1
+                  AND r.status IN ('pending', 'processing')
+            ) AS ok
+            """,
+            campaign_kind,
+        )
+    return bool(row["ok"]) if row else False
+
+
+async def email_stagger_eligible_user_ids(pool, *, campaign_kind: str) -> list[str]:
+    """Users with successful analyze + optimize, unpaid, marketing OK, never sent this kind, not mid-queue."""
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            f"""
+            WITH analyzed AS (
+                SELECT DISTINCT user_id AS uid
+                FROM {USAGE_AUDIT_TABLE}
+                WHERE success = TRUE
+                  AND user_id IS NOT NULL
+                  AND action IN ('analyze_ats_score', 'analyze_insights')
+            ),
+            optimized AS (
+                SELECT DISTINCT user_id AS uid
+                FROM {USAGE_AUDIT_TABLE}
+                WHERE success = TRUE
+                  AND user_id IS NOT NULL
+                  AND action = 'optimize_complete'
+            )
+            SELECT u.id::text AS id
+            FROM {USERS_TABLE} u
+            INNER JOIN analyzed a ON a.uid = u.id
+            INNER JOIN optimized o ON o.uid = u.id
+            WHERE {_sql_user_is_unpaid()}
+              AND COALESCE(u.admin_blocked, FALSE) = FALSE
+              AND {_sql_user_marketing_opt_in()}
+              AND NOT EXISTS (
+                SELECT 1 FROM {EMAIL_STAGGER_SENT_LOG_TABLE} s
+                WHERE s.user_id = u.id AND s.campaign_kind = $1
+              )
+              AND NOT EXISTS (
+                SELECT 1
+                FROM {EMAIL_STAGGER_RECIPIENT_TABLE} r
+                INNER JOIN {EMAIL_STAGGER_RUN_TABLE} run ON r.run_id = run.id
+                WHERE r.user_id = u.id
+                  AND run.campaign_kind = $1
+                  AND r.status IN ('pending', 'processing')
+              )
+            ORDER BY u.created_at ASC
+            """,
+            campaign_kind,
+        )
+    return [str(r["id"]) for r in rows]
+
+
+async def email_stagger_run_insert(
+    pool,
+    *,
+    campaign_kind: str,
+    template_id: str,
+    recipient_count: int,
+    created_by_email: str | None,
+) -> str:
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            f"""
+            INSERT INTO {EMAIL_STAGGER_RUN_TABLE} (campaign_kind, template_id, recipient_count, created_by_email)
+            VALUES ($1, $2, $3, $4)
+            RETURNING id::text
+            """,
+            campaign_kind,
+            template_id,
+            recipient_count,
+            created_by_email,
+        )
+    return str(row["id"]) if row else ""
+
+
+async def email_stagger_recipients_insert_one_by_one(
+    pool,
+    *,
+    run_id: str,
+    template_id: str,
+    user_ids: list[str],
+    run_ats: list[datetime],
+) -> None:
+    """Insert recipients without COPY (simpler types for asyncpg)."""
+    if not user_ids:
+        return
+    if len(user_ids) != len(run_ats):
+        raise ValueError("user_ids and run_ats length mismatch")
+    async with pool.acquire() as conn:
+        await conn.executemany(
+            f"""
+            INSERT INTO {EMAIL_STAGGER_RECIPIENT_TABLE} (run_id, user_id, template_id, run_at)
+            VALUES ($1::uuid, $2::uuid, $3, $4)
+            """,
+            [(run_id, uid, template_id, ra) for uid, ra in zip(user_ids, run_ats)],
+        )
+
+
+async def email_stagger_reset_stale_processing(pool) -> None:
+    async with pool.acquire() as conn:
+        await conn.execute(
+            f"""
+            UPDATE {EMAIL_STAGGER_RECIPIENT_TABLE}
+            SET status = 'pending', claimed_at = NULL
+            WHERE status = 'processing'
+              AND claimed_at IS NOT NULL
+              AND claimed_at < NOW() - interval '40 minutes'
+            """
+        )
+
+
+async def email_stagger_claim_next_due(pool) -> dict[str, Any] | None:
+    await email_stagger_reset_stale_processing(pool)
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            row = await conn.fetchrow(
+                f"""
+                SELECT r.id::text AS id, r.user_id::text AS user_id, r.template_id,
+                       run.campaign_kind, run.id::text AS run_id
+                FROM {EMAIL_STAGGER_RECIPIENT_TABLE} r
+                INNER JOIN {EMAIL_STAGGER_RUN_TABLE} run ON r.run_id = run.id
+                WHERE r.status = 'pending' AND r.run_at <= NOW()
+                ORDER BY r.run_at ASC
+                LIMIT 1
+                FOR UPDATE OF r SKIP LOCKED
+                """
+            )
+            if not row:
+                return None
+            d = dict(row)
+            await conn.execute(
+                f"""
+                UPDATE {EMAIL_STAGGER_RECIPIENT_TABLE}
+                SET status = 'processing', claimed_at = NOW()
+                WHERE id = $1::uuid
+                """,
+                d["id"],
+            )
+    return d
+
+
+async def email_stagger_mark_sent(pool, *, recipient_id: str) -> None:
+    async with pool.acquire() as conn:
+        await conn.execute(
+            f"""
+            UPDATE {EMAIL_STAGGER_RECIPIENT_TABLE}
+            SET status = 'sent', sent_at = NOW(), error_message = NULL
+            WHERE id = $1::uuid
+            """,
+            recipient_id,
+        )
+
+
+async def email_stagger_mark_skipped_paid(pool, *, recipient_id: str) -> None:
+    async with pool.acquire() as conn:
+        await conn.execute(
+            f"""
+            UPDATE {EMAIL_STAGGER_RECIPIENT_TABLE}
+            SET status = 'skipped_paid', sent_at = NOW(), error_message = NULL
+            WHERE id = $1::uuid
+            """,
+            recipient_id,
+        )
+
+
+async def email_stagger_mark_skipped_marketing(pool, *, recipient_id: str) -> None:
+    async with pool.acquire() as conn:
+        await conn.execute(
+            f"""
+            UPDATE {EMAIL_STAGGER_RECIPIENT_TABLE}
+            SET status = 'skipped_marketing', sent_at = NOW(), error_message = NULL
+            WHERE id = $1::uuid
+            """,
+            recipient_id,
+        )
+
+
+async def email_stagger_mark_failed(pool, *, recipient_id: str, message: str) -> None:
+    async with pool.acquire() as conn:
+        await conn.execute(
+            f"""
+            UPDATE {EMAIL_STAGGER_RECIPIENT_TABLE}
+            SET status = 'failed', error_message = $2, sent_at = NOW()
+            WHERE id = $1::uuid
+            """,
+            recipient_id,
+            (message or "")[:2000],
+        )
+
+
+async def email_stagger_sent_log_upsert(pool, *, user_id: str, campaign_kind: str, run_id: str) -> None:
+    async with pool.acquire() as conn:
+        await conn.execute(
+            f"""
+            INSERT INTO {EMAIL_STAGGER_SENT_LOG_TABLE} (user_id, campaign_kind, run_id)
+            VALUES ($1::uuid, $2, $3::uuid)
+            ON CONFLICT (user_id, campaign_kind) DO UPDATE SET sent_at = EXCLUDED.sent_at, run_id = EXCLUDED.run_id
+            """,
+            user_id,
+            campaign_kind,
+            run_id,
+        )
+
+
+async def email_stagger_pending_count(pool, *, campaign_kind: str | None = None) -> int:
+    async with pool.acquire() as conn:
+        if campaign_kind:
+            row = await conn.fetchrow(
+                f"""
+                SELECT COUNT(*)::int AS c
+                FROM {EMAIL_STAGGER_RECIPIENT_TABLE} r
+                INNER JOIN {EMAIL_STAGGER_RUN_TABLE} run ON r.run_id = run.id
+                WHERE r.status = 'pending' AND run.campaign_kind = $1
+                """,
+                campaign_kind,
+            )
+        else:
+            row = await conn.fetchrow(
+                f"SELECT COUNT(*)::int AS c FROM {EMAIL_STAGGER_RECIPIENT_TABLE} WHERE status = 'pending'"
+            )
+    return int(row["c"]) if row else 0
