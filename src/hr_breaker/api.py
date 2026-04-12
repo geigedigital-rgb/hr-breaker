@@ -122,6 +122,9 @@ from hr_breaker.services.db import (
     optimize_session_draft_get,
     optimize_session_draft_upsert,
     user_set_marketing_emails_opt_in,
+    uploaded_pdf_upsert,
+    uploaded_pdf_get,
+    uploaded_pdf_delete,
 )
 from hr_breaker.services.reviews_repo import (
     reviews_apply_patch,
@@ -2373,6 +2376,7 @@ async def _register_uploaded_pdf_bytes(
     safe_hash = checksum[:12]
     filename = f"uploaded_{safe_hash}_{ts}.pdf"
     path = settings.output_dir / filename
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(body)
     pdf_storage.save_source_content(checksum, content)
     record = GeneratedPDF(
@@ -2385,6 +2389,20 @@ async def _register_uploaded_pdf_bytes(
         source_was_pdf=True,
     )
     await pdf_storage.save_record_async(record, user_id=user_id)
+    # Persist bytes and text in DB so uploads survive container restarts (Railway ephemeral disk).
+    try:
+        pool = await get_pool()
+        if pool:
+            await uploaded_pdf_upsert(
+                pool,
+                source_checksum=checksum,
+                filename=filename,
+                user_id=user_id,
+                pdf_data=body,
+                extracted_text=content,
+            )
+    except Exception as e:
+        logger.warning("uploaded_pdf_upsert failed (non-fatal): %s", e)
     return filename
 
 
@@ -5178,13 +5196,21 @@ async def api_history_original(filename: str, user: dict | None = Depends(get_cu
     if not record or not record.source_checksum:
         raise HTTPException(404, "Original not found")
     path = pdf_storage.get_source_path(record.source_checksum)
-    if not path:
-        raise HTTPException(404, "Original content not stored")
-    return FileResponse(
-        path,
-        media_type="text/plain; charset=utf-8",
-        filename=f"original_{record.company}_{record.job_title or 'resume'}.txt".replace(" ", "_"),
-    )
+    dl_name = f"original_{record.company}_{record.job_title or 'resume'}.txt".replace(" ", "_")
+    if path:
+        return FileResponse(path, media_type="text/plain; charset=utf-8", filename=dl_name)
+    # Fallback: return extracted text stored in DB alongside the uploaded PDF bytes.
+    if filename.startswith("uploaded_"):
+        pool = await get_pool()
+        if pool:
+            row = await uploaded_pdf_get(pool, source_checksum=record.source_checksum)
+            if row and row["extracted_text"]:
+                return Response(
+                    content=row["extracted_text"].encode("utf-8"),
+                    media_type="text/plain; charset=utf-8",
+                    headers={"Content-Disposition": f'attachment; filename="{dl_name}"'},
+                )
+    raise HTTPException(404, "Original content not stored")
 
 
 @router.delete("/history/{filename}")
@@ -5193,8 +5219,17 @@ async def api_history_delete(filename: str, user: dict | None = Depends(get_curr
     if "/" in filename or "\\" in filename:
         raise HTTPException(400, "Invalid filename")
     user_id = str(user["id"]) if user else None
+    record = await pdf_storage.get_record_by_filename_async(filename, user_id=user_id)
     if not await pdf_storage.delete_record_async(filename, user_id=user_id):
         raise HTTPException(404, "Record not found")
+    # Also remove uploaded PDF bytes from DB when deleting an uploaded source PDF.
+    if filename.startswith("uploaded_") and record and record.source_checksum:
+        try:
+            pool = await get_pool()
+            if pool:
+                await uploaded_pdf_delete(pool, source_checksum=record.source_checksum)
+        except Exception as e:
+            logger.warning("uploaded_pdf_delete failed (non-fatal): %s", e)
     return {"ok": True}
 
 
@@ -5226,11 +5261,12 @@ async def api_history_open(filename: str, user: dict | None = Depends(get_curren
     if "/" in filename or "\\" in filename:
         raise HTTPException(400, "Invalid filename")
     user_id = str(user["id"]) if user else None
+    record = None
     if user_id:
         pool = await get_pool()
         if pool and not _is_admin_user(user):
             sub = await user_get_subscription(pool, user_id)
-            if (sub.get("plan") or "free") == "free":
+            if (sub.get("plan") or "free") == "free" and not filename.startswith("uploaded_"):
                 raise HTTPException(
                     402,
                     "Upgrade to a paid plan to view PDFs. Go to Upgrade in the menu.",
@@ -5241,6 +5277,17 @@ async def api_history_open(filename: str, user: dict | None = Depends(get_curren
     settings = get_settings()
     path = settings.output_dir / filename
     if not path.is_file():
+        # Fallback: serve uploaded source PDF bytes from DB (survives container restarts).
+        if filename.startswith("uploaded_") and record and record.source_checksum:
+            pool = await get_pool()
+            if pool:
+                row = await uploaded_pdf_get(pool, source_checksum=record.source_checksum)
+                if row and row["pdf_data"]:
+                    return Response(
+                        content=bytes(row["pdf_data"]),
+                        media_type="application/pdf",
+                        headers={"Content-Disposition": "inline"},
+                    )
         raise HTTPException(404, "File not found")
     return FileResponse(
         path,
@@ -5255,29 +5302,49 @@ async def api_history_thumbnail(filename: str, user: dict | None = Depends(get_c
     if "/" in filename or "\\" in filename:
         raise HTTPException(400, "Invalid filename")
     user_id = str(user["id"]) if user else None
+    record = None
     if user_id:
         record = await pdf_storage.get_record_by_filename_async(filename, user_id=user_id)
         if not record:
             raise HTTPException(404, "File not found")
     settings = get_settings()
     path = settings.output_dir / filename
-    if not path.is_file():
-        raise HTTPException(404, "File not found")
-    try:
-        doc = fitz.open(path)
+
+    async def _render_pdf_thumbnail(pdf_bytes: bytes) -> Response:
+        def _do() -> bytes:
+            doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+            try:
+                if doc.page_count == 0:
+                    raise ValueError("PDF has no pages")
+                page = doc[0]
+                pix = page.get_pixmap(dpi=120, alpha=False)
+                return pix.tobytes("png")
+            finally:
+                doc.close()
+
         try:
-            if doc.page_count == 0:
-                raise HTTPException(404, "PDF has no pages")
-            page = doc[0]
-            pix = page.get_pixmap(dpi=120, alpha=False)
-            png_bytes = pix.tobytes("png")
+            png = await asyncio.to_thread(_do)
             return Response(
-                content=png_bytes,
+                content=png,
                 media_type="image/png",
                 headers={"Cache-Control": "public, max-age=86400"},
             )
-        finally:
-            doc.close()
+        except Exception as e:
+            logger.exception("Thumbnail render failed for %s: %s", filename, e)
+            raise HTTPException(500, "Failed to generate thumbnail")
+
+    if not path.is_file():
+        # Fallback: render thumbnail from uploaded PDF bytes stored in DB.
+        if filename.startswith("uploaded_") and record and record.source_checksum:
+            pool = await get_pool()
+            if pool:
+                row = await uploaded_pdf_get(pool, source_checksum=record.source_checksum)
+                if row and row["pdf_data"]:
+                    return await _render_pdf_thumbnail(bytes(row["pdf_data"]))
+        raise HTTPException(404, "File not found")
+    try:
+        pdf_bytes = await asyncio.to_thread(path.read_bytes)
+        return await _render_pdf_thumbnail(pdf_bytes)
     except HTTPException:
         raise
     except Exception as e:

@@ -370,6 +370,69 @@ async def init_table(pool) -> None:
         await conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_opt_session_drafts_expires ON optimize_session_drafts (expires_at)"
         )
+        await conn.execute(
+            f"""
+            CREATE TABLE IF NOT EXISTS uploaded_source_pdfs (
+                source_checksum TEXT PRIMARY KEY,
+                filename TEXT NOT NULL,
+                user_id UUID REFERENCES {USERS_TABLE}(id) ON DELETE CASCADE,
+                pdf_data BYTEA NOT NULL,
+                extracted_text TEXT NOT NULL DEFAULT '',
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+            """
+        )
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_uploaded_source_pdfs_user ON uploaded_source_pdfs (user_id)"
+        )
+
+
+async def uploaded_pdf_upsert(
+    pool,
+    *,
+    source_checksum: str,
+    filename: str,
+    user_id: str | None,
+    pdf_data: bytes,
+    extracted_text: str,
+) -> None:
+    """Store (or replace) an uploaded source PDF in the DB so it survives container restarts."""
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO uploaded_source_pdfs (source_checksum, filename, user_id, pdf_data, extracted_text)
+            VALUES ($1, $2, $3::uuid, $4, $5)
+            ON CONFLICT (source_checksum) DO UPDATE SET
+                filename = EXCLUDED.filename,
+                user_id = COALESCE(EXCLUDED.user_id, uploaded_source_pdfs.user_id),
+                pdf_data = EXCLUDED.pdf_data,
+                extracted_text = EXCLUDED.extracted_text
+            """,
+            source_checksum,
+            filename,
+            user_id,
+            pdf_data,
+            extracted_text,
+        )
+
+
+async def uploaded_pdf_get(pool, *, source_checksum: str) -> dict[str, Any] | None:
+    """Return {pdf_data, extracted_text, filename} for a checksum, or None if not stored."""
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT filename, pdf_data, extracted_text FROM uploaded_source_pdfs WHERE source_checksum = $1",
+            source_checksum,
+        )
+    return dict(row) if row else None
+
+
+async def uploaded_pdf_delete(pool, *, source_checksum: str) -> None:
+    """Remove a stored uploaded PDF from the DB."""
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "DELETE FROM uploaded_source_pdfs WHERE source_checksum = $1",
+            source_checksum,
+        )
 
 
 async def db_insert(pool, output_dir: Path, pdf: GeneratedPDF, user_id: str) -> None:
@@ -452,7 +515,8 @@ async def db_list_all(pool, output_dir: Path, user_id: str | None = None) -> lis
         else:
             rows = await conn.fetch(f"SELECT * FROM {TABLE} ORDER BY created_at DESC")
     records = [_row_to_record(dict(r), output_dir) for r in rows]
-    return [r for r in records if r.path.is_file()]
+    # Always show uploaded source PDFs (bytes live in DB); only hide generated PDFs whose disk file is gone.
+    return [r for r in records if r.path.is_file() or r.path.name.startswith("uploaded_")]
 
 
 async def db_get_by_filename(pool, output_dir: Path, filename: str, user_id: str | None = None) -> GeneratedPDF | None:
