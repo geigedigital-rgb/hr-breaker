@@ -8,13 +8,19 @@ export type AdminEmailTemplateDemo = {
   html: string;
 };
 
+/** Production app host where /public email assets are served (Resend must load images over HTTPS). */
+const DEFAULT_EMAIL_ASSET_ORIGIN_PROD = "https://my.pitchcv.app";
+
 /**
- * Public origin for static email assets (logo, hero). Prefer build-time VITE_EMAIL_ASSET_ORIGIN
- * (e.g. https://my.pitchcv.app) so preview matches production; else current browser origin.
+ * Public origin for static email assets (logo, hero).
+ * 1) VITE_EMAIL_ASSET_ORIGIN — явно при build.
+ * 2) Vite dev server (localhost) — по умолчанию прод-оригин, чтобы превью и «Copy URL» не вели на :5173.
+ * 3) Иначе — текущий origin (прод-админка на том же хосте, что и SPA).
  */
 export function getEmailAssetOrigin(): string {
   const fromEnv = (import.meta.env.VITE_EMAIL_ASSET_ORIGIN as string | undefined)?.trim().replace(/\/$/, "");
   if (fromEnv) return fromEnv;
+  if (import.meta.env.DEV) return DEFAULT_EMAIL_ASSET_ORIGIN_PROD;
   if (typeof window !== "undefined") return window.location.origin;
   return "";
 }

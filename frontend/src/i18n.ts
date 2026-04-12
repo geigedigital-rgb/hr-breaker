@@ -536,7 +536,7 @@ const en = {
         copyError: "Could not copy",
         assetUrlsTitle: "Public image URLs (this host)",
         assetUrlsHint:
-          "Files live under frontend/public. Production image URLs should use your real app origin (e.g. https://my.pitchcv.app). Set EMAIL_PUBLIC_BASE_URL on the API and VITE_EMAIL_ASSET_ORIGIN at frontend build for previews — see docs/EMAIL_RESEND.md.",
+          "Files live under frontend/public. In local dev, asset URLs default to https://my.pitchcv.app so images load in preview and match Resend. Override with VITE_EMAIL_ASSET_ORIGIN; API sends use EMAIL_PUBLIC_BASE_URL — see docs/EMAIL_RESEND.md.",
         copyLogoUrl: "Copy logo URL",
         copyHeroUrl: "Copy hero URL",
         assetUrlCopied: "URL copied",
