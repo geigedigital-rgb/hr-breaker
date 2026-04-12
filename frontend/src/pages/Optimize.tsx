@@ -160,12 +160,8 @@ function LoaderFactCard({ fact }: { fact: string }) {
   const body = stripFactPrefix(fact);
   if (!body) return null;
   return (
-    <div className="w-full max-w-md rounded-2xl border border-[#D9E5FF] bg-[linear-gradient(180deg,rgba(255,255,255,0.96)_0%,rgba(245,248,255,0.98)_100%)] p-4 shadow-[0_14px_40px_rgba(69,120,252,0.10)]">
-      <div className="inline-flex items-center gap-2 rounded-full border border-[#D9E5FF] bg-white/90 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#4578FC]">
-        <SparklesIcon className="h-3.5 w-3.5" />
-        <span>{t("optimize.quickFactLabel")}</span>
-      </div>
-      <p className="mt-3 text-sm leading-6 text-[#181819] text-center">
+    <div className="mt-8 max-w-sm animate-pulse text-center">
+      <p className="text-[14px] font-medium leading-relaxed text-[#8b8d99]">
         {body}
       </p>
     </div>
@@ -173,14 +169,12 @@ function LoaderFactCard({ fact }: { fact: string }) {
 }
 
 function OptimizeLoaderCard({
-  eyebrow,
   title,
   subtitle,
   progress,
   progressAriaLabel,
   fact,
 }: {
-  eyebrow: string;
   title: string;
   subtitle: string;
   progress?: number;
@@ -189,42 +183,32 @@ function OptimizeLoaderCard({
 }) {
   const safeProgress = progress == null ? undefined : Math.max(0, Math.min(100, Math.round(progress)));
   return (
-    <div className="rounded-[28px] border border-white/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.98)_0%,rgba(247,250,255,0.98)_100%)] p-6 sm:p-8 shadow-[0_24px_70px_rgba(69,120,252,0.10)]">
-      <div className="mx-auto flex max-w-md flex-col items-center gap-4 text-center">
-        <div className="inline-flex items-center gap-2 rounded-full border border-[#D9E5FF] bg-[#EEF4FF] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#4578FC]">
-          <span className="relative flex h-2.5 w-2.5">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#4578FC]/45" />
-            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[#4578FC]" />
-          </span>
-          <span>{eyebrow}</span>
+    <div className="flex w-full flex-col items-center justify-center py-16 px-4">
+      <div className="mx-auto flex max-w-md flex-col items-center text-center">
+        <div className="relative mb-8 flex h-12 w-12 items-center justify-center">
+          <div className="absolute inset-0 animate-ping rounded-full bg-[#4578FC]/15" />
+          <div className="absolute inset-1 animate-pulse rounded-full bg-[#4578FC]/20" />
+          <SparklesIcon className="relative h-6 w-6 text-[#4578FC]" />
         </div>
 
-        <div className="relative flex h-16 w-16 items-center justify-center rounded-[20px] bg-[linear-gradient(135deg,#4578FC_0%,#6D5EF8_55%,#8B5CF6_100%)] shadow-[0_18px_40px_rgba(69,120,252,0.24)]">
-          <div className="absolute inset-[1px] rounded-[19px] bg-[linear-gradient(180deg,rgba(255,255,255,0.22)_0%,rgba(255,255,255,0.06)_100%)]" />
-          <ArrowPathIcon className="relative h-8 w-8 animate-spin text-white" />
-        </div>
-
-        <div className="space-y-2">
-          <p className="text-lg font-semibold tracking-[-0.01em] text-[#181819]">{title}</p>
-          <p className="mx-auto max-w-sm text-sm leading-6 text-[var(--text-muted)]">{subtitle}</p>
+        <div className="mb-6 space-y-2">
+          <p className="text-[20px] font-medium tracking-tight text-[#181819]">{title}</p>
+          <p className="mx-auto max-w-sm text-[15px] text-[var(--text-muted)]">{subtitle}</p>
         </div>
 
         {safeProgress != null ? (
-          <div className="w-full max-w-xs space-y-2">
-            <div className="h-2.5 overflow-hidden rounded-full bg-[#E8EDF9]">
+          <div className="w-full max-w-[240px] space-y-3">
+            <div className="h-1 w-full overflow-hidden rounded-full bg-[#EBEDF5]">
               <div
-                className="relative h-full rounded-full bg-[linear-gradient(90deg,#4578FC_0%,#6D5EF8_55%,#8B5CF6_100%)] transition-all duration-300 ease-out"
+                className="h-full rounded-full bg-[#4578FC] transition-all duration-300 ease-out"
                 style={{ width: `${safeProgress}%` }}
                 role="progressbar"
                 aria-valuenow={safeProgress}
                 aria-valuemin={0}
                 aria-valuemax={100}
                 aria-label={progressAriaLabel}
-              >
-                <div className="absolute inset-y-0 right-0 w-10 bg-[linear-gradient(90deg,rgba(255,255,255,0)_0%,rgba(255,255,255,0.42)_55%,rgba(255,255,255,0)_100%)]" />
-              </div>
+              />
             </div>
-            <p className="text-sm font-semibold tabular-nums text-[#181819]">{safeProgress}%</p>
           </div>
         ) : null}
 
@@ -3325,11 +3309,6 @@ export default function Optimize() {
           <>
             {(stage === "scanning" || (stage === "assessment" && preScores == null)) && (
               <OptimizeLoaderCard
-                eyebrow={
-                  awaitingLandingClaim
-                    ? t("optimize.loadingStatusPreparing")
-                    : t("optimize.loadingStatusAnalyze")
-                }
                 title={
                   awaitingLandingClaim
                     ? t("optimize.preparingLandingCheck")
@@ -3352,7 +3331,6 @@ export default function Optimize() {
 
             {stage === "loading" && (
               <OptimizeLoaderCard
-                eyebrow={t("optimize.loadingStatusImprove")}
                 title={t("optimize.improvingResume")}
                 subtitle={`${t("optimize.doNotClosePage")} ${t("optimize.doNotClosePageHint")}`}
                 progress={visibleLoadProgress}
