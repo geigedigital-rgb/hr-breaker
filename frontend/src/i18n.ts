@@ -591,8 +591,9 @@ const en = {
       },
       send: {
         title: "Automation & send",
-        subtitle:
-          "Catalog of automated and manual email flows, per-user funnel inspection, then templates, queue, and segment tools. Cron: POST /api/admin/email/queue/process (paused automations skip processing).",
+        subtitle: "Win-back after optimize, quick send, queue, and segment tools. Advanced: full automation list and per-user inspection.",
+        tabMain: "Main",
+        tabTools: "Advanced",
         resendOk: "Resend is configured (API key + From).",
         resendMissing: "Set RESEND_API_KEY and RESEND_FROM on the server to send real email.",
         deliveryDocHint: "Full setup (Resend templates vs inline HTML, variables, cron): see docs/EMAIL_RESEND.md in the repo.",
