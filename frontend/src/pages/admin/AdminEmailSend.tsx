@@ -3,18 +3,29 @@ import {
   ADMIN_EMAIL_SEGMENT_OPTIMIZED_UNPAID,
   getAdminResendTemplates,
   getAdminEmailControl,
+  getAdminEmailCtaInfo,
   patchAdminEmailControl,
   postAdminEmailSendOne,
   postAdminEmailQueueProcess,
   postAdminEmailSegmentPreview,
   postAdminEmailSegmentSend,
   type AdminEmailControl,
+  type AdminEmailCtaInfo,
   type AdminResendTemplate,
   type AdminEmailSendOneResult,
   type AdminEmailSegmentPreview,
   type AdminEmailSegmentSendResult,
 } from "../../api";
 import { t } from "../../i18n";
+
+function formatCtaExpires(iso: string | null): string {
+  if (!iso) return "—";
+  try {
+    return new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+  } catch {
+    return iso;
+  }
+}
 
 export default function AdminEmailSend() {
   const [control, setControl] = useState<AdminEmailControl | null>(null);
@@ -43,6 +54,9 @@ export default function AdminEmailSend() {
   const [singleEmail, setSingleEmail] = useState("");
   const [singleTemplateId, setSingleTemplateId] = useState("");
   const [singleResult, setSingleResult] = useState<AdminEmailSendOneResult | null>(null);
+  const [ctaInfo, setCtaInfo] = useState<AdminEmailCtaInfo | null>(null);
+  const [ctaLoading, setCtaLoading] = useState(false);
+  const [ctaErr, setCtaErr] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
     setLoadErr(null);
@@ -73,6 +87,35 @@ export default function AdminEmailSend() {
   useEffect(() => {
     void reload();
   }, [reload]);
+
+  useEffect(() => {
+    const em = singleEmail.trim();
+    if (!em.includes("@")) {
+      setCtaInfo(null);
+      setCtaErr(null);
+      setCtaLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setCtaLoading(true);
+    setCtaErr(null);
+    const timer = window.setTimeout(() => {
+      void getAdminEmailCtaInfo(em)
+        .then((d) => {
+          if (!cancelled) setCtaInfo(d);
+        })
+        .catch((e) => {
+          if (!cancelled) setCtaErr(e instanceof Error ? e.message : String(e));
+        })
+        .finally(() => {
+          if (!cancelled) setCtaLoading(false);
+        });
+    }, 450);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [singleEmail]);
 
   const onSave = async () => {
     setSaving(true);
@@ -259,6 +302,34 @@ export default function AdminEmailSend() {
             </select>
           </div>
         </div>
+        {singleEmail.trim().includes("@") ? (
+          <div
+            className="mt-3 rounded-lg border border-[#EBEDF5] bg-[#F9FAFB] px-3 py-2.5 text-xs leading-relaxed text-[var(--text)]"
+            role="status"
+            aria-live="polite"
+          >
+            {ctaLoading ? (
+              <span className="text-[var(--text-muted)]">{t("admin.email.send.singleCtaLoading")}</span>
+            ) : null}
+            {ctaErr ? <span className="text-red-700">{ctaErr}</span> : null}
+            {!ctaLoading && !ctaErr && ctaInfo ? (
+              !ctaInfo.user_found ? (
+                <span className="text-amber-800">{t("admin.email.send.singleCtaUserMissing")}</span>
+              ) : ctaInfo.has_valid_snapshot ? (
+                <span className="text-emerald-800">
+                  {t("admin.email.send.singleCtaSnapshotOk").replace(
+                    "{expires}",
+                    formatCtaExpires(ctaInfo.snapshot_expires_at)
+                  )}
+                </span>
+              ) : ctaInfo.has_saved_pdf ? (
+                <span className="text-amber-900">{t("admin.email.send.singleCtaPdfFallback")}</span>
+              ) : (
+                <span className="text-amber-900">{t("admin.email.send.singleCtaHomeOnly")}</span>
+              )
+            ) : null}
+          </div>
+        ) : null}
         {templatesErr ? <p className="mt-2 text-xs text-red-700">{templatesErr}</p> : null}
         <button
           type="button"

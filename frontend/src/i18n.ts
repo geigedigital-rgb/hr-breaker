@@ -604,6 +604,14 @@ const en = {
         singleTemplatePlaceholder: "Select published template from Resend…",
         singleSend: "Send one email",
         singleConfirm: "Send email now to {email}?",
+        singleCtaLoading: "Checking snapshot / saved PDF for this address…",
+        singleCtaUserMissing: "No account with this email — Quick send will fail until the user registers.",
+        singleCtaSnapshotOk:
+          "Active optimization snapshot (expires {expires}). The download link will open the full in-app result with a token.",
+        singleCtaPdfFallback:
+          "No active snapshot. A saved PDF exists — the download link will use a one-time open-resume URL (if your Resend template binds DOWNLOAD_URL).",
+        singleCtaHomeOnly:
+          "No active snapshot and no saved PDF in history — the download link will be the app home only. Run Optimize (or wait for a snapshot) to get a deep link.",
         singleOk: "Email sent to {email}",
         singleErr: "Send failed: {error}",
         autoTitle: "Automatic win-back after optimize",

@@ -514,3 +514,38 @@ async def send_resend_template_to_email(
         reply_to=extras.get("reply_to"),
         headers=extras.get("headers"),
     )
+
+
+async def admin_email_cta_digest_for_email(
+    pool,
+    settings: Settings,
+    *,
+    email: str,
+) -> dict[str, Any]:
+    """Admin Quick send: whether user has a valid optimize snapshot and/or saved PDF for DOWNLOAD_URL."""
+    em = (email or "").strip()
+    out: dict[str, Any] = {
+        "email": em,
+        "user_found": False,
+        "has_valid_snapshot": False,
+        "snapshot_expires_at": None,
+        "has_saved_pdf": False,
+    }
+    if not em or "@" not in em:
+        return out
+    u = await user_get_by_email(pool, em)
+    if not u:
+        return out
+    uid = str(u["id"])
+    out["user_found"] = True
+    row = await optimization_snapshot_get_latest_valid(pool, uid)
+    if row:
+        out["has_valid_snapshot"] = True
+        exp = row.get("expires_at")
+        if isinstance(exp, datetime):
+            if exp.tzinfo is None:
+                exp = exp.replace(tzinfo=timezone.utc)
+            out["snapshot_expires_at"] = exp.isoformat()
+    pdf = await latest_resume_open_url_for_user(pool, settings, uid)
+    out["has_saved_pdf"] = bool((pdf or "").strip())
+    return out

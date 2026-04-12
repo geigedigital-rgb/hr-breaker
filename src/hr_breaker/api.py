@@ -1212,6 +1212,15 @@ class AdminEmailSendOneOut(BaseModel):
     error: str | None = None
 
 
+class AdminEmailCtaInfoOut(BaseModel):
+    """What DOWNLOAD_URL (etc.) will resolve to for win-back / Quick send."""
+    email: str
+    user_found: bool
+    has_valid_snapshot: bool
+    snapshot_expires_at: str | None = None
+    has_saved_pdf: bool = False
+
+
 class AdminActivityItem(BaseModel):
     filename: str
     company: str
@@ -3910,6 +3919,22 @@ async def api_admin_email_send_one(
         email=em,
         resend_template_id=(body.resend_template_id or "").strip(),
     )
+
+
+@router.get("/admin/email/cta-info", response_model=AdminEmailCtaInfoOut)
+async def api_admin_email_cta_info(
+    email: str = Query(..., min_length=3, max_length=254),
+    _admin: dict = Depends(get_admin_user),
+) -> AdminEmailCtaInfoOut:
+    """Preview for Quick send: valid optimization snapshot and/or saved PDF for CTA link."""
+    pool = await get_pool()
+    if pool is None:
+        raise HTTPException(503, "Database not configured")
+    from hr_breaker.services.email_winback import admin_email_cta_digest_for_email
+
+    settings = get_settings()
+    d = await admin_email_cta_digest_for_email(pool, settings, email=email.strip())
+    return AdminEmailCtaInfoOut(**d)
 
 
 @router.post("/admin/email/segment/preview", response_model=AdminEmailSegmentPreviewOut)

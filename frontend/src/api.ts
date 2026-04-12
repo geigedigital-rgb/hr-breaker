@@ -1276,6 +1276,22 @@ export async function postAdminEmailSendOne(body: {
   return data;
 }
 
+export type AdminEmailCtaInfo = {
+  email: string;
+  user_found: boolean;
+  has_valid_snapshot: boolean;
+  snapshot_expires_at: string | null;
+  has_saved_pdf: boolean;
+};
+
+export async function getAdminEmailCtaInfo(email: string): Promise<AdminEmailCtaInfo> {
+  const q = encodeURIComponent(email.trim());
+  const r = await fetch(`${API}/admin/email/cta-info?email=${q}`, { headers: authHeaders() });
+  const data = await parseJsonOrThrow<AdminEmailCtaInfo & { detail?: string }>(r);
+  if (!r.ok) throw new Error((data as { detail?: string }).detail || r.statusText);
+  return data;
+}
+
 export type AdminEmailSegmentPreview = {
   segment_id: string;
   days: number;
