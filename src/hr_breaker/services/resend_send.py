@@ -68,8 +68,10 @@ async def resend_send_template(
     - Reserved variable names Resend blocks: FIRST_NAME, LAST_NAME, EMAIL, UNSUBSCRIBE_URL.
     """
     tid = template_id.strip()
+    # Resend reserves these EXACT uppercase names (case-sensitive per their docs).
+    # Lowercase aliases like unsubscribe_url / optimize_entry_url are fine as custom variables.
     _RESERVED = {"FIRST_NAME", "LAST_NAME", "EMAIL", "UNSUBSCRIBE_URL"}
-    safe_vars = {k: v for k, v in variables.items() if k and k.upper() not in _RESERVED}
+    safe_vars = {k: v for k, v in variables.items() if k and k not in _RESERVED}
 
     payload: dict[str, Any] = {
         "from": from_addr,
