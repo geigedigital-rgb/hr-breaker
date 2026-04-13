@@ -12,13 +12,11 @@ import {
   postAdminEmailQueueProcess,
   getAdminEmailStaggerPreview,
   postAdminEmailStaggerSnapshot,
-  postAdminEmailStaggerProcess,
   type AdminEmailAutomationItem,
   type AdminEmailAutomationsList,
   type AdminEmailControl,
   type AdminEmailCtaInfo,
   type AdminEmailStaggerPreview,
-  type AdminEmailStaggerProcess,
   type AdminResendTemplate,
   type AdminEmailSendOneResult,
   type AdminUserJourney,
@@ -125,7 +123,6 @@ export default function AdminEmailSend() {
   const [staggerPreview, setStaggerPreview] = useState<AdminEmailStaggerPreview | null>(null);
   const [staggerErr, setStaggerErr] = useState<string | null>(null);
   const [staggerBusy, setStaggerBusy] = useState<string | null>(null);
-  const [staggerProcessResult, setStaggerProcessResult] = useState<AdminEmailStaggerProcess | null>(null);
   const [staggerInfo, setStaggerInfo] = useState<string | null>(null);
   const [staggerLastSnapshot, setStaggerLastSnapshot] = useState<{
     first_run_at: string | null;
@@ -181,6 +178,13 @@ export default function AdminEmailSend() {
   useEffect(() => {
     void reload();
   }, [reload]);
+
+  useEffect(() => {
+    if (selectedAutomationId === "analyze_optimize_stagger_campaign" && !staggerPreview && staggerBusy == null) {
+      void onStaggerPreview();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedAutomationId]);
 
   useEffect(() => {
     const em = singleEmail.trim();
@@ -326,7 +330,7 @@ export default function AdminEmailSend() {
     setStaggerErr(null);
     setStaggerInfo(null);
     try {
-      const p = await getAdminEmailStaggerPreview({ maxIds: 200 });
+      const p = await getAdminEmailStaggerPreview({ maxIds: 0 });
       setStaggerPreview(p);
     } catch (e) {
       setStaggerErr(e instanceof Error ? e.message : String(e));
@@ -341,14 +345,15 @@ export default function AdminEmailSend() {
       setStaggerErr(t("admin.email.send.staggerTemplateMissing"));
       return;
     }
-    if (!window.confirm(t("admin.email.send.staggerSnapshotConfirm"))) return;
+    const n = staggerPreview?.eligible_count ?? 0;
+    const confirmMsg = t("admin.email.send.staggerLaunchConfirm").replace("{n}", String(n));
+    if (!window.confirm(confirmMsg)) return;
     setStaggerBusy("snapshot");
     setStaggerErr(null);
     setStaggerInfo(null);
     try {
       const out = await postAdminEmailStaggerSnapshot({ template_id: tid });
       setStaggerPreview(null);
-      setStaggerProcessResult(null);
       setStaggerLastSnapshot(
         out.enqueued > 0
           ? {
@@ -371,19 +376,6 @@ export default function AdminEmailSend() {
     }
   };
 
-  const onStaggerProcess = async () => {
-    setStaggerBusy("process");
-    setStaggerErr(null);
-    try {
-      const out = await postAdminEmailStaggerProcess();
-      setStaggerProcessResult(out);
-      void reload();
-    } catch (e) {
-      setStaggerErr(e instanceof Error ? e.message : String(e));
-    } finally {
-      setStaggerBusy(null);
-    }
-  };
 
   if (loadErr && !control) {
     return (
@@ -617,212 +609,119 @@ export default function AdminEmailSend() {
               <div className="space-y-5">
                 <div>
                   <h4 className="text-base font-semibold text-[var(--text)]">{t("admin.email.send.staggerTitle")}</h4>
-                  <p className="mt-1 text-xs leading-relaxed text-[var(--text-muted)]">{t("admin.email.send.staggerHint")}</p>
-                  <p className="mt-2 rounded-lg border border-black/[0.06] bg-white/80 px-3 py-2 text-[11px] leading-relaxed text-[var(--text-muted)]">
-                    {t("admin.email.send.staggerMentalModel")}
-                  </p>
-                  <p className="mt-2 text-[11px] leading-relaxed text-[var(--text-tertiary)]">{t("admin.email.send.staggerDedupeNote")}</p>
                 </div>
-                <div className="space-y-2 text-xs text-[var(--text-muted)]">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${staggerFlow ? automationBadgeClass(staggerFlow) : ui.badge("neutral")}`}>
+
+                {/* Eligible count */}
+                <div className="flex items-center gap-3">
+                  {staggerBusy === "preview" ? (
+                    <span className="text-sm text-[var(--text-muted)]">…</span>
+                  ) : staggerPreview ? (
+                    <span className="text-sm font-medium text-[var(--text)]">
+                      {t("admin.email.send.staggerEligibleCount").replace("{n}", String(staggerPreview.eligible_count))}
+                    </span>
+                  ) : null}
+                  <button
+                    type="button"
+                    disabled={staggerBusy != null}
+                    onClick={() => void onStaggerPreview()}
+                    className={ui.btnGhost}
+                  >
+                    ↻
+                  </button>
+                </div>
+
+                {/* Queue status */}
+                {(staggerFlow?.pending_queue_count ?? 0) > 0 ? (
+                  <div className="flex flex-wrap items-center gap-2 text-sm">
+                    <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ${staggerFlow ? automationBadgeClass(staggerFlow) : ui.badge("neutral")}`}>
                       {staggerFlow ? automationStatusLabel(staggerFlow) : "—"}
                     </span>
-                    <span>
-                      {t("admin.email.send.staggerQueuePendingLine")
-                        .replace("{total}", String(staggerFlow?.pending_queue_count ?? "—"))
-                        .replace(
-                          "{due}",
-                          typeof staggerFlow?.pending_due_count === "number"
-                            ? String(staggerFlow.pending_due_count)
-                            : "—",
-                        )}
+                    <span className="text-[var(--text-muted)]">
+                      {staggerFlow?.pending_queue_count ?? 0} pending
+                      {typeof staggerFlow?.pending_due_count === "number"
+                        ? ` · ${staggerFlow.pending_due_count} ${t("admin.email.send.staggerDueShort")}`
+                        : null}
                     </span>
+                    {staggerLastSnapshot?.first_run_at ? (
+                      <span className="text-xs text-[var(--text-tertiary)]">
+                        · {t("admin.email.send.staggerFirstSend").replace("{at}", formatCtaExpires(staggerLastSnapshot.first_run_at))}
+                        {staggerLastSnapshot.last_run_at ? (
+                          <> · {t("admin.email.send.staggerLastSend").replace("{at}", formatCtaExpires(staggerLastSnapshot.last_run_at))}</>
+                        ) : null}
+                      </span>
+                    ) : null}
                   </div>
-                  {staggerFlow?.paused ? (
-                    <p className="rounded-lg border border-amber-200/80 bg-amber-50/90 px-3 py-2 text-[11px] text-amber-950">
-                      {t("admin.email.send.staggerQueuePausedNoSends")}
-                    </p>
-                  ) : null}
-                  {!staggerFlow?.paused &&
-                  typeof staggerFlow?.pending_due_count === "number" &&
-                  (staggerFlow.pending_queue_count ?? 0) > 0 &&
-                  staggerFlow.pending_due_count === 0 ? (
-                    <p className="rounded-lg border border-black/[0.06] bg-black/[0.02] px-3 py-2 text-[11px] leading-relaxed text-[var(--text-muted)]">
-                      {t("admin.email.send.staggerQueueNoDueExplain").replace("{total}", String(staggerFlow.pending_queue_count))}
-                    </p>
-                  ) : null}
-                </div>
-                {staggerErr ? (
-                  <p className="text-xs text-red-700" role="alert">
-                    {staggerErr}
+                ) : null}
+
+                {staggerFlow?.paused ? (
+                  <p className="rounded-lg border border-amber-200/80 bg-amber-50/90 px-3 py-2 text-xs text-amber-950">
+                    {t("admin.email.send.staggerPausedBanner")}
                   </p>
                 ) : null}
 
-                <div className="space-y-3 rounded-xl border border-black/[0.06] bg-black/[0.02] p-4">
-                  <div>
-                    <p className="text-xs font-semibold text-[var(--text)]">{t("admin.email.send.staggerStepPreview")}</p>
-                    <p className="mt-1 text-[11px] leading-relaxed text-[var(--text-muted)]">{t("admin.email.send.staggerStepPreviewBody")}</p>
-                    <button
-                      type="button"
-                      disabled={staggerBusy != null}
-                      onClick={() => void onStaggerPreview()}
-                      className={`${ui.btnSecondary} mt-2`}
-                    >
-                      {staggerBusy === "preview" ? "…" : t("admin.email.send.staggerPreview")}
-                    </button>
-                  </div>
-                  {staggerPreview ? (
-                    <div className="space-y-2 border-t border-black/[0.06] pt-3">
-                      <p className="text-xs text-[var(--text-muted)]">
-                        {t("admin.email.send.staggerPreviewSummary")
-                          .replace("{n}", String(staggerPreview.eligible_count))
-                          .replace("{p}", String(staggerPreview.pending_count))
-                          .replace("{a}", String(staggerPreview.has_active_queue_for_kind))}
-                      </p>
-                      {staggerPreview.sample_user_ids.length > 0 ? (
-                        <>
-                          <p className="text-[11px] font-medium text-[var(--text-tertiary)]">
-                            {t("admin.email.send.staggerPreviewSampleTitle")
-                              .replace("{shown}", String(staggerPreview.sample_user_ids.length))
-                              .replace("{total}", String(staggerPreview.eligible_count))}
-                          </p>
-                          <pre className="max-h-40 overflow-auto rounded-lg border border-black/[0.06] bg-white p-2 font-mono text-[10px] leading-relaxed text-[var(--text)]">
-                            {staggerPreview.sample_user_ids.join("\n")}
-                          </pre>
-                          {staggerPreview.eligible_count > staggerPreview.sample_user_ids.length ? (
-                            <p className="text-[11px] text-[var(--text-muted)]">
-                              {t("admin.email.send.staggerPreviewSampleMore").replace(
-                                "{more}",
-                                String(staggerPreview.eligible_count - staggerPreview.sample_user_ids.length),
-                              )}
-                            </p>
-                          ) : null}
-                        </>
-                      ) : null}
-                    </div>
-                  ) : null}
-                </div>
+                {staggerErr ? (
+                  <p className="text-xs text-red-700" role="alert">{staggerErr}</p>
+                ) : null}
 
-                <div className="space-y-3 rounded-xl border border-black/[0.06] bg-black/[0.02] p-4">
-                  <div>
-                    <p className="text-xs font-semibold text-[var(--text)]">{t("admin.email.send.staggerStepTemplate")}</p>
-                    <p className="mt-1 text-[11px] leading-relaxed text-[var(--text-muted)]">{t("admin.email.send.staggerStepTemplateBody")}</p>
-                  </div>
+                {/* Template + Launch */}
+                <div className="space-y-3">
                   <div>
                     <label className={ui.label}>{t("admin.email.send.staggerTemplateLabel")}</label>
                     <input
                       type="text"
                       value={staggerTmpl}
                       onChange={(e) => setStaggerTmpl(e.target.value)}
-                      placeholder="ahead-of-candidates or Resend template id"
+                      placeholder="Resend template id"
                       autoComplete="off"
                       spellCheck={false}
                       className={`${ui.input} font-mono text-xs`}
                     />
                   </div>
+                  <button
+                    type="button"
+                    disabled={
+                      staggerBusy != null ||
+                      !staggerTmpl.trim() ||
+                      !!(staggerPreview?.has_active_queue_for_kind) ||
+                      (staggerFlow?.pending_queue_count ?? 0) > 0
+                    }
+                    onClick={() => void onStaggerSnapshot()}
+                    className={ui.btnPrimary}
+                  >
+                    {staggerBusy === "snapshot" ? "…" : t("admin.email.send.staggerLaunchBtn")}
+                  </button>
                 </div>
 
-                <div className="space-y-3 rounded-xl border border-black/[0.06] bg-black/[0.02] p-4">
-                  <div>
-                    <p className="text-xs font-semibold text-[var(--text)]">{t("admin.email.send.staggerStepSnapshot")}</p>
-                    <p className="mt-1 text-[11px] leading-relaxed text-[var(--text-muted)]">{t("admin.email.send.staggerStepSnapshotBody")}</p>
-                    <button
-                      type="button"
-                      disabled={
-                        staggerBusy != null ||
-                        !!(staggerPreview?.has_active_queue_for_kind) ||
-                        (staggerFlow?.pending_queue_count ?? 0) > 0
-                      }
-                      onClick={() => void onStaggerSnapshot()}
-                      className={`${ui.btnPrimary} mt-2`}
-                    >
-                      {staggerBusy === "snapshot" ? "…" : t("admin.email.send.staggerSnapshot")}
-                    </button>
-                  </div>
-                  {staggerInfo ? <p className="text-xs font-medium text-emerald-800">{staggerInfo}</p> : null}
-                  {staggerLastSnapshot?.first_run_at ? (
-                    <p className="text-[11px] leading-relaxed text-[var(--text-muted)]">
-                      {t("admin.email.send.staggerFirstSendScheduled").replace("{at}", formatCtaExpires(staggerLastSnapshot.first_run_at))}
-                      {staggerLastSnapshot.last_run_at ? (
-                        <>
-                          {" "}
-                          ·{" "}
-                          {t("admin.email.send.staggerLastSendScheduled").replace(
-                            "{at}",
-                            formatCtaExpires(staggerLastSnapshot.last_run_at),
-                          )}
-                        </>
-                      ) : null}
-                    </p>
-                  ) : null}
-                </div>
+                {staggerInfo ? (
+                  <p className="text-xs font-medium text-emerald-800">{staggerInfo}</p>
+                ) : null}
 
-                <div className="space-y-3 rounded-xl border border-black/[0.06] bg-black/[0.02] p-4">
-                  <div>
-                    <p className="text-xs font-semibold text-[var(--text)]">{t("admin.email.send.staggerStepSend")}</p>
-                    <p className="mt-1 text-[11px] leading-relaxed text-[var(--text-muted)]">{t("admin.email.send.staggerStepSendBody")}</p>
-                    {staggerFlow?.paused ? (
-                      <p className="mt-2 text-[11px] text-amber-900">{t("admin.email.send.staggerSendDisabledPaused")}</p>
-                    ) : null}
-                    <button
-                      type="button"
-                      disabled={staggerBusy != null || !!staggerFlow?.paused}
-                      onClick={() => void onStaggerProcess()}
-                      className={`${ui.btnSecondary} mt-2`}
-                    >
-                      {staggerBusy === "process" ? "…" : t("admin.email.send.staggerProcess")}
-                    </button>
-                  </div>
-                  {staggerProcessResult ? (
-                    <div className="space-y-2 border-t border-black/[0.06] pt-3">
-                      {staggerProcessResult.paused ? (
-                        <p className="rounded-lg border border-amber-200/80 bg-amber-50/90 px-3 py-2 text-xs font-medium text-amber-950">
-                          {t("admin.email.send.staggerProcessPausedBanner")}
-                        </p>
-                      ) : null}
-                      {!staggerProcessResult.paused &&
-                      staggerProcessResult.processed === false &&
-                      staggerProcessResult.message === "no due rows" ? (
-                        <p className="rounded-lg border border-sky-200/80 bg-sky-50/90 px-3 py-2 text-xs leading-relaxed text-sky-950">
-                          {t("admin.email.send.staggerProcessNoDueBanner")}
-                        </p>
-                      ) : null}
-                      <pre className="max-h-28 overflow-auto rounded-lg border border-black/[0.06] bg-white p-2 text-[10px] text-[var(--text)]">
-                        {JSON.stringify(staggerProcessResult, null, 2)}
-                      </pre>
-                    </div>
-                  ) : null}
-                </div>
-
-                <div className="rounded-xl border border-black/[0.06] bg-black/[0.02] p-4">
-                  <p className="text-[11px] leading-relaxed text-[var(--text-muted)]">{t("admin.email.send.staggerPauseResumeHint")}</p>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      disabled={autoFlowBusy != null || !!staggerFlow?.paused}
-                      onClick={() => void onAutomationPatch("analyze_optimize_stagger_campaign", { paused: true })}
-                      className={ui.btnGhost}
-                    >
-                      {t("admin.email.send.btnPause")}
-                    </button>
-                    <button
-                      type="button"
-                      disabled={autoFlowBusy != null || !staggerFlow?.paused}
-                      onClick={() => void onAutomationPatch("analyze_optimize_stagger_campaign", { paused: false })}
-                      className={ui.btnGhost}
-                    >
-                      {t("admin.email.send.btnResume")}
-                    </button>
-                    <button
-                      type="button"
-                      disabled={autoFlowBusy != null}
-                      onClick={() => void onClearPendingQueue("analyze_optimize_stagger_campaign")}
-                      className={ui.btnDanger}
-                    >
-                      {t("admin.email.send.staggerBtnClearQueue")}
-                    </button>
-                  </div>
+                {/* Secondary controls */}
+                <div className="flex flex-wrap items-center gap-2 border-t border-black/[0.06] pt-4">
+                  <button
+                    type="button"
+                    disabled={autoFlowBusy != null || !!staggerFlow?.paused}
+                    onClick={() => void onAutomationPatch("analyze_optimize_stagger_campaign", { paused: true })}
+                    className={ui.btnGhost}
+                  >
+                    {t("admin.email.send.btnPause")}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={autoFlowBusy != null || !staggerFlow?.paused}
+                    onClick={() => void onAutomationPatch("analyze_optimize_stagger_campaign", { paused: false })}
+                    className={ui.btnGhost}
+                  >
+                    {t("admin.email.send.btnResume")}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={autoFlowBusy != null}
+                    onClick={() => void onClearPendingQueue("analyze_optimize_stagger_campaign")}
+                    className={ui.btnDanger}
+                  >
+                    {t("admin.email.send.staggerBtnClearQueue")}
+                  </button>
                 </div>
               </div>
             ) : (

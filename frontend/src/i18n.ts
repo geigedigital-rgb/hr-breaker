@@ -594,16 +594,11 @@ const en = {
         automationPanelHeading: "Email automations",
         automationPanelHint: "Select a flow to show its actions and settings.",
         automationsTablePending: "Queue",
-        staggerQueuePendingLine:
-          "Scheduled in queue: {total} · Ready to send now (run_at ≤ now): {due}",
-        staggerQueueNoDueExplain:
-          "All {total} rows are still waiting for their send time. Nothing goes out until each row’s run_at is in the past and something calls the stagger process endpoint (cron or the button below). This is expected right after Enroll.",
-        staggerQueuePausedNoSends: "Stagger is Paused — resume it so due rows can be processed.",
         staggerDueShort: "due now",
-        staggerBtnClearQueue: "Clear stagger queue (reset)",
+        staggerBtnClearQueue: "Clear queue",
         staggerClearQueueConfirm:
-          "Remove all pending and in-flight (processing) stagger rows for this campaign? You can run Enroll again afterward. Users who already received an email stay deduped (sent_log is not cleared).",
-        staggerClearQueueConfirmFinal: "Final confirm: delete stagger queue rows?",
+          "Remove all pending rows from the stagger queue? Users who already received an email remain excluded from future campaigns. You can launch again afterward.",
+        staggerClearQueueConfirmFinal: "Confirm: delete all pending stagger rows?",
         automationDetailPlaceholder:
           "This flow is listed for visibility only. Controls will appear here when it is wired on the backend.",
         mainFlowsTitle: "Active automation",
@@ -647,52 +642,22 @@ const en = {
         loadErr: "Could not load email control",
         queueTitle: "Scheduled queue",
         queueHint:
-          "Shows how many win-back sends are waiting for their send time. If “Post-optimize win-back” is Paused in Automations, processing returns without sending. “Process queue” sends up to the limit of due rows (checks again that the user is still unpaid).",
+          "Shows win-back pending count. “Process due queues” runs the same job as cron: up to 25 due win-back rows (if auto is on and not paused) and up to 25 due stagger rows (if stagger is not paused). One URL for both — like win-back before, plus stagger.",
         pendingLabel: "Pending in queue",
-        processQueue: "Process queue now",
+        processQueue: "Process due queues (win-back + stagger)",
         processResult: "Last process result",
         staggerTitle: "Stagger campaign — analyze + optimize, unpaid",
-        staggerHint:
-          "Check who qualifies (no emails). Set template, then Enroll everyone — that only builds the queue with per-user send times (random 3–8 minutes apart). No instant mass send: the server sends when each row’s time is reached, normally via your cron hitting the process endpoint.",
-        staggerMentalModel:
-          "Enroll everyone does not blast mail; it schedules rows. After that, timing is enforced by run_at in the database. Optional: “Send one due email” below is only for manual testing or if you have no cron.",
-        staggerDedupeNote:
-          "Dedupe: after a successful send, the user is written to email_stagger_sent_log for this campaign kind and will not appear in Preview or Enroll again. Users still waiting in the queue (pending/processing) are also excluded from a second snapshot. Skipped or failed rows do not write that log, so those users can appear in a future run if they still match the rules.",
-        staggerStepPreview: "1. Check who qualifies",
-        staggerStepPreviewBody:
-          "No template required. Shows how many users match and a sample of user ids. Everyone eligible is still included when you enroll — not only the sample.",
-        staggerStepTemplate: "2. Template id",
-        staggerStepTemplateBody:
-          "Alias from your app (e.g. ahead-of-candidates) or a Resend template id. Required before Enroll everyone — stored on each queued recipient.",
-        staggerStepSnapshot: "3. Enroll everyone (queue + schedule)",
-        staggerStepSnapshotBody:
-          "One click: writes all eligible users into the database with future send times. Blocked while this campaign already has an open queue — finish or wait until it drains.",
-        staggerStepSend: "4. Optional — send when due",
-        staggerStepSendBody:
-          "In production, a cron job should call the stagger process endpoint so each row sends when its scheduled time passes. The button here sends at most one due row per click (for debugging or if cron is off). Nothing sends while this flow is Paused — Resume it in the section below first.",
-        staggerSendDisabledPaused: "Resume stagger (section below) — sends are blocked while Paused.",
-        staggerProcessPausedBanner:
-          "Response says paused: the stagger flow is on Pause in admin. Click Resume, then try again or wait for cron.",
-        staggerProcessNoDueBanner:
-          "no due rows is normal right after Enroll: the first email is scheduled a few minutes in the future, then every 3–8 minutes. Wait until «due now» in the table is above 0, then click again or use cron. If «Pending» stays 0, you have not enrolled yet — run step 3.",
-        staggerFirstSendScheduled: "First send slot (UTC): {at}",
-        staggerLastSendScheduled: "Last send slot (UTC): {at}",
-        staggerPauseResumeHint:
-          "Pause / Resume stops or allows the server to process due rows (cron and the optional one-send button).",
-        staggerPreviewSampleTitle: "Sample user ids ({shown} of {total})",
-        staggerPreviewSampleMore: "… and {more} more — not shown here, but included when you build the queue.",
-        staggerTemplateLabel: "Template (app id or Resend id)",
-        staggerTemplateMissing: "Enter a template id.",
-        staggerPreview: "Check who qualifies",
-        staggerSnapshot: "Enroll everyone (queue + schedule)",
-        staggerProcess: "Send one due email (manual / test)",
-        staggerSnapshotConfirm:
-          "Build the send queue now? This freezes the current cohort. You cannot start another snapshot for this flow while pending sends exist.",
-        staggerPreviewSummary:
-          "Eligible now: {n} · Pending in queue: {p} · Another snapshot blocked: {a}",
-        staggerSnapshotOk: "Queued {n} recipients (run {run}). Reload automations to see pending count.",
+        staggerTemplateLabel: "Resend template id",
+        staggerTemplateMissing: "Enter a Resend template id.",
+        staggerEligibleCount: "{n} eligible users",
+        staggerLaunchBtn: "Launch campaign",
+        staggerLaunchConfirm: "Queue emails to {n} users with 3–7 min gaps between sends?",
+        staggerSnapshotOk: "Campaign launched — {n} emails queued (run {run}).",
+        staggerFirstSend: "First send: {at}",
+        staggerLastSend: "Last send: {at}",
+        staggerPausedBanner: "Paused — resume to allow processing.",
         staggerStatusIdle: "Idle",
-        staggerStatusDraining: "Queue draining",
+        staggerStatusDraining: "Sending…",
         segmentTitle: "Manual send to segment",
         segmentHint:
           "Segment “optimized, unpaid, recent”: users with a successful optimize_complete in the last N days who still have no active trial/monthly subscription. Blocked accounts excluded.",

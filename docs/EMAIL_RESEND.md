@@ -126,14 +126,11 @@ RESEND_TEMPLATE_SHORT_NUDGE=другой_id
 1. Зелёная плашка = заданы `RESEND_API_KEY` и `RESEND_FROM`.
 2. Дополнительно в интерфейсе отображается, заданы ли **Resend template id** для win-back и для nudge (флаги с API).
 3. **Автоматическая очередь**: включить автоматизацию, выставить min/max минут задержки → после успешной оптимизации у неплатного пользователя создаётся запись в очереди.
-4. **Обработка очереди**: Resend **не** опрашивает сам. Нужно по расписанию вызывать  
+4. **Обработка очередей (win-back + stagger)**: Resend **не** опрашивает сам. Один и тот же вызов по расписанию:  
    `POST /api/admin/email/queue/process?limit=25`  
-   с заголовком `Authorization: Bearer <JWT админа>`  
-   (кнопка в админке или cron на Railway / GitHub Actions и т.д.).
-4b. **Stagger (Enroll everyone)**: это другая очередь. После snapshot письма **не** идут сами: у каждой строки своё время `run_at` (интервалы 3–8 мин). Периодически вызывайте  
-   `POST /api/admin/email/stagger-campaign/process`  
-   с тем же `Authorization: Bearer <JWT админа>` — за один вызов отправляется **не больше одного** письма среди строк, у которых уже `run_at <= now`. В админке в колонке очереди для stagger показываются **всего запланировано** и **сколько уже «due»**; если «due» = 0, отправок ещё не будет — ждите время или проверьте, что автоматизация не на Pause.  
-   **Сброс очереди:** в админке у потока stagger — кнопка «Clear stagger queue» (или `POST .../automations/analyze_optimize_stagger_campaign/clear-pending-queue`) удаляет все строки `pending` и `processing` для этой кампании; после этого можно снова Enroll. История успешных отправок (`sent_log`) не стирается.
+   с `Authorization: Bearer <JWT админа>` — обрабатывает **до 25** просроченных win-back (если авто включено и не на паузе) **и до 25** просроченных stagger-строк (если stagger не на паузе). Отдельный `POST .../stagger-campaign/process` — только **одна** stagger-отправка за вызов (для отладки).  
+   **Stagger:** после Enroll у строк свои `run_at` (интервалы 3–8 мин). В админке для stagger показаны «всего в очереди» и «due now».  
+   **Сброс stagger:** кнопка «Clear stagger queue» или `POST .../automations/analyze_optimize_stagger_campaign/clear-pending-queue` — удаляет `pending`/`processing`; `sent_log` не трогаем.
 5. **Ручная рассылка**: сегмент, дни, лимит, шаблон → Preview → при необходимости снять «Dry run» и отправить.
 
 ---
@@ -158,5 +155,5 @@ RESEND_TEMPLATE_SHORT_NUDGE=другой_id
 1. Resend: домен, ключ, шаблон(ы), publish.  
 2. `.env` / Railway: секреты `RESEND_API_KEY`, `RESEND_FROM`, плюс `FRONTEND_URL`, `EMAIL_PUBLIC_BASE_URL`, `JWT_SECRET`, `DATABASE_URL`. Id шаблонов — в админке (БД), не обязательно в Railway.  
 3. Перезапуск API после смены env.  
-4. Админка: вписать id шаблонов Resend, включить авто при необходимости, cron на `queue/process` и при использовании stagger — на `stagger-campaign/process`.  
+4. Админка: вписать id шаблонов Resend, включить авто при необходимости, один cron на `queue/process` (win-back + stagger).  
 5. Прод: макет — в Resend; сценарии «после оптимизации / сегмент» — в PitchCV.

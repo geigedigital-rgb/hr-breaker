@@ -4111,13 +4111,16 @@ async def api_admin_email_queue_process(
     _admin: dict = Depends(get_admin_user),
     limit: int = Query(25, ge=1, le=100),
 ) -> dict[str, Any]:
-    """Process due scheduled win-back rows (call from cron every few minutes or manually)."""
+    """Process due win-back rows and due stagger rows (single cron URL — same as before for win-back, plus stagger)."""
     pool = await get_pool()
     if pool is None:
         raise HTTPException(503, "Database not configured")
     from hr_breaker.services.email_winback import process_winback_due_batch
+    from hr_breaker.services.email_stagger_campaign import process_stagger_due_batch
 
-    return await process_winback_due_batch(pool, limit=limit)
+    winback = await process_winback_due_batch(pool, limit=limit)
+    stagger = await process_stagger_due_batch(pool, limit=limit)
+    return {"winback": winback, "stagger": stagger}
 
 
 @router.get("/admin/email/resend/templates", response_model=list[AdminResendTemplateItem])
@@ -4362,6 +4365,7 @@ async def api_admin_email_stagger_snapshot(
 
 @router.post("/admin/email/stagger-campaign/process", response_model=AdminEmailStaggerProcessOut)
 async def api_admin_email_stagger_process(_admin: dict = Depends(get_admin_user)) -> AdminEmailStaggerProcessOut:
+    """One stagger send. For cron use POST /admin/email/queue/process (win-back + stagger together)."""
     pool = await get_pool()
     if pool is None:
         raise HTTPException(503, "Database not configured")
