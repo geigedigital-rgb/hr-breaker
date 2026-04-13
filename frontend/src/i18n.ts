@@ -603,6 +603,7 @@ const en = {
         automationPanelHeading: "Email automations",
         automationPanelHint: "Select a flow to show its actions and settings.",
         automationsTablePending: "Queue",
+        staggerSendNext: "Send next due email",
         staggerDueShort: "due now",
         staggerBtnClearQueue: "Clear queue",
         staggerClearQueueConfirm:

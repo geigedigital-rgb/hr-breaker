@@ -28,7 +28,13 @@ from hr_breaker.services.db import (
     user_get_by_id,
     user_get_subscription,
 )
-from hr_breaker.services.email_winback import deliver_winback_or_resend_template
+from hr_breaker.services.email_winback import (
+    build_unsubscribe_url,
+    latest_email_cta_url_for_user,
+    resend_transactional_extras,
+    resend_variables_for_send,
+)
+from hr_breaker.services.resend_send import resend_send_template
 
 logger = logging.getLogger(__name__)
 
@@ -136,15 +142,20 @@ async def process_stagger_next_send(
     *,
     settings: Settings | None = None,
 ) -> dict[str, object]:
-    """Claim at most one due recipient and send. Call from cron every minute or manually."""
+    """Claim at most one due recipient and send via Resend template (same path as Quick Send).
+
+    template_id stored per-row is the raw Resend template UUID entered at launch time.
+    """
     s = settings or get_settings()
     api_key = (s.resend_api_key or "").strip()
     from_addr = (s.resend_from or "").strip()
     public_base = (s.email_public_base_url or s.frontend_url or "").strip().rstrip("/")
     subject = (s.resend_winback_subject or "PitchCV").strip() or "PitchCV"
 
-    if not api_key or not from_addr:
-        return {"ok": False, "error": "RESEND_API_KEY and RESEND_FROM must be set", "processed": False}
+    if not api_key:
+        return {"ok": False, "error": "RESEND_API_KEY is not set", "processed": False}
+    if not from_addr:
+        return {"ok": False, "error": "RESEND_FROM is not set", "processed": False}
 
     cfg = await admin_email_settings_get(pool)
     if is_analyze_optimize_stagger_paused(cfg):
@@ -160,8 +171,9 @@ async def process_stagger_next_send(
     kind = str(row["campaign_kind"] or CAMPAIGN_KIND_ANALYZE_OPTIMIZE_UNPAID)
     run_id = str(row["run_id"])
 
-    db_r = str(cfg.get("resend_template_reminder_no_download") or "")
-    db_n = str(cfg.get("resend_template_short_nudge") or "")
+    if not tmpl:
+        await email_stagger_mark_failed(pool, recipient_id=rid, message="template_id is empty")
+        return {"ok": True, "processed": True, "recipient_id": rid, "result": "failed", "detail": "no template_id"}
 
     try:
         u = await user_get_by_id(pool, uid)
@@ -180,25 +192,32 @@ async def process_stagger_next_send(
             await email_stagger_mark_skipped_paid(pool, recipient_id=rid)
             return {"ok": True, "processed": True, "recipient_id": rid, "result": "skipped_paid"}
 
-        await deliver_winback_or_resend_template(
-            settings=s,
+        # Build personalised variables (same as Quick Send)
+        resume_url = await latest_email_cta_url_for_user(pool, s, uid)
+        unsub = build_unsubscribe_url(s, uid)
+        extras = resend_transactional_extras(s, unsubscribe_url=unsub)
+
+        await resend_send_template(
             api_key=api_key,
             from_addr=from_addr,
             to=email,
             subject=subject,
-            template_ref=tmpl,
-            public_base=public_base,
-            user_id=uid,
-            pool=pool,
-            db_resend_template_reminder=db_r,
-            db_resend_template_short_nudge=db_n,
+            template_id=tmpl,
+            variables=resend_variables_for_send(
+                public_base=public_base,
+                unsubscribe_url=unsub,
+                resume_url=resume_url,
+            ),
+            reply_to=extras.get("reply_to"),
+            headers=extras.get("headers"),
         )
         await email_stagger_mark_sent(pool, recipient_id=rid)
         await email_stagger_sent_log_upsert(pool, user_id=uid, campaign_kind=kind, run_id=run_id)
+        logger.info("Stagger sent %s → %s template=%s", uid, email, tmpl)
         return {"ok": True, "processed": True, "recipient_id": rid, "result": "sent", "email": email}
     except Exception as e:
         msg = str(e)[:2000]
-        logger.exception("Stagger send failed %s: %s", rid, e)
+        logger.exception("Stagger send failed rid=%s uid=%s tmpl=%s: %s", rid, uid, tmpl, e)
         await email_stagger_mark_failed(pool, recipient_id=rid, message=msg)
         return {"ok": True, "processed": True, "recipient_id": rid, "result": "failed", "detail": msg}
 

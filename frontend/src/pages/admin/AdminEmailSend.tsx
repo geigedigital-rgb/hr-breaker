@@ -467,7 +467,7 @@ export default function AdminEmailSend() {
           .replace("{n}", String(out.enqueued))
           .replace("{run}", out.run_id || "—"),
       );
-      logEmailAdmin("stagger_snapshot", "Stagger queue built (emails go out via queue/process when due)", {
+      logEmailAdmin("stagger_snapshot", "Stagger queue built — triggering first sends now", {
         enqueued: out.enqueued,
         run_id: out.run_id,
         template_id: out.template_id,
@@ -475,6 +475,26 @@ export default function AdminEmailSend() {
         last_run_at: out.last_run_at,
       });
       void reload();
+      // Auto-trigger queue/process right after snapshot so first due email goes immediately
+      if (out.enqueued > 0) {
+        logEmailAdmin("queue_process", "Auto-trigger POST queue/process after snapshot…");
+        try {
+          const qr = await postAdminEmailQueueProcess(25);
+          const stagger = (qr as Record<string, unknown>).stagger as Record<string, unknown> | undefined;
+          logEmailAdmin("queue_process", "Auto-trigger queue/process result", {
+            stagger_sent: stagger?.sent,
+            stagger_failed: stagger?.failed,
+            stagger_message: stagger?.last_message,
+            hint: stagger?.sent === 0 && stagger?.last_message === "no due rows"
+              ? "First run_at is a few minutes in the future — cron will pick it up. Or press 'Send next' below."
+              : undefined,
+          });
+          setQueueResult(qr);
+        } catch (qe) {
+          logEmailAdmin("queue_process", "Auto-trigger failed", { error: qe instanceof Error ? qe.message : String(qe) });
+        }
+        void reload();
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setStaggerErr(msg);
@@ -823,6 +843,32 @@ export default function AdminEmailSend() {
 
                 {staggerInfo ? (
                   <p className="text-xs font-medium text-emerald-800">{staggerInfo}</p>
+                ) : null}
+
+                {/* Send next / process controls */}
+                {(staggerFlow?.pending_queue_count ?? 0) > 0 ? (
+                  <div className="space-y-2 rounded-xl border border-black/[0.06] bg-black/[0.02] p-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        disabled={busy === "queue" || staggerBusy != null || !!staggerFlow?.paused}
+                        onClick={() => void onProcessQueue()}
+                        className={ui.btnPrimary}
+                      >
+                        {busy === "queue" ? "…" : t("admin.email.send.staggerSendNext")}
+                      </button>
+                      <span className="text-xs text-[var(--text-muted)]">
+                        {typeof staggerFlow?.pending_due_count === "number"
+                          ? `${staggerFlow.pending_due_count} due now of ${staggerFlow.pending_queue_count ?? 0} pending`
+                          : `${staggerFlow?.pending_queue_count ?? 0} pending`}
+                      </span>
+                    </div>
+                    {queueResult ? (
+                      <pre className="max-h-28 overflow-auto rounded-lg border border-black/[0.06] bg-white p-2 text-[10px] text-[var(--text)]">
+                        {JSON.stringify((queueResult as Record<string, unknown>).stagger ?? queueResult, null, 2)}
+                      </pre>
+                    ) : null}
+                  </div>
                 ) : null}
 
                 {/* Secondary controls */}
