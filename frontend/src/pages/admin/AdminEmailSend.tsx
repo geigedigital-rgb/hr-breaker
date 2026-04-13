@@ -127,6 +127,11 @@ export default function AdminEmailSend() {
   const [staggerBusy, setStaggerBusy] = useState<string | null>(null);
   const [staggerProcessResult, setStaggerProcessResult] = useState<AdminEmailStaggerProcess | null>(null);
   const [staggerInfo, setStaggerInfo] = useState<string | null>(null);
+  const [staggerLastSnapshot, setStaggerLastSnapshot] = useState<{
+    first_run_at: string | null;
+    last_run_at: string | null;
+    enqueued: number;
+  } | null>(null);
 
   const postWinback = automations?.items.find((i) => i.id === "post_optimize_winback");
   const staggerFlow = automations?.items.find((i) => i.id === "analyze_optimize_stagger_campaign");
@@ -291,6 +296,7 @@ export default function AdminEmailSend() {
     setAutomationsErr(null);
     try {
       await postAdminEmailClearPendingQueue(id);
+      if (id === "analyze_optimize_stagger_campaign") setStaggerLastSnapshot(null);
       void reload();
     } catch (e) {
       setAutomationsErr(e instanceof Error ? e.message : String(e));
@@ -343,6 +349,15 @@ export default function AdminEmailSend() {
       const out = await postAdminEmailStaggerSnapshot({ template_id: tid });
       setStaggerPreview(null);
       setStaggerProcessResult(null);
+      setStaggerLastSnapshot(
+        out.enqueued > 0
+          ? {
+              first_run_at: out.first_run_at ?? null,
+              last_run_at: out.last_run_at ?? null,
+              enqueued: out.enqueued,
+            }
+          : null,
+      );
       setStaggerInfo(
         t("admin.email.send.staggerSnapshotOk")
           .replace("{n}", String(out.enqueued))
@@ -726,6 +741,21 @@ export default function AdminEmailSend() {
                     </button>
                   </div>
                   {staggerInfo ? <p className="text-xs font-medium text-emerald-800">{staggerInfo}</p> : null}
+                  {staggerLastSnapshot?.first_run_at ? (
+                    <p className="text-[11px] leading-relaxed text-[var(--text-muted)]">
+                      {t("admin.email.send.staggerFirstSendScheduled").replace("{at}", formatCtaExpires(staggerLastSnapshot.first_run_at))}
+                      {staggerLastSnapshot.last_run_at ? (
+                        <>
+                          {" "}
+                          ·{" "}
+                          {t("admin.email.send.staggerLastSendScheduled").replace(
+                            "{at}",
+                            formatCtaExpires(staggerLastSnapshot.last_run_at),
+                          )}
+                        </>
+                      ) : null}
+                    </p>
+                  ) : null}
                 </div>
 
                 <div className="space-y-3 rounded-xl border border-black/[0.06] bg-black/[0.02] p-4">
@@ -749,6 +779,13 @@ export default function AdminEmailSend() {
                       {staggerProcessResult.paused ? (
                         <p className="rounded-lg border border-amber-200/80 bg-amber-50/90 px-3 py-2 text-xs font-medium text-amber-950">
                           {t("admin.email.send.staggerProcessPausedBanner")}
+                        </p>
+                      ) : null}
+                      {!staggerProcessResult.paused &&
+                      staggerProcessResult.processed === false &&
+                      staggerProcessResult.message === "no due rows" ? (
+                        <p className="rounded-lg border border-sky-200/80 bg-sky-50/90 px-3 py-2 text-xs leading-relaxed text-sky-950">
+                          {t("admin.email.send.staggerProcessNoDueBanner")}
                         </p>
                       ) : null}
                       <pre className="max-h-28 overflow-auto rounded-lg border border-black/[0.06] bg-white p-2 text-[10px] text-[var(--text)]">

@@ -673,6 +673,10 @@ const en = {
         staggerSendDisabledPaused: "Resume stagger (section below) — sends are blocked while Paused.",
         staggerProcessPausedBanner:
           "Response says paused: the stagger flow is on Pause in admin. Click Resume, then try again or wait for cron.",
+        staggerProcessNoDueBanner:
+          "no due rows is normal right after Enroll: the first email is scheduled a few minutes in the future, then every 3–8 minutes. Wait until «due now» in the table is above 0, then click again or use cron. If «Pending» stays 0, you have not enrolled yet — run step 3.",
+        staggerFirstSendScheduled: "First send slot (UTC): {at}",
+        staggerLastSendScheduled: "Last send slot (UTC): {at}",
         staggerPauseResumeHint:
           "Pause / Resume stops or allows the server to process due rows (cron and the optional one-send button).",
         staggerPreviewSampleTitle: "Sample user ids ({shown} of {total})",
