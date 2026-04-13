@@ -31,6 +31,8 @@ function formatRelative(iso: string): string {
   return diffYears === 1 ? t("home.yearAgo") : tFormat(t("home.yearsAgo"), { n: String(diffYears) });
 }
 
+type ResumeCardItem = api.HistoryItem & { optimizedItem?: api.HistoryItem };
+
 /** Уникальные «исходные» резюме по source_checksum; при отсутствии checksum считаем каждый item отдельно */
 function useResumeDocuments() {
   const [items, setItems] = useState<api.HistoryItem[]>([]);
@@ -47,23 +49,34 @@ function useResumeDocuments() {
       .finally(() => setLoading(false));
   }, [refresh]);
 
-  const byChecksum = new Map<string, api.HistoryItem>();
   const list = Array.isArray(items) ? items : [];
+
+  // Group by source_checksum: track latest upload + latest optimized per source
+  type Group = { upload: api.HistoryItem | null; optimized: api.HistoryItem | null };
+  const groups = new Map<string, Group>();
   for (const item of list) {
     const key = item.source_checksum ?? item.filename;
-    if (!byChecksum.has(key)) byChecksum.set(key, item);
+    if (!groups.has(key)) groups.set(key, { upload: null, optimized: null });
+    const g = groups.get(key)!;
+    const isUpload = item.source_was_pdf === true && item.filename.startsWith("uploaded_");
+    if (isUpload) {
+      if (!g.upload || new Date(item.timestamp) > new Date(g.upload.timestamp)) g.upload = item;
+    } else {
+      if (!g.optimized || new Date(item.timestamp) > new Date(g.optimized.timestamp)) g.optimized = item;
+    }
   }
-  const allDocuments = Array.from(byChecksum.values()).sort(
-    (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-  );
-  /** In «My resumes» block — only uploaded PDFs (register-upload), not improved */
-  const documents = allDocuments.filter(
-    (d) => d.source_was_pdf === true && d.filename.startsWith("uploaded_")
-  );
-  /** In «Edit history» block — improved/tailored resumes */
-  const editedDocuments = allDocuments.filter(
-    (d) => !(d.source_was_pdf === true && d.filename.startsWith("uploaded_"))
-  );
+
+  /** In «My resumes» block — uploaded originals, enriched with latest optimized version */
+  const documents: ResumeCardItem[] = Array.from(groups.values())
+    .filter((g) => g.upload !== null)
+    .map((g) => ({ ...g.upload!, ...(g.optimized ? { optimizedItem: g.optimized } : {}) }))
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+  /** In «Edit history» block — improved/tailored resumes (groups without an upload) */
+  const editedDocuments = Array.from(groups.values())
+    .filter((g) => g.upload === null && g.optimized !== null)
+    .map((g) => g.optimized!)
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
   return { documents, editedDocuments, loading, error, refetch: () => setRefresh((r) => r + 1) };
 }
@@ -197,86 +210,94 @@ export default function Home() {
             <p className="text-sm text-red-600 py-8" role="alert">{error}</p>
           )}
           {!loading && !error && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
               {documents.slice(0, 10).map((item) => {
                 const name = [item.first_name, item.last_name].filter(Boolean).join(" ") || t("home.noName");
+                const previewFilename = item.optimizedItem?.filename ?? item.filename;
+                const openFilename = item.optimizedItem?.filename ?? item.filename;
+                const qualityScore = item.optimizedItem?.post_ats_score ?? null;
                 return (
                   <article
                     key={item.filename}
-                    className="flex gap-2 rounded-xl p-2 hover:bg-[#F5F6FA] transition-colors min-w-0"
+                    className="flex gap-3 rounded-xl p-2.5 hover:bg-[#F5F6FA] transition-colors min-w-0"
                   >
                     {/* Превью в пропорциях A4 (210×297) */}
-                    <div className="shrink-0 w-24 min-w-0 rounded-md bg-white overflow-hidden flex flex-col relative aspect-[210/297] group/preview">
+                    <div className="shrink-0 w-44 min-w-0 rounded-md bg-white overflow-hidden flex flex-col relative aspect-[210/297] group/preview">
                       <a
-                        href={api.historyOpenUrl(item.filename, api.getStoredToken())}
+                        href={api.historyOpenUrl(openFilename, api.getStoredToken())}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="absolute inset-0 z-10 flex items-center justify-center bg-black/0 transition-colors group-hover/preview:bg-black/30 rounded-md"
                         aria-label={t("home.open")}
                         title={t("home.open")}
                       >
-                        <span className="opacity-0 group-hover/preview:opacity-100 transition-opacity flex items-center justify-center w-7 h-7 rounded-full bg-white/95 text-[#181819] shadow-sm">
+                        <span className="opacity-0 group-hover/preview:opacity-100 transition-opacity flex items-center justify-center w-8 h-8 rounded-full bg-white/95 text-[#181819] shadow-sm">
                           <EyeIcon className="w-4 h-4" />
                         </span>
                       </a>
-                      {thumbnailErrors.has(item.filename) ? (
+                      {thumbnailErrors.has(previewFilename) ? (
                         <>
-                          <div className="h-4 bg-[#EEF1FC] flex items-center px-1 gap-0.5">
-                            <span className="w-1 h-1 rounded-full bg-[#c8cddc]" />
-                            <span className="w-1 h-1 rounded-full bg-[#c8cddc]" />
-                            <span className="w-1 h-1 rounded-full bg-[#c8cddc]" />
+                          <div className="h-5 bg-[#EEF1FC] flex items-center px-1.5 gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-[#c8cddc]" />
+                            <span className="w-1.5 h-1.5 rounded-full bg-[#c8cddc]" />
+                            <span className="w-1.5 h-1.5 rounded-full bg-[#c8cddc]" />
                           </div>
-                          <div className="flex-1 p-1 flex flex-col justify-center">
-                            <DocumentTextIcon className="w-5 h-5 text-[#4578FC]/60 mx-auto mb-0.5" />
-                            <p className="text-[8px] font-semibold text-[#181819] uppercase tracking-wide text-center truncate">
+                          <div className="flex-1 p-1.5 flex flex-col justify-center">
+                            <DocumentTextIcon className="w-6 h-6 text-[#4578FC]/60 mx-auto mb-1" />
+                            <p className="text-[9px] font-semibold text-[#181819] uppercase tracking-wide text-center truncate">
                               {name}
                             </p>
                           </div>
                         </>
                       ) : (
                         <img
-                          src={api.historyThumbnailUrl(item.filename, api.getStoredToken())}
+                          src={api.historyThumbnailUrl(previewFilename, api.getStoredToken())}
                           alt=""
                           className="absolute inset-0 w-full h-full object-cover object-top"
-                          onError={() => setThumbnailErrors((s) => new Set(s).add(item.filename))}
+                          onError={() => setThumbnailErrors((s) => new Set(s).add(previewFilename))}
                         />
                       )}
                     </div>
-                    {/* Название, дата, кнопки вертикально */}
+                    {/* Название, дата, плашка качества, кнопки вертикально */}
                     <div className="min-w-0 flex-1 flex flex-col py-0.5">
-                      <h3 className="text-[11px] font-semibold text-[#181819] truncate leading-tight">{name}</h3>
-                      <p className="text-[10px] md:text-[9px] text-[var(--text-muted)] mt-0.5">
+                      <h3 className="text-[13px] font-semibold text-[#181819] truncate leading-tight">{name}</h3>
+                      <p className="text-xs text-[var(--text-muted)] mt-0.5">
                         {formatRelative(item.timestamp)}
                       </p>
-                      {/* Slightly larger mobile micro-actions for tap readability */}
+                      {qualityScore != null && (
+                        <div className="mt-1.5 inline-flex items-center gap-1 self-start px-1.5 py-0.5 rounded bg-[#217d47]/10">
+                          <span className="text-[11px] font-semibold text-[#217d47]">{qualityScore}%</span>
+                          <span className="text-[10px] text-[#217d47]/80">{t("home.resumeQuality")}</span>
+                        </div>
+                      )}
                       <div className="flex flex-col gap-0.5 mt-1.5">
                         <button
                           type="button"
                           onClick={(e) => handleImproveHistoryItem(item, e)}
                           disabled={improvingFilename === item.filename}
-                          className="inline-flex items-center gap-1.5 p-1 rounded text-[10px] md:text-[9px] font-medium text-[var(--text-muted)] hover:bg-[#EBEDF5] hover:text-[#181819] transition-colors disabled:opacity-50 text-left"
+                          className="inline-flex items-center gap-1.5 p-1 rounded text-xs font-medium text-[var(--text-muted)] hover:bg-[#EBEDF5] hover:text-[#181819] transition-colors disabled:opacity-50 text-left"
                         >
                           {improvingFilename === item.filename ? (
-                            <span className="w-3 h-3 md:w-2.5 md:h-2.5 border border-[#4578FC]/30 border-t-[#4578FC] rounded-full animate-spin shrink-0" aria-hidden />
+                            <span className="w-3.5 h-3.5 border border-[#4578FC]/30 border-t-[#4578FC] rounded-full animate-spin shrink-0" aria-hidden />
                           ) : (
-                            <PencilSquareIcon className="w-3.5 h-3.5 md:w-3 md:h-3 shrink-0" />
+                            <PencilSquareIcon className="w-4 h-4 shrink-0" />
                           )}
                           {t("home.improve")}
                         </button>
                         <a
                           href={api.downloadUrl(item.filename, api.getStoredToken())}
                           download={item.filename}
-                          className="inline-flex items-center gap-1.5 p-1 rounded text-[10px] md:text-[9px] font-medium text-[var(--text-muted)] hover:bg-[#EBEDF5] hover:text-[#181819] transition-colors"
+                          className="inline-flex items-center gap-1.5 p-1 rounded text-xs font-medium text-[var(--text-muted)] hover:bg-[#EBEDF5] hover:text-[#181819] transition-colors"
                         >
-                          <ArrowDownTrayIcon className="w-3.5 h-3.5 md:w-3 md:h-3 shrink-0" />
+                          <ArrowDownTrayIcon className="w-4 h-4 shrink-0" />
                           {t("home.downloadPdf")}
                         </a>
                         <button
                           type="button"
                           onClick={() => setDeleteConfirm({ filename: item.filename, name })}
-                          className="inline-flex items-center gap-1.5 p-1 rounded text-[10px] md:text-[9px] font-medium text-[var(--text-muted)] hover:bg-[#EBEDF5] hover:text-red-600 transition-colors text-left"
+                          className="inline-flex items-center gap-1.5 p-1 rounded text-xs font-medium text-[var(--text-muted)] hover:bg-[#EBEDF5] hover:text-red-600 transition-colors text-left"
                         >
-                          <TrashIcon className="w-3.5 h-3.5 md:w-3 md:h-3 shrink-0" />
+                          <TrashIcon className="w-4 h-4 shrink-0" />
                           {t("home.delete")}
                         </button>
                       </div>
@@ -296,106 +317,30 @@ export default function Home() {
                 type="button"
                 onClick={() => addFileInputRef.current?.click()}
                 disabled={addUploading}
-                className="flex flex-col items-center justify-center gap-1.5 rounded-xl min-h-0 w-full aspect-[210/297] max-h-[6.5rem] border border-dashed border-[#c8cddc] hover:border-[#4578FC]/50 hover:bg-[#F5F6FA] transition-colors text-[var(--text-muted)] hover:text-[#4578FC] disabled:opacity-60 disabled:cursor-wait"
+                className="flex gap-3 rounded-xl p-2.5 hover:bg-[#F5F6FA] transition-colors text-left disabled:opacity-60 disabled:cursor-wait group/add"
               >
-                {addUploading ? (
-                  <span className="h-5 w-5 border-2 border-[#4578FC]/30 border-t-[#4578FC] rounded-full animate-spin" aria-hidden />
-                ) : (
-                  <PlusIcon className="w-5 h-5 text-[#4578FC]" strokeWidth={2} />
-                )}
-                <span className="text-[10px] font-medium">{addUploading ? t("home.uploading") : t("home.add")}</span>
+                {/* A4-shaped dashed area — same proportions as resume preview */}
+                <div className="shrink-0 w-44 aspect-[210/297] rounded-md border-2 border-dashed border-[#c8cddc] group-hover/add:border-[#4578FC]/50 transition-colors flex items-center justify-center">
+                  {addUploading ? (
+                    <span className="h-7 w-7 border-2 border-[#4578FC]/30 border-t-[#4578FC] rounded-full animate-spin" aria-hidden />
+                  ) : (
+                    <span className="w-12 h-12 rounded-full bg-[#F0F2FA] group-hover/add:bg-[#EEF1FC] flex items-center justify-center transition-colors">
+                      <PlusIcon className="w-6 h-6 text-[#9aa3b8] group-hover/add:text-[#4578FC] transition-colors" strokeWidth={2} />
+                    </span>
+                  )}
+                </div>
+                {/* Text block */}
+                <div className="min-w-0 flex-1 flex flex-col justify-start py-0.5 gap-1">
+                  <h3 className="text-[13px] font-semibold text-[var(--text-muted)] leading-tight">
+                    {addUploading ? t("home.uploading") : t("home.importResume")}
+                  </h3>
+                  <p className="text-xs text-[var(--text-muted)] leading-snug">{t("home.importResumeDescLine1")}<br />{t("home.importResumeDescLine2")}</p>
+                </div>
               </button>
             </div>
           )}
         </div>
       </section>
-
-      {/* Section: Edit history — tailored resumes */}
-      {editedDocuments.length > 0 && (
-        <section className="rounded-2xl border border-[#EBEDF5] bg-white overflow-hidden" aria-labelledby="edited-heading">
-          <div className="px-5 py-4 border-b border-[#EBEDF5]">
-            <h2 id="edited-heading" className="text-base font-semibold text-[#181819]">{t("home.editHistory")}</h2>
-            <p className="text-sm text-[var(--text-muted)] mt-0.5">{t("home.editHistoryDesc")}</p>
-          </div>
-          <div className="p-5">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {editedDocuments.slice(0, 12).map((item) => {
-                const name = [item.first_name, item.last_name].filter(Boolean).join(" ") || t("home.resume");
-                return (
-                  <article
-                    key={item.filename}
-                    className="flex gap-2 rounded-xl p-2 hover:bg-[#F5F6FA] transition-colors min-w-0"
-                  >
-                    <div className="shrink-0 w-24 min-w-0 rounded-md bg-white overflow-hidden flex flex-col relative aspect-[210/297] group/preview">
-                      <a
-                        href={api.historyOpenUrl(item.filename, api.getStoredToken())}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="absolute inset-0 z-10 flex items-center justify-center bg-black/0 transition-colors group-hover/preview:bg-black/30 rounded-md"
-                        aria-label={t("home.open")}
-                        title={t("home.open")}
-                      >
-                        <span className="opacity-0 group-hover/preview:opacity-100 transition-opacity flex items-center justify-center w-7 h-7 rounded-full bg-white/95 text-[#181819] shadow-sm">
-                          <EyeIcon className="w-4 h-4" />
-                        </span>
-                      </a>
-                      {thumbnailErrors.has(item.filename) ? (
-                        <>
-                          <div className="h-4 bg-[#EEF1FC] flex items-center px-1 gap-0.5">
-                            <span className="w-1 h-1 rounded-full bg-[#c8cddc]" />
-                            <span className="w-1 h-1 rounded-full bg-[#c8cddc]" />
-                            <span className="w-1 h-1 rounded-full bg-[#c8cddc]" />
-                          </div>
-                          <div className="flex-1 p-1 flex flex-col justify-center">
-                            <DocumentTextIcon className="w-5 h-5 text-[#4578FC]/60 mx-auto mb-0.5" />
-                            <p className="text-[8px] font-semibold text-[#181819] uppercase tracking-wide text-center truncate">
-                              {name}
-                            </p>
-                          </div>
-                        </>
-                      ) : (
-                        <img
-                          src={api.historyThumbnailUrl(item.filename, api.getStoredToken())}
-                          alt=""
-                          className="absolute inset-0 w-full h-full object-cover object-top"
-                          onError={() => setThumbnailErrors((s) => new Set(s).add(item.filename))}
-                        />
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1 flex flex-col py-0.5">
-                      <h3 className="text-[11px] font-semibold text-[#181819] truncate leading-tight">{name}</h3>
-                      <p className="text-[10px] text-[var(--text-muted)] mt-0.5 line-clamp-2" title={item.job_title || undefined}>
-                        {item.job_title || "—"}
-                      </p>
-                      <p className="text-[10px] md:text-[9px] text-[var(--text-muted)] mt-1">
-                        {formatRelative(item.timestamp)}
-                      </p>
-                      <div className="flex flex-col gap-0.5 mt-1.5">
-                        <a
-                          href={api.downloadUrl(item.filename, api.getStoredToken())}
-                          download={item.filename}
-                          className="inline-flex items-center gap-1.5 p-1 rounded text-[10px] md:text-[9px] font-medium text-[var(--text-muted)] hover:bg-[#EBEDF5] hover:text-[#181819] transition-colors"
-                        >
-                          <ArrowDownTrayIcon className="w-3.5 h-3.5 md:w-3 md:h-3 shrink-0" />
-                          {t("home.downloadPdf")}
-                        </a>
-                        <button
-                          type="button"
-                          onClick={() => setDeleteConfirm({ filename: item.filename, name })}
-                          className="inline-flex items-center gap-1.5 p-1 rounded text-[10px] md:text-[9px] font-medium text-[var(--text-muted)] hover:bg-[#EBEDF5] hover:text-red-600 transition-colors text-left"
-                        >
-                          <TrashIcon className="w-3.5 h-3.5 md:w-3 md:h-3 shrink-0" />
-                          {t("home.delete")}
-                        </button>
-                      </div>
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-          </div>
-        </section>
-      )}
 
       {/* Delete confirmation modal */}
       {deleteConfirm && (

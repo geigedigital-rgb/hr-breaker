@@ -107,6 +107,10 @@ const en = {
     yearAgo: "1 year ago",
     yearsAgo: "{n} years ago",
     loadError: "Load error",
+    resumeQuality: "Resume quality",
+    importResume: "Import Resume",
+    importResumeDescLine1: "Upload your resume to improve",
+    importResumeDescLine2: "it for any job posting.",
     readFileError: "Could not read file",
   },
   login: {
