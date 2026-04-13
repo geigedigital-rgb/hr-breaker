@@ -116,6 +116,7 @@ from hr_breaker.services.db import (
     email_winback_delete_all_pending,
     email_winback_pending_list_for_user,
     email_stagger_pending_count,
+    email_stagger_due_pending_count,
     optimization_snapshot_get_by_id_for_user,
     optimization_snapshot_get_latest_valid,
     optimization_snapshot_insert,
@@ -1314,6 +1315,7 @@ class AdminEmailAutomationItemOut(BaseModel):
     enabled: bool
     paused: bool
     pending_queue_count: int | None = None
+    pending_due_count: int | None = None
     supports_enable_toggle: bool = False
     supports_pause: bool = False
     supports_clear_queue: bool = False
@@ -4198,6 +4200,7 @@ def _build_admin_automation_list_out(
     *,
     pending_winback: int,
     pending_stagger: int,
+    pending_stagger_due: int = 0,
 ) -> AdminEmailAutomationsListOut:
     states = parse_automation_states(cfg.get("automation_states"))
     items: list[AdminEmailAutomationItemOut] = []
@@ -4223,6 +4226,7 @@ def _build_admin_automation_list_out(
             sup_en = False
             sup_pause = False
             sup_clear = False
+        pend_due: int | None = pending_stagger_due if aid == "analyze_optimize_stagger_campaign" else None
         items.append(
             AdminEmailAutomationItemOut(
                 id=aid,
@@ -4235,6 +4239,7 @@ def _build_admin_automation_list_out(
                 enabled=enabled,
                 paused=paused,
                 pending_queue_count=pend,
+                pending_due_count=pend_due,
                 supports_enable_toggle=sup_en,
                 supports_pause=sup_pause,
                 supports_clear_queue=sup_clear,
@@ -4251,7 +4256,10 @@ async def api_admin_email_automations(_admin: dict = Depends(get_admin_user)) ->
     cfg = await admin_email_settings_get(pool)
     pending_w = await email_winback_pending_count(pool)
     pending_s = await email_stagger_pending_count(pool, campaign_kind=None)
-    return _build_admin_automation_list_out(cfg, pending_winback=pending_w, pending_stagger=pending_s)
+    pending_s_due = await email_stagger_due_pending_count(pool, campaign_kind=None)
+    return _build_admin_automation_list_out(
+        cfg, pending_winback=pending_w, pending_stagger=pending_s, pending_stagger_due=pending_s_due
+    )
 
 
 @router.patch("/admin/email/automations/{automation_id}", response_model=AdminEmailAutomationsListOut)
@@ -4286,7 +4294,10 @@ async def api_admin_email_automations_patch(
     cfg = await admin_email_settings_get(pool)
     pending_w = await email_winback_pending_count(pool)
     pending_s = await email_stagger_pending_count(pool, campaign_kind=None)
-    return _build_admin_automation_list_out(cfg, pending_winback=pending_w, pending_stagger=pending_s)
+    pending_s_due = await email_stagger_due_pending_count(pool, campaign_kind=None)
+    return _build_admin_automation_list_out(
+        cfg, pending_winback=pending_w, pending_stagger=pending_s, pending_stagger_due=pending_s_due
+    )
 
 
 @router.post("/admin/email/automations/{automation_id}/clear-pending-queue", response_model=AdminEmailClearQueueOut)

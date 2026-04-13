@@ -130,6 +130,9 @@ RESEND_TEMPLATE_SHORT_NUDGE=другой_id
    `POST /api/admin/email/queue/process?limit=25`  
    с заголовком `Authorization: Bearer <JWT админа>`  
    (кнопка в админке или cron на Railway / GitHub Actions и т.д.).
+4b. **Stagger (Enroll everyone)**: это другая очередь. После snapshot письма **не** идут сами: у каждой строки своё время `run_at` (интервалы 3–8 мин). Периодически вызывайте  
+   `POST /api/admin/email/stagger-campaign/process`  
+   с тем же `Authorization: Bearer <JWT админа>` — за один вызов отправляется **не больше одного** письма среди строк, у которых уже `run_at <= now`. В админке в колонке очереди для stagger показываются **всего запланировано** и **сколько уже «due»**; если «due» = 0, отправок ещё не будет — ждите время или проверьте, что автоматизация не на Pause.
 5. **Ручная рассылка**: сегмент, дни, лимит, шаблон → Preview → при необходимости снять «Dry run» и отправить.
 
 ---
@@ -154,5 +157,5 @@ RESEND_TEMPLATE_SHORT_NUDGE=другой_id
 1. Resend: домен, ключ, шаблон(ы), publish.  
 2. `.env` / Railway: секреты `RESEND_API_KEY`, `RESEND_FROM`, плюс `FRONTEND_URL`, `EMAIL_PUBLIC_BASE_URL`, `JWT_SECRET`, `DATABASE_URL`. Id шаблонов — в админке (БД), не обязательно в Railway.  
 3. Перезапуск API после смены env.  
-4. Админка: вписать id шаблонов Resend, включить авто при необходимости, cron на `queue/process`.  
+4. Админка: вписать id шаблонов Resend, включить авто при необходимости, cron на `queue/process` и при использовании stagger — на `stagger-campaign/process`.  
 5. Прод: макет — в Resend; сценарии «после оптимизации / сегмент» — в PitchCV.

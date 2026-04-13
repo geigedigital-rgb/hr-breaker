@@ -444,7 +444,16 @@ export default function AdminEmailSend() {
                           </span>
                         </td>
                         <td className="px-2 py-2.5 text-right align-middle text-xs tabular-nums text-[var(--text-muted)]">
-                          {it.pending_queue_count ?? "—"}
+                          {it.id === "analyze_optimize_stagger_campaign" && it.pending_due_count != null ? (
+                            <span className="inline-block text-right">
+                              <span className="block font-medium text-[var(--text)]">{it.pending_queue_count ?? "—"}</span>
+                              <span className="block text-[10px] text-[var(--text-tertiary)]">
+                                {it.pending_due_count} {t("admin.email.send.staggerDueShort")}
+                              </span>
+                            </span>
+                          ) : (
+                            (it.pending_queue_count ?? "—")
+                          )}
                         </td>
                       </tr>
                     );
@@ -593,14 +602,35 @@ export default function AdminEmailSend() {
                   </p>
                   <p className="mt-2 text-[11px] leading-relaxed text-[var(--text-tertiary)]">{t("admin.email.send.staggerDedupeNote")}</p>
                 </div>
-                <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--text-muted)]">
-                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${staggerFlow ? automationBadgeClass(staggerFlow) : ui.badge("neutral")}`}>
-                    {staggerFlow ? automationStatusLabel(staggerFlow) : "—"}
-                  </span>
-                  <span>
-                    {t("admin.email.send.pendingLabel")}:{" "}
-                    <strong className="tabular-nums text-[var(--text)]">{staggerFlow?.pending_queue_count ?? "—"}</strong>
-                  </span>
+                <div className="space-y-2 text-xs text-[var(--text-muted)]">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${staggerFlow ? automationBadgeClass(staggerFlow) : ui.badge("neutral")}`}>
+                      {staggerFlow ? automationStatusLabel(staggerFlow) : "—"}
+                    </span>
+                    <span>
+                      {t("admin.email.send.staggerQueuePendingLine")
+                        .replace("{total}", String(staggerFlow?.pending_queue_count ?? "—"))
+                        .replace(
+                          "{due}",
+                          typeof staggerFlow?.pending_due_count === "number"
+                            ? String(staggerFlow.pending_due_count)
+                            : "—",
+                        )}
+                    </span>
+                  </div>
+                  {staggerFlow?.paused ? (
+                    <p className="rounded-lg border border-amber-200/80 bg-amber-50/90 px-3 py-2 text-[11px] text-amber-950">
+                      {t("admin.email.send.staggerQueuePausedNoSends")}
+                    </p>
+                  ) : null}
+                  {!staggerFlow?.paused &&
+                  typeof staggerFlow?.pending_due_count === "number" &&
+                  (staggerFlow.pending_queue_count ?? 0) > 0 &&
+                  staggerFlow.pending_due_count === 0 ? (
+                    <p className="rounded-lg border border-black/[0.06] bg-black/[0.02] px-3 py-2 text-[11px] leading-relaxed text-[var(--text-muted)]">
+                      {t("admin.email.send.staggerQueueNoDueExplain").replace("{total}", String(staggerFlow.pending_queue_count))}
+                    </p>
+                  ) : null}
                 </div>
                 {staggerErr ? (
                   <p className="text-xs text-red-700" role="alert">

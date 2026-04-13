@@ -1351,6 +1351,8 @@ export type AdminEmailAutomationItem = {
   enabled: boolean;
   paused: boolean;
   pending_queue_count: number | null;
+  /** Stagger only: pending rows whose run_at is already due (process can send). */
+  pending_due_count?: number | null;
   supports_enable_toggle: boolean;
   supports_pause: boolean;
   supports_clear_queue: boolean;

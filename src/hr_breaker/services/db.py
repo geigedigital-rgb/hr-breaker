@@ -2255,3 +2255,28 @@ async def email_stagger_pending_count(pool, *, campaign_kind: str | None = None)
                 f"SELECT COUNT(*)::int AS c FROM {EMAIL_STAGGER_RECIPIENT_TABLE} WHERE status = 'pending'"
             )
     return int(row["c"]) if row else 0
+
+
+async def email_stagger_due_pending_count(pool, *, campaign_kind: str | None = None) -> int:
+    """Pending rows with run_at <= NOW() (same filter as process_stagger claim)."""
+    async with pool.acquire() as conn:
+        if campaign_kind:
+            row = await conn.fetchrow(
+                f"""
+                SELECT COUNT(*)::int AS c
+                FROM {EMAIL_STAGGER_RECIPIENT_TABLE} r
+                INNER JOIN {EMAIL_STAGGER_RUN_TABLE} run ON r.run_id = run.id
+                WHERE r.status = 'pending' AND r.run_at <= NOW()
+                  AND run.campaign_kind = $1
+                """,
+                campaign_kind,
+            )
+        else:
+            row = await conn.fetchrow(
+                f"""
+                SELECT COUNT(*)::int AS c
+                FROM {EMAIL_STAGGER_RECIPIENT_TABLE} r
+                WHERE r.status = 'pending' AND r.run_at <= NOW()
+                """
+            )
+    return int(row["c"]) if row else 0

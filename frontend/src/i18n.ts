@@ -593,7 +593,13 @@ const en = {
         tabTools: "Advanced",
         automationPanelHeading: "Email automations",
         automationPanelHint: "Select a flow to show its actions and settings.",
-        automationsTablePending: "Pending",
+        automationsTablePending: "Queue",
+        staggerQueuePendingLine:
+          "Scheduled in queue: {total} · Ready to send now (run_at ≤ now): {due}",
+        staggerQueueNoDueExplain:
+          "All {total} rows are still waiting for their send time. Nothing goes out until each row’s run_at is in the past and something calls the stagger process endpoint (cron or the button below). This is expected right after Enroll.",
+        staggerQueuePausedNoSends: "Stagger is Paused — resume it so due rows can be processed.",
+        staggerDueShort: "due now",
         automationDetailPlaceholder:
           "This flow is listed for visibility only. Controls will appear here when it is wired on the backend.",
         mainFlowsTitle: "Active automation",
