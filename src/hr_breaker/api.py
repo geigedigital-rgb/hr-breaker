@@ -4354,21 +4354,6 @@ async def api_admin_email_stagger_process(_admin: dict = Depends(get_admin_user)
     return AdminEmailStaggerProcessOut(**raw)
 
 
-@router.post("/admin/email/stagger-campaign/process-batch")
-async def api_admin_email_stagger_process_batch(
-    _admin: dict = Depends(get_admin_user),
-    limit: int = Query(25, ge=1, le=100),
-) -> dict[str, Any]:
-    """Process up to `limit` due stagger rows (each row must have run_at <= now). Same as repeated single process."""
-    pool = await get_pool()
-    if pool is None:
-        raise HTTPException(503, "Database not configured")
-    from hr_breaker.services.email_stagger_campaign import process_stagger_due_batch
-
-    raw = await process_stagger_due_batch(pool, limit=limit)
-    return raw
-
-
 @router.get("/admin/email/user-journey", response_model=AdminUserJourneyOut)
 async def api_admin_email_user_journey(
     email: str = Query(..., min_length=3, max_length=254),

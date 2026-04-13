@@ -643,9 +643,9 @@ const en = {
         processResult: "Last process result",
         staggerTitle: "Stagger campaign — analyze + optimize, unpaid",
         staggerHint:
-          "Check who qualifies (no emails). Then set template and Enroll everyone — that queues all eligible users with spaced send times, not an instant blast. Emails go when each row’s time is due, or when you use Send below.",
+          "Check who qualifies (no emails). Set template, then Enroll everyone — that only builds the queue with per-user send times (random 3–8 minutes apart). No instant mass send: the server sends when each row’s time is reached, normally via your cron hitting the process endpoint.",
         staggerMentalModel:
-          "Check who qualifies = preview only. Enroll everyone = one click that puts every matching user on the schedule (first send in a few minutes, then every 3–8 minutes). Use Send or cron for rows whose time has arrived.",
+          "Enroll everyone does not blast mail; it schedules rows. After that, timing is enforced by run_at in the database. Optional: “Send one due email” below is only for manual testing or if you have no cron.",
         staggerDedupeNote:
           "Dedupe: after a successful send, the user is written to email_stagger_sent_log for this campaign kind and will not appear in Preview or Enroll again. Users still waiting in the queue (pending/processing) are also excluded from a second snapshot. Skipped or failed rows do not write that log, so those users can appear in a future run if they still match the rules.",
         staggerStepPreview: "1. Check who qualifies",
@@ -657,25 +657,18 @@ const en = {
         staggerStepSnapshot: "3. Enroll everyone (queue + schedule)",
         staggerStepSnapshotBody:
           "One click: writes all eligible users into the database with future send times. Blocked while this campaign already has an open queue — finish or wait until it drains.",
-        staggerStepSend: "4. Send when due",
+        staggerStepSend: "4. Optional — send when due",
         staggerStepSendBody:
-          "Only rows whose scheduled time has passed are sent. Send one = one email. Send batch (25) = up to 25 due rows in one request (same as clicking Send one many times).",
+          "In production, a cron job should call the stagger process endpoint so each row sends when its scheduled time passes. The button here sends at most one due row per click (for debugging or if cron is off).",
         staggerPauseResumeHint:
-          "Pause / Resume stops or allows the server to pick up due rows (manual sends and background/cron processing).",
+          "Pause / Resume stops or allows the server to process due rows (cron and the optional one-send button).",
         staggerPreviewSampleTitle: "Sample user ids ({shown} of {total})",
         staggerPreviewSampleMore: "… and {more} more — not shown here, but included when you build the queue.",
         staggerTemplateLabel: "Template (app id or Resend id)",
         staggerTemplateMissing: "Enter a template id.",
         staggerPreview: "Check who qualifies",
         staggerSnapshot: "Enroll everyone (queue + schedule)",
-        staggerProcess: "Send one due email",
-        staggerProcessBatch: "Send due emails (batch 25)",
-        staggerProcessBatchHint:
-          "Processes up to 25 recipients whose send time is already due. Right after enrolling, often 0–1 are due; run again later or rely on cron.",
-        staggerBatchSummary:
-          "Batch finished: {iter} attempts · sent {sent} · failed {fail} · skipped marketing {sm} · skipped paid {sp}",
-        staggerBatchPaused: "Campaign is paused — no further sends in this batch until you resume.",
-        staggerBatchDetails: "Per-attempt details",
+        staggerProcess: "Send one due email (manual / test)",
         staggerSnapshotConfirm:
           "Build the send queue now? This freezes the current cohort. You cannot start another snapshot for this flow while pending sends exist.",
         staggerPreviewSummary:
