@@ -1,4 +1,4 @@
-"""One-shot staggered email campaign: snapshot eligible users, queue with 3–8 min gaps, process one send per call."""
+"""One-shot staggered email campaign: snapshot eligible users (≥1 successful analyze), queue with 3–8 min gaps."""
 
 from __future__ import annotations
 
@@ -14,6 +14,8 @@ from hr_breaker.services.db import (
     admin_email_settings_get,
     email_stagger_active_recipient_exists,
     email_stagger_claim_next_due,
+    email_stagger_eligible_count,
+    email_stagger_eligible_sample_emails,
     email_stagger_eligible_user_ids,
     email_stagger_mark_failed,
     email_stagger_mark_sent,
@@ -53,14 +55,18 @@ async def preview_stagger_campaign(
     campaign_kind: str = CAMPAIGN_KIND_ANALYZE_OPTIMIZE_UNPAID,
     max_sample: int = 8,
 ) -> dict:
-    ids = await email_stagger_eligible_user_ids(pool, campaign_kind=campaign_kind)
     active = await email_stagger_active_recipient_exists(pool, campaign_kind=campaign_kind)
     pending = await email_stagger_pending_count(pool, campaign_kind=campaign_kind)
     cap = max(0, min(int(max_sample), 500))
+    eligible_count = await email_stagger_eligible_count(pool, campaign_kind=campaign_kind)
+    sample_emails: list[str] = []
+    if cap > 0:
+        sample_emails = await email_stagger_eligible_sample_emails(pool, campaign_kind=campaign_kind, limit=cap)
     return {
         "campaign_kind": campaign_kind,
-        "eligible_count": len(ids),
-        "sample_user_ids": ids[:cap] if cap else [],
+        "eligible_count": eligible_count,
+        "sample_user_ids": [],
+        "sample_emails": sample_emails,
         "has_active_queue_for_kind": active,
         "pending_count": pending,
     }

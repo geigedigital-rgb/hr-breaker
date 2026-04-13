@@ -39,9 +39,10 @@ AUTOMATION_DEFINITIONS: list[AutomationDef] = [
         "id": "analyze_optimize_stagger_campaign",
         "name": "Analyze + optimize (unpaid) — staggered one-shot",
         "description": (
-            "Manual snapshot: all users who ever completed a successful analyze and optimize, still unpaid, "
-            "marketing OK. Queue is built once with random 3–8 minutes between sends; each user receives at most "
-            "one email for this campaign kind. Process one send per cron or admin call until the queue is empty."
+            "Manual snapshot: all users who completed at least one successful analyze (ATS score or insights), "
+            "still unpaid, marketing OK, with a non-empty email. Queue is built once with random 3–8 minutes between "
+            "sends; each user receives at most one email for this campaign kind. Process one send per cron or admin "
+            "call until the queue is empty."
         ),
         "channel": "queue",
         "dedupe_summary": (
@@ -50,9 +51,9 @@ AUTOMATION_DEFINITIONS: list[AutomationDef] = [
             "Admin: clear-pending-queue for this automation id removes pending/processing recipients (not sent_log)."
         ),
         "conditions_code": (
-            "Eligible: usage_audit_log has successful analyze_ats_score or analyze_insights AND optimize_complete; "
-            "unpaid; not admin_blocked; marketing_emails_opt_in. Template: app id (e.g. ahead-of-candidates) or "
-            "Resend published template id."
+            "Eligible: usage_audit_log has successful analyze_ats_score or analyze_insights (optimize not required); "
+            "unpaid; not admin_blocked; marketing_emails_opt_in; non-empty email. Template: Resend published id or "
+            "app template alias."
         ),
         "wired": True,
     },

@@ -129,7 +129,7 @@ RESEND_TEMPLATE_SHORT_NUDGE=другой_id
 4. **Обработка очередей (win-back + stagger)**: Resend **не** опрашивает сам. Один и тот же вызов по расписанию:  
    `POST /api/admin/email/queue/process?limit=25`  
    с `Authorization: Bearer <JWT админа>` — обрабатывает **до 25** просроченных win-back (если авто включено и не на паузе) **и до 25** просроченных stagger-строк (если stagger не на паузе). Отдельный `POST .../stagger-campaign/process` — только **одна** stagger-отправка за вызов (для отладки).  
-   **Stagger:** после Enroll у строк свои `run_at` (интервалы 3–8 мин). В админке для stagger показаны «всего в очереди» и «due now».  
+   **Stagger:** когорта — пользователи с **успешным анализом** (`analyze_ats_score` / `analyze_insights` в `usage_audit_log`), без платной подписки, с согласием на маркетинг и непустым email; optimize не обязателен. После Launch у строк свои `run_at` (интервалы 3–8 мин). В админке — превью списка email (сэмпл) и счётчик eligible.  
    **Сброс stagger:** кнопка «Clear stagger queue» или `POST .../automations/analyze_optimize_stagger_campaign/clear-pending-queue` — удаляет `pending`/`processing`; `sent_log` не трогаем.
 5. **Ручная рассылка**: сегмент, дни, лимит, шаблон → Preview → при необходимости снять «Dry run» и отправить.
 

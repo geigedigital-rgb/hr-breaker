@@ -2038,7 +2038,7 @@ async def email_stagger_active_recipient_exists(pool, *, campaign_kind: str) -> 
 
 
 async def email_stagger_eligible_user_ids(pool, *, campaign_kind: str) -> list[str]:
-    """Users with successful analyze + optimize, unpaid, marketing OK.
+    """Users with at least one successful analyze, unpaid, marketing OK, non-empty email.
 
     Excludes: (1) any row in email_stagger_sent_log for this campaign_kind — set only after a successful Resend send;
     (2) users with a pending/processing row for this campaign_kind (open queue / in-flight send).
@@ -2052,21 +2052,14 @@ async def email_stagger_eligible_user_ids(pool, *, campaign_kind: str) -> list[s
                 WHERE success = TRUE
                   AND user_id IS NOT NULL
                   AND action IN ('analyze_ats_score', 'analyze_insights')
-            ),
-            optimized AS (
-                SELECT DISTINCT user_id AS uid
-                FROM {USAGE_AUDIT_TABLE}
-                WHERE success = TRUE
-                  AND user_id IS NOT NULL
-                  AND action = 'optimize_complete'
             )
             SELECT u.id::text AS id
             FROM {USERS_TABLE} u
             INNER JOIN analyzed a ON a.uid = u.id
-            INNER JOIN optimized o ON o.uid = u.id
             WHERE {_sql_user_is_unpaid()}
               AND COALESCE(u.admin_blocked, FALSE) = FALSE
               AND {_sql_user_marketing_opt_in()}
+              AND NULLIF(TRIM(COALESCE(u.email, '')), '') IS NOT NULL
               AND NOT EXISTS (
                 SELECT 1 FROM {EMAIL_STAGGER_SENT_LOG_TABLE} s
                 WHERE s.user_id = u.id AND s.campaign_kind = $1
@@ -2084,6 +2077,84 @@ async def email_stagger_eligible_user_ids(pool, *, campaign_kind: str) -> list[s
             campaign_kind,
         )
     return [str(r["id"]) for r in rows]
+
+
+async def email_stagger_eligible_count(pool, *, campaign_kind: str) -> int:
+    """Count users matching the same rules as email_stagger_eligible_user_ids (without materializing all ids)."""
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            f"""
+            WITH analyzed AS (
+                SELECT DISTINCT user_id AS uid
+                FROM {USAGE_AUDIT_TABLE}
+                WHERE success = TRUE
+                  AND user_id IS NOT NULL
+                  AND action IN ('analyze_ats_score', 'analyze_insights')
+            )
+            SELECT COUNT(*)::int AS c
+            FROM {USERS_TABLE} u
+            INNER JOIN analyzed a ON a.uid = u.id
+            WHERE {_sql_user_is_unpaid()}
+              AND COALESCE(u.admin_blocked, FALSE) = FALSE
+              AND {_sql_user_marketing_opt_in()}
+              AND NULLIF(TRIM(COALESCE(u.email, '')), '') IS NOT NULL
+              AND NOT EXISTS (
+                SELECT 1 FROM {EMAIL_STAGGER_SENT_LOG_TABLE} s
+                WHERE s.user_id = u.id AND s.campaign_kind = $1
+              )
+              AND NOT EXISTS (
+                SELECT 1
+                FROM {EMAIL_STAGGER_RECIPIENT_TABLE} r
+                INNER JOIN {EMAIL_STAGGER_RUN_TABLE} run ON r.run_id = run.id
+                WHERE r.user_id = u.id
+                  AND run.campaign_kind = $1
+                  AND r.status IN ('pending', 'processing')
+              )
+            """,
+            campaign_kind,
+        )
+    return int(row["c"]) if row and row["c"] is not None else 0
+
+
+async def email_stagger_eligible_sample_emails(pool, *, campaign_kind: str, limit: int) -> list[str]:
+    """First `limit` emails (same cohort as stagger eligible), ordered by account created_at."""
+    lim = max(1, min(int(limit), 500))
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            f"""
+            WITH analyzed AS (
+                SELECT DISTINCT user_id AS uid
+                FROM {USAGE_AUDIT_TABLE}
+                WHERE success = TRUE
+                  AND user_id IS NOT NULL
+                  AND action IN ('analyze_ats_score', 'analyze_insights')
+            )
+            SELECT TRIM(u.email) AS email
+            FROM {USERS_TABLE} u
+            INNER JOIN analyzed a ON a.uid = u.id
+            WHERE {_sql_user_is_unpaid()}
+              AND COALESCE(u.admin_blocked, FALSE) = FALSE
+              AND {_sql_user_marketing_opt_in()}
+              AND NULLIF(TRIM(COALESCE(u.email, '')), '') IS NOT NULL
+              AND NOT EXISTS (
+                SELECT 1 FROM {EMAIL_STAGGER_SENT_LOG_TABLE} s
+                WHERE s.user_id = u.id AND s.campaign_kind = $1
+              )
+              AND NOT EXISTS (
+                SELECT 1
+                FROM {EMAIL_STAGGER_RECIPIENT_TABLE} r
+                INNER JOIN {EMAIL_STAGGER_RUN_TABLE} run ON r.run_id = run.id
+                WHERE r.user_id = u.id
+                  AND run.campaign_kind = $1
+                  AND r.status IN ('pending', 'processing')
+              )
+            ORDER BY u.created_at ASC
+            LIMIT $2
+            """,
+            campaign_kind,
+            lim,
+        )
+    return [str(r["email"]).strip() for r in rows if r.get("email")]
 
 
 async def email_stagger_run_insert(

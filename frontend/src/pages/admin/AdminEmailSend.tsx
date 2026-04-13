@@ -418,10 +418,12 @@ export default function AdminEmailSend() {
     setStaggerInfo(null);
     logEmailAdmin("stagger_preview", "GET stagger-campaign/preview");
     try {
-      const p = await getAdminEmailStaggerPreview({ maxIds: 0 });
+      const p = await getAdminEmailStaggerPreview({ maxIds: 200 });
       setStaggerPreview(p);
+      const emails = p.sample_emails ?? [];
       logEmailAdmin("stagger_preview", "Stagger eligible cohort", {
         eligible_count: p.eligible_count,
+        sample_emails_returned: emails.length,
         pending_count: p.pending_count,
         has_active_queue_for_kind: p.has_active_queue_for_kind,
         campaign_kind: p.campaign_kind,
@@ -735,6 +737,27 @@ export default function AdminEmailSend() {
                     ↻
                   </button>
                 </div>
+
+                {staggerPreview && (staggerPreview.sample_emails?.length ?? 0) > 0 ? (
+                  <div className="space-y-2">
+                    <p className="text-[11px] font-medium text-[var(--text-tertiary)]">
+                      {t("admin.email.send.staggerSampleEmailsCaption")
+                        .replace("{shown}", String(staggerPreview.sample_emails?.length ?? 0))
+                        .replace("{total}", String(staggerPreview.eligible_count))}
+                    </p>
+                    <pre className="max-h-56 overflow-auto rounded-xl border border-black/[0.06] bg-black/[0.02] p-3 font-mono text-[11px] leading-relaxed text-[var(--text)]">
+                      {(staggerPreview.sample_emails ?? []).join("\n")}
+                    </pre>
+                    {staggerPreview.eligible_count > (staggerPreview.sample_emails?.length ?? 0) ? (
+                      <p className="text-[11px] text-[var(--text-muted)]">
+                        {t("admin.email.send.staggerSampleEmailsMore").replace(
+                          "{n}",
+                          String(staggerPreview.eligible_count - (staggerPreview.sample_emails?.length ?? 0)),
+                        )}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
 
                 {/* Queue status */}
                 {(staggerFlow?.pending_queue_count ?? 0) > 0 ? (

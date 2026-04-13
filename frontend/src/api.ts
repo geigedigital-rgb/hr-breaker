@@ -1397,19 +1397,26 @@ export async function postAdminEmailClearPendingQueue(automationId: string): Pro
 export type AdminEmailStaggerPreview = {
   campaign_kind: string;
   eligible_count: number;
+  /** Deprecated; preview returns sample_emails instead. */
   sample_user_ids: string[];
+  sample_emails?: string[];
   has_active_queue_for_kind: boolean;
   pending_count: number;
 };
 
 export async function getAdminEmailStaggerPreview(opts?: { maxIds?: number }): Promise<AdminEmailStaggerPreview> {
   const q = new URLSearchParams();
-  if (opts?.maxIds != null && opts.maxIds > 0) q.set("max_ids", String(Math.min(500, Math.floor(opts.maxIds))));
+  const lim = opts?.maxIds != null ? Math.min(500, Math.floor(opts.maxIds)) : 200;
+  if (lim >= 0) q.set("max_ids", String(lim));
   const qs = q.toString();
   const r = await fetch(`${API}/admin/email/stagger-campaign/preview${qs ? `?${qs}` : ""}`, { headers: authHeaders() });
   const data = await parseJsonOrThrow<AdminEmailStaggerPreview & { detail?: string }>(r);
   if (!r.ok) throw new Error((data as { detail?: string }).detail || r.statusText);
-  return data;
+  return {
+    ...data,
+    sample_user_ids: data.sample_user_ids ?? [],
+    sample_emails: data.sample_emails ?? [],
+  };
 }
 
 export type AdminEmailStaggerSnapshot = {

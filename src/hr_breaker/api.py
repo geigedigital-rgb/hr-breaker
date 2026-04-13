@@ -1339,7 +1339,8 @@ class AdminEmailClearQueueOut(BaseModel):
 class AdminEmailStaggerPreviewOut(BaseModel):
     campaign_kind: str
     eligible_count: int
-    sample_user_ids: list[str]
+    sample_user_ids: list[str] = Field(default_factory=list)
+    sample_emails: list[str] = Field(default_factory=list)
     has_active_queue_for_kind: bool
     pending_count: int
 
@@ -4326,7 +4327,12 @@ async def api_admin_email_automations_clear_queue(
 
 @router.get("/admin/email/stagger-campaign/preview", response_model=AdminEmailStaggerPreviewOut)
 async def api_admin_email_stagger_preview(
-    max_ids: int = Query(100, ge=1, le=500, description="How many user ids to return in sample_user_ids (capped)."),
+    max_ids: int = Query(
+        100,
+        ge=0,
+        le=500,
+        description="How many sample emails to return (same cohort as snapshot); 0 = count only, no addresses.",
+    ),
     _admin: dict = Depends(get_admin_user),
 ) -> AdminEmailStaggerPreviewOut:
     pool = await get_pool()
