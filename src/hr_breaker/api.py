@@ -115,6 +115,7 @@ from hr_breaker.services.db import (
     email_winback_pending_count,
     email_winback_delete_all_pending,
     email_winback_pending_list_for_user,
+    admin_email_audience_list,
     email_stagger_pending_count,
     email_stagger_due_pending_count,
     email_stagger_delete_all_pending_and_processing,
@@ -1334,6 +1335,25 @@ class AdminEmailAutomationPatchBody(BaseModel):
 
 class AdminEmailClearQueueOut(BaseModel):
     deleted: int
+
+
+class AdminEmailAudienceUserOut(BaseModel):
+    id: str
+    email: str | None = None
+    name: str | None = None
+    created_at: str
+    marketing_emails_opt_in: bool | None = None
+    has_analyzed: bool
+    has_optimized: bool
+    winback_sent: int = 0
+    winback_last_sent: str | None = None
+    stagger_sent_count: int = 0
+    stagger_campaign_kinds: str | None = None
+
+
+class AdminEmailAudienceResponse(BaseModel):
+    items: list[AdminEmailAudienceUserOut]
+    total: int
 
 
 class AdminEmailStaggerPreviewOut(BaseModel):
@@ -4323,6 +4343,41 @@ async def api_admin_email_automations_clear_queue(
         n = await email_stagger_delete_all_pending_and_processing(pool, campaign_kind=CAMPAIGN_KIND_ANALYZE_OPTIMIZE_UNPAID)
         return AdminEmailClearQueueOut(deleted=n)
     raise HTTPException(400, "Unknown automation for clear-pending-queue.")
+
+
+@router.get("/admin/email/audience", response_model=AdminEmailAudienceResponse)
+async def api_admin_email_audience(
+    _admin: dict = Depends(get_admin_user),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    q: str | None = Query(None, max_length=200, description="Filter by email substring (case-insensitive)."),
+    activity: Literal["any", "analyzed", "optimized", "login_only"] = Query(
+        "any",
+        description="Product activity: any; analyzed; optimized; login_only = no successful analyze/optimize in audit.",
+    ),
+) -> AdminEmailAudienceResponse:
+    """All users (paginated) with analyze/optimize flags and recorded marketing sends (win-back + stagger)."""
+    pool = await get_pool()
+    if pool is None:
+        raise HTTPException(503, "Database not configured")
+    rows, total = await admin_email_audience_list(pool, limit=limit, offset=offset, search=q, activity=activity)
+    items = [
+        AdminEmailAudienceUserOut(
+            id=str(r["id"]),
+            email=r.get("email"),
+            name=r.get("name"),
+            created_at=str(r.get("created_at") or ""),
+            marketing_emails_opt_in=r.get("marketing_emails_opt_in"),
+            has_analyzed=bool(r.get("has_analyzed")),
+            has_optimized=bool(r.get("has_optimized")),
+            winback_sent=int(r.get("winback_sent") or 0),
+            winback_last_sent=str(r["winback_last_sent"]) if r.get("winback_last_sent") else None,
+            stagger_sent_count=int(r.get("stagger_sent_count") or 0),
+            stagger_campaign_kinds=str(r["stagger_campaign_kinds"]) if r.get("stagger_campaign_kinds") else None,
+        )
+        for r in rows
+    ]
+    return AdminEmailAudienceResponse(items=items, total=total)
 
 
 @router.get("/admin/email/stagger-campaign/preview", response_model=AdminEmailStaggerPreviewOut)

@@ -1253,6 +1253,43 @@ export type AdminEmailControl = {
   resend_template_short_nudge: string;
 };
 
+export type AdminEmailAudienceUser = {
+  id: string;
+  email: string | null;
+  name: string | null;
+  created_at: string;
+  marketing_emails_opt_in: boolean | null;
+  has_analyzed: boolean;
+  has_optimized: boolean;
+  winback_sent: number;
+  winback_last_sent: string | null;
+  stagger_sent_count: number;
+  stagger_campaign_kinds: string | null;
+};
+
+export type AdminEmailAudienceResponse = {
+  items: AdminEmailAudienceUser[];
+  total: number;
+};
+
+export async function getAdminEmailAudience(opts: {
+  limit?: number;
+  offset?: number;
+  q?: string;
+  activity?: "any" | "analyzed" | "optimized" | "login_only";
+}): Promise<AdminEmailAudienceResponse> {
+  const q = new URLSearchParams();
+  if (opts.limit != null) q.set("limit", String(opts.limit));
+  if (opts.offset != null) q.set("offset", String(opts.offset));
+  if (opts.q?.trim()) q.set("q", opts.q.trim());
+  if (opts.activity && opts.activity !== "any") q.set("activity", opts.activity);
+  const qs = q.toString();
+  const r = await fetch(`${API}/admin/email/audience${qs ? `?${qs}` : ""}`, { headers: authHeaders() });
+  const data = await parseJsonOrThrow<AdminEmailAudienceResponse & { detail?: string }>(r);
+  if (!r.ok) throw new Error((data as { detail?: string }).detail || r.statusText);
+  return data;
+}
+
 export async function getAdminEmailControl(): Promise<AdminEmailControl> {
   const r = await fetch(`${API}/admin/email/control`, { headers: authHeaders() });
   const data = await parseJsonOrThrow<AdminEmailControl & { detail?: string }>(r);

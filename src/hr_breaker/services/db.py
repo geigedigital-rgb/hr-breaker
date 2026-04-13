@@ -2381,3 +2381,126 @@ async def email_stagger_delete_all_pending_and_processing(pool, *, campaign_kind
         except Exception:
             return 0
     return 0
+
+
+async def admin_email_audience_list(
+    pool,
+    *,
+    limit: int,
+    offset: int,
+    search: str | None = None,
+    activity: str | None = None,
+) -> tuple[list[dict[str, Any]], int]:
+    """Paginated users with activity flags and tracked outbound email stats (win-back + stagger).
+
+    activity: any | analyzed | optimized | login_only (no successful analyze or optimize in audit).
+    """
+    act = (activity or "any").strip().lower()
+    if act == "analyzed":
+        activity_code = 1
+    elif act == "optimized":
+        activity_code = 2
+    elif act == "login_only":
+        activity_code = 3
+    else:
+        activity_code = 0
+
+    pat = None
+    s = (search or "").strip()
+    if s:
+        pat = f"%{s}%"
+
+    where_activity = f"""
+    AND (
+        $2::int = 0
+        OR ($2::int = 1 AND EXISTS (
+            SELECT 1 FROM {USAGE_AUDIT_TABLE} ua
+            WHERE ua.user_id = u.id AND ua.success = TRUE
+              AND ua.action IN ('analyze_ats_score', 'analyze_insights')
+        ))
+        OR ($2::int = 2 AND EXISTS (
+            SELECT 1 FROM {USAGE_AUDIT_TABLE} ua
+            WHERE ua.user_id = u.id AND ua.success = TRUE AND ua.action = 'optimize_complete'
+        ))
+        OR ($2::int = 3 AND NOT EXISTS (
+            SELECT 1 FROM {USAGE_AUDIT_TABLE} ua
+            WHERE ua.user_id = u.id AND ua.success = TRUE
+              AND ua.action IN ('analyze_ats_score', 'analyze_insights')
+        ) AND NOT EXISTS (
+            SELECT 1 FROM {USAGE_AUDIT_TABLE} ua2
+            WHERE ua2.user_id = u.id AND ua2.success = TRUE AND ua2.action = 'optimize_complete'
+        ))
+    )
+    """
+
+    base_where = f"""
+    WHERE ($1::text IS NULL OR u.email ILIKE $1)
+    {where_activity}
+    """
+
+    lim = max(1, min(int(limit), 200))
+    off = max(0, int(offset))
+
+    async with pool.acquire() as conn:
+        count_row = await conn.fetchrow(
+            f"SELECT COUNT(*)::int AS c FROM {USERS_TABLE} u {base_where}",
+            pat,
+            activity_code,
+        )
+        total = int(count_row["c"]) if count_row else 0
+
+        rows = await conn.fetch(
+            f"""
+            SELECT
+                u.id,
+                u.email,
+                u.name,
+                u.created_at,
+                u.marketing_emails_opt_in,
+                EXISTS (
+                    SELECT 1 FROM {USAGE_AUDIT_TABLE} ua
+                    WHERE ua.user_id = u.id AND ua.success = TRUE
+                      AND ua.action IN ('analyze_ats_score', 'analyze_insights')
+                ) AS has_analyzed,
+                EXISTS (
+                    SELECT 1 FROM {USAGE_AUDIT_TABLE} ua
+                    WHERE ua.user_id = u.id AND ua.success = TRUE AND ua.action = 'optimize_complete'
+                ) AS has_optimized,
+                COALESCE((
+                    SELECT COUNT(*)::int FROM {EMAIL_WINBACK_SCHEDULE_TABLE} w
+                    WHERE w.user_id = u.id AND w.status = 'sent'
+                ), 0) AS winback_sent,
+                (
+                    SELECT MAX(w.sent_at) FROM {EMAIL_WINBACK_SCHEDULE_TABLE} w
+                    WHERE w.user_id = u.id AND w.status = 'sent'
+                ) AS winback_last_sent,
+                COALESCE((
+                    SELECT COUNT(*)::int FROM {EMAIL_STAGGER_SENT_LOG_TABLE} s
+                    WHERE s.user_id = u.id
+                ), 0) AS stagger_sent_count,
+                (
+                    SELECT string_agg(sub.campaign_kind, ', ' ORDER BY sub.campaign_kind)
+                    FROM (SELECT DISTINCT campaign_kind FROM {EMAIL_STAGGER_SENT_LOG_TABLE} s2
+                          WHERE s2.user_id = u.id) sub
+                ) AS stagger_campaign_kinds
+            FROM {USERS_TABLE} u
+            {base_where}
+            ORDER BY u.created_at DESC
+            LIMIT $3 OFFSET $4
+            """,
+            pat,
+            activity_code,
+            lim,
+            off,
+        )
+
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        d = dict(r)
+        if d.get("created_at") is not None and hasattr(d["created_at"], "isoformat"):
+            d["created_at"] = d["created_at"].isoformat()
+        if d.get("winback_last_sent") is not None and hasattr(d["winback_last_sent"], "isoformat"):
+            d["winback_last_sent"] = d["winback_last_sent"].isoformat()
+        d["id"] = str(d["id"])
+        out.append(d)
+    return out, total
