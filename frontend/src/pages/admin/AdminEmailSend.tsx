@@ -13,12 +13,14 @@ import {
   getAdminEmailStaggerPreview,
   postAdminEmailStaggerSnapshot,
   postAdminEmailStaggerProcess,
+  postAdminEmailStaggerProcessBatch,
   type AdminEmailAutomationItem,
   type AdminEmailAutomationsList,
   type AdminEmailControl,
   type AdminEmailCtaInfo,
   type AdminEmailStaggerPreview,
   type AdminEmailStaggerProcess,
+  type AdminEmailStaggerProcessBatch,
   type AdminResendTemplate,
   type AdminEmailSendOneResult,
   type AdminUserJourney,
@@ -126,6 +128,7 @@ export default function AdminEmailSend() {
   const [staggerErr, setStaggerErr] = useState<string | null>(null);
   const [staggerBusy, setStaggerBusy] = useState<string | null>(null);
   const [staggerProcessResult, setStaggerProcessResult] = useState<AdminEmailStaggerProcess | null>(null);
+  const [staggerBatchResult, setStaggerBatchResult] = useState<AdminEmailStaggerProcessBatch | null>(null);
   const [staggerInfo, setStaggerInfo] = useState<string | null>(null);
 
   const postWinback = automations?.items.find((i) => i.id === "post_optimize_winback");
@@ -313,6 +316,7 @@ export default function AdminEmailSend() {
     setStaggerBusy("preview");
     setStaggerErr(null);
     setStaggerInfo(null);
+    setStaggerBatchResult(null);
     try {
       const p = await getAdminEmailStaggerPreview({ maxIds: 200 });
       setStaggerPreview(p);
@@ -337,6 +341,7 @@ export default function AdminEmailSend() {
       const out = await postAdminEmailStaggerSnapshot({ template_id: tid });
       setStaggerPreview(null);
       setStaggerProcessResult(null);
+      setStaggerBatchResult(null);
       setStaggerInfo(
         t("admin.email.send.staggerSnapshotOk")
           .replace("{n}", String(out.enqueued))
@@ -353,9 +358,25 @@ export default function AdminEmailSend() {
   const onStaggerProcess = async () => {
     setStaggerBusy("process");
     setStaggerErr(null);
+    setStaggerBatchResult(null);
     try {
       const out = await postAdminEmailStaggerProcess();
       setStaggerProcessResult(out);
+      void reload();
+    } catch (e) {
+      setStaggerErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setStaggerBusy(null);
+    }
+  };
+
+  const onStaggerProcessBatch = async () => {
+    setStaggerBusy("batch");
+    setStaggerErr(null);
+    setStaggerProcessResult(null);
+    try {
+      const out = await postAdminEmailStaggerProcessBatch(25);
+      setStaggerBatchResult(out);
       void reload();
     } catch (e) {
       setStaggerErr(e instanceof Error ? e.message : String(e));
@@ -588,6 +609,9 @@ export default function AdminEmailSend() {
                 <div>
                   <h4 className="text-base font-semibold text-[var(--text)]">{t("admin.email.send.staggerTitle")}</h4>
                   <p className="mt-1 text-xs leading-relaxed text-[var(--text-muted)]">{t("admin.email.send.staggerHint")}</p>
+                  <p className="mt-2 rounded-lg border border-black/[0.06] bg-white/80 px-3 py-2 text-[11px] leading-relaxed text-[var(--text-muted)]">
+                    {t("admin.email.send.staggerMentalModel")}
+                  </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--text-muted)]">
                   <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${staggerFlow ? automationBadgeClass(staggerFlow) : ui.badge("neutral")}`}>
@@ -674,7 +698,11 @@ export default function AdminEmailSend() {
                     <p className="mt-1 text-[11px] leading-relaxed text-[var(--text-muted)]">{t("admin.email.send.staggerStepSnapshotBody")}</p>
                     <button
                       type="button"
-                      disabled={staggerBusy != null || !!(staggerPreview?.has_active_queue_for_kind)}
+                      disabled={
+                        staggerBusy != null ||
+                        !!(staggerPreview?.has_active_queue_for_kind) ||
+                        (staggerFlow?.pending_queue_count ?? 0) > 0
+                      }
                       onClick={() => void onStaggerSnapshot()}
                       className={`${ui.btnPrimary} mt-2`}
                     >
@@ -688,10 +716,42 @@ export default function AdminEmailSend() {
                   <div>
                     <p className="text-xs font-semibold text-[var(--text)]">{t("admin.email.send.staggerStepSend")}</p>
                     <p className="mt-1 text-[11px] leading-relaxed text-[var(--text-muted)]">{t("admin.email.send.staggerStepSendBody")}</p>
-                    <button type="button" disabled={staggerBusy != null} onClick={() => void onStaggerProcess()} className={`${ui.btnSecondary} mt-2`}>
-                      {staggerBusy === "process" ? "…" : t("admin.email.send.staggerProcess")}
-                    </button>
+                    <p className="mt-2 text-[11px] text-[var(--text-tertiary)]">{t("admin.email.send.staggerProcessBatchHint")}</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <button type="button" disabled={staggerBusy != null} onClick={() => void onStaggerProcess()} className={ui.btnSecondary}>
+                        {staggerBusy === "process" ? "…" : t("admin.email.send.staggerProcess")}
+                      </button>
+                      <button type="button" disabled={staggerBusy != null} onClick={() => void onStaggerProcessBatch()} className={ui.btnSecondary}>
+                        {staggerBusy === "batch" ? "…" : t("admin.email.send.staggerProcessBatch")}
+                      </button>
+                    </div>
                   </div>
+                  {staggerBatchResult ? (
+                    <div className="space-y-1 border-t border-black/[0.06] pt-3">
+                      <p className={`text-xs font-medium ${staggerBatchResult.ok ? "text-emerald-800" : "text-red-800"}`}>
+                        {t("admin.email.send.staggerBatchSummary")
+                          .replace("{iter}", String(staggerBatchResult.iterations))
+                          .replace("{sent}", String(staggerBatchResult.sent))
+                          .replace("{fail}", String(staggerBatchResult.failed))
+                          .replace("{sm}", String(staggerBatchResult.skipped_marketing))
+                          .replace("{sp}", String(staggerBatchResult.skipped_paid))}
+                      </p>
+                      {staggerBatchResult.paused ? (
+                        <p className="text-xs text-amber-800">{t("admin.email.send.staggerBatchPaused")}</p>
+                      ) : null}
+                      {staggerBatchResult.error ? (
+                        <p className="text-xs text-red-700">{String(staggerBatchResult.error)}</p>
+                      ) : null}
+                      <details className="rounded-lg border border-black/[0.06] bg-white/80 px-2 py-1.5">
+                        <summary className="cursor-pointer text-[10px] font-medium text-[var(--text-muted)]">
+                          {t("admin.email.send.staggerBatchDetails")}
+                        </summary>
+                        <pre className="mt-2 max-h-40 overflow-auto text-[10px] leading-relaxed text-[var(--text)]">
+                          {JSON.stringify(staggerBatchResult.runs, null, 2)}
+                        </pre>
+                      </details>
+                    </div>
+                  ) : null}
                   {staggerProcessResult ? (
                     <pre className="max-h-28 overflow-auto rounded-lg border border-black/[0.06] bg-white p-2 text-[10px] text-[var(--text)]">
                       {JSON.stringify(staggerProcessResult, null, 2)}

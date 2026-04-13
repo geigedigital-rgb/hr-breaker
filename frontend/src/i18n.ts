@@ -643,28 +643,37 @@ const en = {
         processResult: "Last process result",
         staggerTitle: "Stagger campaign — analyze + optimize, unpaid",
         staggerHint:
-          "Workflow: preview → set template id → build queue → send. Snapshot freezes the eligible cohort into timed rows (random 3–8 minutes between sends). “Process one send” handles one due row per click (cron does the same). Users who already got this campaign kind are skipped forever.",
-        staggerStepPreview: "1. Preview",
+          "Check who qualifies (no emails). Then set template and Enroll everyone — that queues all eligible users with spaced send times, not an instant blast. Emails go when each row’s time is due, or when you use Send below.",
+        staggerMentalModel:
+          "Check who qualifies = preview only. Enroll everyone = one click that puts every matching user on the schedule (first send in a few minutes, then every 3–8 minutes). Use Send or cron for rows whose time has arrived.",
+        staggerStepPreview: "1. Check who qualifies",
         staggerStepPreviewBody:
-          "Loads who matches the rules right now. Does not read the template field. The list below is a sample; Build queue still enqueues every eligible user.",
+          "No template required. Shows how many users match and a sample of user ids. Everyone eligible is still included when you enroll — not only the sample.",
         staggerStepTemplate: "2. Template id",
         staggerStepTemplateBody:
-          "Alias from your app (e.g. ahead-of-candidates) or a Resend template id. Required before Build queue — it is saved on each queued recipient.",
-        staggerStepSnapshot: "3. Build queue (snapshot)",
+          "Alias from your app (e.g. ahead-of-candidates) or a Resend template id. Required before Enroll everyone — stored on each queued recipient.",
+        staggerStepSnapshot: "3. Enroll everyone (queue + schedule)",
         staggerStepSnapshotBody:
-          "Writes all eligible users into the DB with scheduled send times. Blocked if a queue for this campaign is already open — finish sending first.",
-        staggerStepSend: "4. Send",
+          "One click: writes all eligible users into the database with future send times. Blocked while this campaign already has an open queue — finish or wait until it drains.",
+        staggerStepSend: "4. Send when due",
         staggerStepSendBody:
-          "One click = at most one email whose scheduled time has passed. Repeat (or rely on cron) until pending is 0.",
+          "Only rows whose scheduled time has passed are sent. Send one = one email. Send batch (25) = up to 25 due rows in one request (same as clicking Send one many times).",
         staggerPauseResumeHint:
-          "Pause / Resume controls whether the server will pick up due rows (manual “Process one send” and background processing).",
+          "Pause / Resume stops or allows the server to pick up due rows (manual sends and background/cron processing).",
         staggerPreviewSampleTitle: "Sample user ids ({shown} of {total})",
         staggerPreviewSampleMore: "… and {more} more — not shown here, but included when you build the queue.",
         staggerTemplateLabel: "Template (app id or Resend id)",
         staggerTemplateMissing: "Enter a template id.",
-        staggerPreview: "Preview eligible",
-        staggerSnapshot: "Build queue (snapshot)",
-        staggerProcess: "Process one send",
+        staggerPreview: "Check who qualifies",
+        staggerSnapshot: "Enroll everyone (queue + schedule)",
+        staggerProcess: "Send one due email",
+        staggerProcessBatch: "Send due emails (batch 25)",
+        staggerProcessBatchHint:
+          "Processes up to 25 recipients whose send time is already due. Right after enrolling, often 0–1 are due; run again later or rely on cron.",
+        staggerBatchSummary:
+          "Batch finished: {iter} attempts · sent {sent} · failed {fail} · skipped marketing {sm} · skipped paid {sp}",
+        staggerBatchPaused: "Campaign is paused — no further sends in this batch until you resume.",
+        staggerBatchDetails: "Per-attempt details",
         staggerSnapshotConfirm:
           "Build the send queue now? This freezes the current cohort. You cannot start another snapshot for this flow while pending sends exist.",
         staggerPreviewSummary:

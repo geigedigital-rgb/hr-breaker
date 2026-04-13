@@ -195,3 +195,44 @@ async def process_stagger_next_send(
         logger.exception("Stagger send failed %s: %s", rid, e)
         await email_stagger_mark_failed(pool, recipient_id=rid, message=msg)
         return {"ok": True, "processed": True, "recipient_id": rid, "result": "failed", "detail": msg}
+
+
+async def process_stagger_due_batch(
+    pool,
+    *,
+    limit: int = 25,
+    settings: Settings | None = None,
+) -> dict[str, object]:
+    """Call process_stagger_next_send up to `limit` times; stop when nothing due, paused, or error."""
+    lim = max(1, min(int(limit), 100))
+    runs: list[dict[str, object]] = []
+    for _ in range(lim):
+        r = await process_stagger_next_send(pool, settings=settings)
+        runs.append(r)
+        if not r.get("ok"):
+            break
+        if r.get("error"):
+            break
+        if r.get("paused"):
+            break
+        if not r.get("processed"):
+            break
+
+    sent = sum(1 for x in runs if x.get("result") == "sent")
+    failed = sum(1 for x in runs if x.get("result") == "failed")
+    skipped_marketing = sum(1 for x in runs if x.get("result") == "skipped_marketing")
+    skipped_paid = sum(1 for x in runs if x.get("result") == "skipped_paid")
+    last = runs[-1] if runs else {}
+    return {
+        "ok": bool(last.get("ok")) if runs else True,
+        "paused": bool(last.get("paused")) if runs else False,
+        "error": last.get("error") if not last.get("ok") else None,
+        "limit": lim,
+        "iterations": len(runs),
+        "sent": sent,
+        "failed": failed,
+        "skipped_marketing": skipped_marketing,
+        "skipped_paid": skipped_paid,
+        "last_message": last.get("message"),
+        "runs": runs,
+    }

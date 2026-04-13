@@ -1453,6 +1453,32 @@ export async function postAdminEmailStaggerProcess(): Promise<AdminEmailStaggerP
   return data;
 }
 
+export type AdminEmailStaggerProcessBatch = {
+  ok: boolean;
+  paused?: boolean;
+  error?: string | null;
+  limit: number;
+  iterations: number;
+  sent: number;
+  failed: number;
+  skipped_marketing: number;
+  skipped_paid: number;
+  last_message?: string | null;
+  runs: AdminEmailStaggerProcess[];
+};
+
+export async function postAdminEmailStaggerProcessBatch(limit = 25): Promise<AdminEmailStaggerProcessBatch> {
+  const lim = Math.min(100, Math.max(1, Math.floor(limit)));
+  const r = await fetch(`${API}/admin/email/stagger-campaign/process-batch?limit=${lim}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({}),
+  });
+  const data = await parseJsonOrThrow<AdminEmailStaggerProcessBatch & { detail?: string }>(r);
+  if (!r.ok) throw new Error((data as { detail?: string }).detail || r.statusText);
+  return data;
+}
+
 export type AdminWinbackPendingItem = {
   id: string;
   run_at: string;
