@@ -587,9 +587,15 @@ const en = {
       },
       send: {
         title: "Automation & send",
-        subtitle: "One active automation: post-optimize win-back. Plus manual testing with any Resend template and per-user inspection.",
+        subtitle:
+          "Choose an email flow on the left, then run or configure it on the right. Quick send and user journey stay below.",
         tabMain: "Main",
         tabTools: "Advanced",
+        automationPanelHeading: "Email automations",
+        automationPanelHint: "Select a flow to show its actions and settings.",
+        automationsTablePending: "Pending",
+        automationDetailPlaceholder:
+          "This flow is listed for visibility only. Controls will appear here when it is wired on the backend.",
         mainFlowsTitle: "Active automation",
         mainFlowsSubtitle: "This page manages the only live automation: one delayed post-optimize win-back for unpaid users.",
         resendOk: "Resend is configured (API key + From).",
@@ -637,7 +643,23 @@ const en = {
         processResult: "Last process result",
         staggerTitle: "Stagger campaign — analyze + optimize, unpaid",
         staggerHint:
-          "One-time snapshot of eligible users. Each send is spaced by a random 3–8 minutes. Run “Process one send” repeatedly (or cron hitting the process endpoint) until the queue is empty. Users who already received this campaign kind are never queued again. Use an app template id (e.g. ahead-of-candidates) or a Resend published template id.",
+          "Workflow: preview → set template id → build queue → send. Snapshot freezes the eligible cohort into timed rows (random 3–8 minutes between sends). “Process one send” handles one due row per click (cron does the same). Users who already got this campaign kind are skipped forever.",
+        staggerStepPreview: "1. Preview",
+        staggerStepPreviewBody:
+          "Loads who matches the rules right now. Does not read the template field. The list below is a sample; Build queue still enqueues every eligible user.",
+        staggerStepTemplate: "2. Template id",
+        staggerStepTemplateBody:
+          "Alias from your app (e.g. ahead-of-candidates) or a Resend template id. Required before Build queue — it is saved on each queued recipient.",
+        staggerStepSnapshot: "3. Build queue (snapshot)",
+        staggerStepSnapshotBody:
+          "Writes all eligible users into the DB with scheduled send times. Blocked if a queue for this campaign is already open — finish sending first.",
+        staggerStepSend: "4. Send",
+        staggerStepSendBody:
+          "One click = at most one email whose scheduled time has passed. Repeat (or rely on cron) until pending is 0.",
+        staggerPauseResumeHint:
+          "Pause / Resume controls whether the server will pick up due rows (manual “Process one send” and background processing).",
+        staggerPreviewSampleTitle: "Sample user ids ({shown} of {total})",
+        staggerPreviewSampleMore: "… and {more} more — not shown here, but included when you build the queue.",
         staggerTemplateLabel: "Template (app id or Resend id)",
         staggerTemplateMissing: "Enter a template id.",
         staggerPreview: "Preview eligible",
@@ -673,7 +695,7 @@ const en = {
         previewFirst: "Preview the segment first.",
         automationsTitle: "Flows",
         automationsSubtitle: "Registry: src/hr_breaker/services/email_automation_registry.py",
-        automationsAdvancedHint: "High-level map only. Controls for win-back are on Main.",
+        automationsAdvancedHint: "High-level map only. Use the table on the left to switch flows.",
         automationsTableFlow: "Flow",
         automationsTableState: "State",
         automationsTableWhere: "Where to run",

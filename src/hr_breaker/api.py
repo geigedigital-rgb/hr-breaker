@@ -4305,13 +4305,18 @@ async def api_admin_email_automations_clear_queue(
 
 
 @router.get("/admin/email/stagger-campaign/preview", response_model=AdminEmailStaggerPreviewOut)
-async def api_admin_email_stagger_preview(_admin: dict = Depends(get_admin_user)) -> AdminEmailStaggerPreviewOut:
+async def api_admin_email_stagger_preview(
+    max_ids: int = Query(100, ge=1, le=500, description="How many user ids to return in sample_user_ids (capped)."),
+    _admin: dict = Depends(get_admin_user),
+) -> AdminEmailStaggerPreviewOut:
     pool = await get_pool()
     if pool is None:
         raise HTTPException(503, "Database not configured")
     from hr_breaker.services.email_stagger_campaign import CAMPAIGN_KIND_ANALYZE_OPTIMIZE_UNPAID, preview_stagger_campaign
 
-    d = await preview_stagger_campaign(pool, campaign_kind=CAMPAIGN_KIND_ANALYZE_OPTIMIZE_UNPAID)
+    d = await preview_stagger_campaign(
+        pool, campaign_kind=CAMPAIGN_KIND_ANALYZE_OPTIMIZE_UNPAID, max_sample=max_ids
+    )
     return AdminEmailStaggerPreviewOut(**d)
 
 

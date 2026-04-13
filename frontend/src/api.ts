@@ -1400,8 +1400,11 @@ export type AdminEmailStaggerPreview = {
   pending_count: number;
 };
 
-export async function getAdminEmailStaggerPreview(): Promise<AdminEmailStaggerPreview> {
-  const r = await fetch(`${API}/admin/email/stagger-campaign/preview`, { headers: authHeaders() });
+export async function getAdminEmailStaggerPreview(opts?: { maxIds?: number }): Promise<AdminEmailStaggerPreview> {
+  const q = new URLSearchParams();
+  if (opts?.maxIds != null && opts.maxIds > 0) q.set("max_ids", String(Math.min(500, Math.floor(opts.maxIds))));
+  const qs = q.toString();
+  const r = await fetch(`${API}/admin/email/stagger-campaign/preview${qs ? `?${qs}` : ""}`, { headers: authHeaders() });
   const data = await parseJsonOrThrow<AdminEmailStaggerPreview & { detail?: string }>(r);
   if (!r.ok) throw new Error((data as { detail?: string }).detail || r.statusText);
   return data;

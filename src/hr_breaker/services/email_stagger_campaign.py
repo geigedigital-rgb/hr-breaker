@@ -47,14 +47,20 @@ def _build_run_schedule(*, first_send_at: datetime, n: int) -> list[datetime]:
     return out
 
 
-async def preview_stagger_campaign(pool, *, campaign_kind: str = CAMPAIGN_KIND_ANALYZE_OPTIMIZE_UNPAID) -> dict:
+async def preview_stagger_campaign(
+    pool,
+    *,
+    campaign_kind: str = CAMPAIGN_KIND_ANALYZE_OPTIMIZE_UNPAID,
+    max_sample: int = 8,
+) -> dict:
     ids = await email_stagger_eligible_user_ids(pool, campaign_kind=campaign_kind)
     active = await email_stagger_active_recipient_exists(pool, campaign_kind=campaign_kind)
     pending = await email_stagger_pending_count(pool, campaign_kind=campaign_kind)
+    cap = max(0, min(int(max_sample), 500))
     return {
         "campaign_kind": campaign_kind,
         "eligible_count": len(ids),
-        "sample_user_ids": ids[:8],
+        "sample_user_ids": ids[:cap] if cap else [],
         "has_active_queue_for_kind": active,
         "pending_count": pending,
     }
