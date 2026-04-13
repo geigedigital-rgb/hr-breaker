@@ -669,7 +669,10 @@ const en = {
           "One click: writes all eligible users into the database with future send times. Blocked while this campaign already has an open queue — finish or wait until it drains.",
         staggerStepSend: "4. Optional — send when due",
         staggerStepSendBody:
-          "In production, a cron job should call the stagger process endpoint so each row sends when its scheduled time passes. The button here sends at most one due row per click (for debugging or if cron is off).",
+          "In production, a cron job should call the stagger process endpoint so each row sends when its scheduled time passes. The button here sends at most one due row per click (for debugging or if cron is off). Nothing sends while this flow is Paused — Resume it in the section below first.",
+        staggerSendDisabledPaused: "Resume stagger (section below) — sends are blocked while Paused.",
+        staggerProcessPausedBanner:
+          "Response says paused: the stagger flow is on Pause in admin. Click Resume, then try again or wait for cron.",
         staggerPauseResumeHint:
           "Pause / Resume stops or allows the server to process due rows (cron and the optional one-send button).",
         staggerPreviewSampleTitle: "Sample user ids ({shown} of {total})",

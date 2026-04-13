@@ -732,14 +732,29 @@ export default function AdminEmailSend() {
                   <div>
                     <p className="text-xs font-semibold text-[var(--text)]">{t("admin.email.send.staggerStepSend")}</p>
                     <p className="mt-1 text-[11px] leading-relaxed text-[var(--text-muted)]">{t("admin.email.send.staggerStepSendBody")}</p>
-                    <button type="button" disabled={staggerBusy != null} onClick={() => void onStaggerProcess()} className={`${ui.btnSecondary} mt-2`}>
+                    {staggerFlow?.paused ? (
+                      <p className="mt-2 text-[11px] text-amber-900">{t("admin.email.send.staggerSendDisabledPaused")}</p>
+                    ) : null}
+                    <button
+                      type="button"
+                      disabled={staggerBusy != null || !!staggerFlow?.paused}
+                      onClick={() => void onStaggerProcess()}
+                      className={`${ui.btnSecondary} mt-2`}
+                    >
                       {staggerBusy === "process" ? "…" : t("admin.email.send.staggerProcess")}
                     </button>
                   </div>
                   {staggerProcessResult ? (
-                    <pre className="max-h-28 overflow-auto rounded-lg border border-black/[0.06] bg-white p-2 text-[10px] text-[var(--text)]">
-                      {JSON.stringify(staggerProcessResult, null, 2)}
-                    </pre>
+                    <div className="space-y-2 border-t border-black/[0.06] pt-3">
+                      {staggerProcessResult.paused ? (
+                        <p className="rounded-lg border border-amber-200/80 bg-amber-50/90 px-3 py-2 text-xs font-medium text-amber-950">
+                          {t("admin.email.send.staggerProcessPausedBanner")}
+                        </p>
+                      ) : null}
+                      <pre className="max-h-28 overflow-auto rounded-lg border border-black/[0.06] bg-white p-2 text-[10px] text-[var(--text)]">
+                        {JSON.stringify(staggerProcessResult, null, 2)}
+                      </pre>
+                    </div>
                   ) : null}
                 </div>
 
