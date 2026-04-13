@@ -22,6 +22,21 @@ import {
   type AdminUserJourney,
 } from "../../api";
 import { t } from "../../i18n";
+import { appendAdminPipelineLog } from "../../adminPipelineLogStore";
+
+function logEmailAdmin(step: string, message: string, data?: Record<string, unknown>): void {
+  appendAdminPipelineLog({ phase: "email", step, message, ...(data !== undefined ? { data } : {}) });
+}
+
+function pickRecord(o: unknown, keys: string[]): Record<string, unknown> | undefined {
+  if (!o || typeof o !== "object") return undefined;
+  const src = o as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  for (const k of keys) {
+    if (k in src) out[k] = src[k];
+  }
+  return Object.keys(out).length ? out : undefined;
+}
 
 /** Shared admin surface tokens — one visual system for this page. */
 const ui = {
@@ -218,6 +233,7 @@ export default function AdminEmailSend() {
   const onSave = async () => {
     setSaving(true);
     setSaveMsg(null);
+    logEmailAdmin("email_control_save", "Saving win-back email settings…");
     try {
       const c = await patchAdminEmailControl({
         winback_auto_enabled: postWinback?.enabled ?? auto,
@@ -227,8 +243,17 @@ export default function AdminEmailSend() {
       });
       setControl(c);
       setSaveMsg("ok");
-    } catch {
+      logEmailAdmin("email_control_save", "Win-back settings saved", {
+        resend_configured: c.resend_configured,
+        winback_auto_enabled: c.winback_auto_enabled,
+        delay_min: c.winback_delay_min_minutes,
+        delay_max: c.winback_delay_max_minutes,
+      });
+    } catch (e) {
       setSaveMsg("err");
+      logEmailAdmin("email_control_save", "Win-back settings save failed", {
+        error: e instanceof Error ? e.message : String(e),
+      });
     } finally {
       setSaving(false);
     }
@@ -240,19 +265,37 @@ export default function AdminEmailSend() {
     if (!ok) return;
     setBusy("single-send");
     setSingleResult(null);
+    logEmailAdmin("send_one", "POST /admin/email/send-one", {
+      email: singleEmail.trim(),
+      resend_template_id: singleTemplateId.trim(),
+    });
     try {
       const r = await postAdminEmailSendOne({
         email: singleEmail.trim(),
         resend_template_id: singleTemplateId.trim(),
       });
       setSingleResult(r);
+      if (r.ok) {
+        logEmailAdmin("send_one", "Resend API accepted quick send (check Resend dashboard for delivery)", {
+          email: r.email,
+          resend_template_id: r.resend_template_id,
+        });
+      } else {
+        logEmailAdmin("send_one", "Quick send returned ok=false", {
+          email: r.email,
+          resend_template_id: r.resend_template_id,
+          error: r.error,
+        });
+      }
     } catch (e) {
+      const err = e instanceof Error ? e.message : String(e);
       setSingleResult({
         ok: false,
         email: singleEmail.trim(),
         resend_template_id: singleTemplateId.trim(),
-        error: e instanceof Error ? e.message : String(e),
+        error: err,
       });
+      logEmailAdmin("send_one", "Quick send request failed", { error: err });
     } finally {
       setBusy(null);
     }
@@ -261,12 +304,45 @@ export default function AdminEmailSend() {
   const onProcessQueue = async () => {
     setBusy("queue");
     setQueueResult(null);
+    logEmailAdmin("queue_process", "POST /admin/email/queue/process?limit=25 (win-back + stagger)…");
     try {
       const r = await postAdminEmailQueueProcess(25);
       setQueueResult(r);
+      const winback = pickRecord(r.winback, [
+        "ok",
+        "error",
+        "disabled",
+        "paused",
+        "message",
+        "sent",
+        "failed",
+        "claimed",
+        "skipped_paid",
+        "skipped_marketing",
+        "skipped_duplicate",
+      ]);
+      const stagger = pickRecord(r.stagger, [
+        "ok",
+        "error",
+        "paused",
+        "sent",
+        "failed",
+        "iterations",
+        "skipped_marketing",
+        "skipped_paid",
+        "last_message",
+      ]);
+      logEmailAdmin("queue_process", "Queue process finished", {
+        winback,
+        stagger,
+        hint:
+          "If stagger.sent=0 and stagger.last_message is no due rows, wait until run_at passes or resume stagger if paused. If winback shows disabled/paused, win-back sends are skipped.",
+      });
       void reload();
     } catch (e) {
-      setQueueResult({ ok: false, error: e instanceof Error ? e.message : String(e) });
+      const err = e instanceof Error ? e.message : String(e);
+      setQueueResult({ ok: false, error: err });
+      logEmailAdmin("queue_process", "Queue process request failed", { error: err });
     } finally {
       setBusy(null);
     }
@@ -275,12 +351,18 @@ export default function AdminEmailSend() {
   const onAutomationPatch = async (id: string, body: { enabled?: boolean; paused?: boolean }) => {
     setAutoFlowBusy(id);
     setAutomationsErr(null);
+    logEmailAdmin("automation_patch", `PATCH /admin/email/automations/${id}`, { body });
     try {
       await patchAdminEmailAutomation(id, body);
       if (id === "post_optimize_winback" && body.enabled != null) setAuto(body.enabled);
+      logEmailAdmin("automation_patch", `Automation ${id} updated`, { body });
       void reload();
     } catch (e) {
       setAutomationsErr(e instanceof Error ? e.message : t("admin.email.send.automationPatchErr"));
+      logEmailAdmin("automation_patch", `Automation ${id} patch failed`, {
+        body,
+        error: e instanceof Error ? e.message : String(e),
+      });
     } finally {
       setAutoFlowBusy(null);
     }
@@ -298,12 +380,17 @@ export default function AdminEmailSend() {
     }
     setAutoFlowBusy("clear-" + id);
     setAutomationsErr(null);
+    logEmailAdmin("clear_queue", `POST clear-pending-queue for ${id}`);
     try {
-      await postAdminEmailClearPendingQueue(id);
+      const { deleted } = await postAdminEmailClearPendingQueue(id);
+      logEmailAdmin("clear_queue", `Cleared ${deleted} row(s) for ${id}`);
       if (id === "analyze_optimize_stagger_campaign") setStaggerLastSnapshot(null);
       void reload();
     } catch (e) {
       setAutomationsErr(e instanceof Error ? e.message : String(e));
+      logEmailAdmin("clear_queue", `Clear queue failed for ${id}`, {
+        error: e instanceof Error ? e.message : String(e),
+      });
     } finally {
       setAutoFlowBusy(null);
     }
@@ -329,11 +416,20 @@ export default function AdminEmailSend() {
     setStaggerBusy("preview");
     setStaggerErr(null);
     setStaggerInfo(null);
+    logEmailAdmin("stagger_preview", "GET stagger-campaign/preview");
     try {
       const p = await getAdminEmailStaggerPreview({ maxIds: 0 });
       setStaggerPreview(p);
+      logEmailAdmin("stagger_preview", "Stagger eligible cohort", {
+        eligible_count: p.eligible_count,
+        pending_count: p.pending_count,
+        has_active_queue_for_kind: p.has_active_queue_for_kind,
+        campaign_kind: p.campaign_kind,
+      });
     } catch (e) {
-      setStaggerErr(e instanceof Error ? e.message : String(e));
+      const msg = e instanceof Error ? e.message : String(e);
+      setStaggerErr(msg);
+      logEmailAdmin("stagger_preview", "Stagger preview failed", { error: msg });
     } finally {
       setStaggerBusy(null);
     }
@@ -351,6 +447,7 @@ export default function AdminEmailSend() {
     setStaggerBusy("snapshot");
     setStaggerErr(null);
     setStaggerInfo(null);
+    logEmailAdmin("stagger_snapshot", "POST stagger-campaign/snapshot", { template_id: tid });
     try {
       const out = await postAdminEmailStaggerSnapshot({ template_id: tid });
       setStaggerPreview(null);
@@ -368,9 +465,18 @@ export default function AdminEmailSend() {
           .replace("{n}", String(out.enqueued))
           .replace("{run}", out.run_id || "—"),
       );
+      logEmailAdmin("stagger_snapshot", "Stagger queue built (emails go out via queue/process when due)", {
+        enqueued: out.enqueued,
+        run_id: out.run_id,
+        template_id: out.template_id,
+        first_run_at: out.first_run_at,
+        last_run_at: out.last_run_at,
+      });
       void reload();
     } catch (e) {
-      setStaggerErr(e instanceof Error ? e.message : String(e));
+      const msg = e instanceof Error ? e.message : String(e);
+      setStaggerErr(msg);
+      logEmailAdmin("stagger_snapshot", "Stagger snapshot failed", { error: msg, template_id: tid });
     } finally {
       setStaggerBusy(null);
     }

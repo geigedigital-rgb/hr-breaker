@@ -588,7 +588,7 @@ const en = {
       send: {
         title: "Automation & send",
         subtitle:
-          "Choose an email flow on the left, then run or configure it on the right. Quick send and user journey stay below.",
+          "Choose an email flow on the left, then run or configure it on the right. Quick send and user journey stay below. Sends and queue actions are appended to Pipeline log (sidebar).",
         tabMain: "Main",
         tabTools: "Advanced",
         automationPanelHeading: "Email automations",

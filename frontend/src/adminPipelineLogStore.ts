@@ -5,7 +5,7 @@ const MAX_ENTRIES = 400;
 
 export type AdminPipelineLogEntry = {
   ts: string;
-  phase: "analyze" | "optimize" | "client" | "templates_lab";
+  phase: "analyze" | "optimize" | "client" | "templates_lab" | "email";
   step: string;
   message: string;
   data?: Record<string, unknown>;
