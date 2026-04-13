@@ -321,22 +321,24 @@ export default function AdminEmailSend() {
         "skipped_marketing",
         "skipped_duplicate",
       ]);
+      const staggerRaw = r.stagger as Record<string, unknown> | undefined;
       const stagger = pickRecord(r.stagger, [
-        "ok",
-        "error",
-        "paused",
-        "sent",
-        "failed",
-        "iterations",
-        "skipped_marketing",
-        "skipped_paid",
-        "last_message",
+        "ok", "error", "paused", "sent", "failed", "iterations",
+        "skipped_marketing", "skipped_paid", "last_message",
       ]);
+      // Collect Resend error details from individual failed send runs
+      const failedDetails: string[] = [];
+      if (Array.isArray(staggerRaw?.runs)) {
+        for (const run of staggerRaw.runs as Record<string, unknown>[]) {
+          if (run?.result === "failed" && run?.detail) {
+            failedDetails.push(`${run.email ?? run.recipient_id}: ${run.detail}`);
+          }
+        }
+      }
       logEmailAdmin("queue_process", "Queue process finished", {
         winback,
         stagger,
-        hint:
-          "If stagger.sent=0 and stagger.last_message is no due rows, wait until run_at passes or resume stagger if paused. If winback shows disabled/paused, win-back sends are skipped.",
+        ...(failedDetails.length ? { resend_errors: failedDetails } : {}),
       });
       void reload();
     } catch (e) {

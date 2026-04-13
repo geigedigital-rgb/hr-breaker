@@ -38,7 +38,10 @@ async def resend_send_html(
             headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
             json=payload,
         )
-        r.raise_for_status()
+        if not r.is_success:
+            body = r.text[:1000] if r.content else ""
+            logger.error("resend_send_html HTTP %s to=%s body=%s", r.status_code, to, body)
+            raise RuntimeError(f"Resend HTTP {r.status_code}: {body or r.reason_phrase}")
         try:
             return dict(r.json()) if r.content else {}
         except Exception:
@@ -56,24 +59,47 @@ async def resend_send_template(
     reply_to: list[str] | None = None,
     headers: dict[str, str] | None = None,
 ) -> dict[str, Any]:
-    """Send using a published Resend Dashboard template (id or alias). Variables: see docs/EMAIL_RESEND.md."""
+    """Send using a published Resend Dashboard template (id or alias).
+
+    Payload format per Resend docs: POST /emails with "template": {"id": ..., "variables": {...}}.
+    Do NOT include html/text/react alongside template — Resend returns 422 if you do.
+    Reserved variable names that Resend blocks: FIRST_NAME, LAST_NAME, EMAIL, UNSUBSCRIBE_URL.
+    Variable keys: ASCII letters, digits, underscores only; max 50 chars; max value 2000 chars.
+    """
+    tid = template_id.strip()
+    # Filter out reserved Resend variable names and empty keys
+    _RESERVED = {"FIRST_NAME", "LAST_NAME", "EMAIL", "UNSUBSCRIBE_URL"}
+    safe_vars = {k: v for k, v in variables.items() if k and k.upper() not in _RESERVED}
+
     payload: dict[str, Any] = {
         "from": from_addr,
         "to": [to],
         "subject": subject,
-        "template": {"id": template_id.strip(), "variables": variables},
+        "template": {"id": tid, "variables": safe_vars},
     }
     if reply_to:
         payload["reply_to"] = reply_to
     if headers:
         payload["headers"] = headers
+    logger.debug("resend_send_template to=%s template=%s vars=%s", to, tid, list(safe_vars.keys()))
     async with httpx.AsyncClient(timeout=45.0) as client:
         r = await client.post(
             RESEND_API,
             headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
             json=payload,
         )
-        r.raise_for_status()
+        if not r.is_success:
+            body = r.text[:1000] if r.content else ""
+            logger.error(
+                "resend_send_template HTTP %s to=%s template=%s body=%s",
+                r.status_code,
+                to,
+                tid,
+                body,
+            )
+            raise RuntimeError(
+                f"Resend HTTP {r.status_code}: {body or r.reason_phrase}"
+            )
         try:
             return dict(r.json()) if r.content else {}
         except Exception:
