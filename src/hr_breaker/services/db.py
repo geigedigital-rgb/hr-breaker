@@ -2038,7 +2038,11 @@ async def email_stagger_active_recipient_exists(pool, *, campaign_kind: str) -> 
 
 
 async def email_stagger_eligible_user_ids(pool, *, campaign_kind: str) -> list[str]:
-    """Users with successful analyze + optimize, unpaid, marketing OK, never sent this kind, not mid-queue."""
+    """Users with successful analyze + optimize, unpaid, marketing OK.
+
+    Excludes: (1) any row in email_stagger_sent_log for this campaign_kind — set only after a successful Resend send;
+    (2) users with a pending/processing row for this campaign_kind (open queue / in-flight send).
+    """
     async with pool.acquire() as conn:
         rows = await conn.fetch(
             f"""

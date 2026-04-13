@@ -612,6 +612,7 @@ export default function AdminEmailSend() {
                   <p className="mt-2 rounded-lg border border-black/[0.06] bg-white/80 px-3 py-2 text-[11px] leading-relaxed text-[var(--text-muted)]">
                     {t("admin.email.send.staggerMentalModel")}
                   </p>
+                  <p className="mt-2 text-[11px] leading-relaxed text-[var(--text-tertiary)]">{t("admin.email.send.staggerDedupeNote")}</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--text-muted)]">
                   <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${staggerFlow ? automationBadgeClass(staggerFlow) : ui.badge("neutral")}`}>

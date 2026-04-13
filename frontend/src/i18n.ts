@@ -646,6 +646,8 @@ const en = {
           "Check who qualifies (no emails). Then set template and Enroll everyone — that queues all eligible users with spaced send times, not an instant blast. Emails go when each row’s time is due, or when you use Send below.",
         staggerMentalModel:
           "Check who qualifies = preview only. Enroll everyone = one click that puts every matching user on the schedule (first send in a few minutes, then every 3–8 minutes). Use Send or cron for rows whose time has arrived.",
+        staggerDedupeNote:
+          "Dedupe: after a successful send, the user is written to email_stagger_sent_log for this campaign kind and will not appear in Preview or Enroll again. Users still waiting in the queue (pending/processing) are also excluded from a second snapshot. Skipped or failed rows do not write that log, so those users can appear in a future run if they still match the rules.",
         staggerStepPreview: "1. Check who qualifies",
         staggerStepPreviewBody:
           "No template required. Shows how many users match and a sample of user ids. Everyone eligible is still included when you enroll — not only the sample.",
