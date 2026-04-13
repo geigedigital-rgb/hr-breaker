@@ -150,7 +150,6 @@ async def process_stagger_next_send(
     api_key = (s.resend_api_key or "").strip()
     from_addr = (s.resend_from or "").strip()
     public_base = (s.email_public_base_url or s.frontend_url or "").strip().rstrip("/")
-    subject = (s.resend_winback_subject or "PitchCV").strip() or "PitchCV"
 
     if not api_key:
         return {"ok": False, "error": "RESEND_API_KEY is not set", "processed": False}
@@ -197,11 +196,11 @@ async def process_stagger_next_send(
         unsub = build_unsubscribe_url(s, uid)
         extras = resend_transactional_extras(s, unsubscribe_url=unsub)
 
+        # subject omitted → Resend template's own subject is used (from dashboard)
         await resend_send_template(
             api_key=api_key,
             from_addr=from_addr,
             to=email,
-            subject=subject,
             template_id=tmpl,
             variables=resend_variables_for_send(
                 public_base=public_base,

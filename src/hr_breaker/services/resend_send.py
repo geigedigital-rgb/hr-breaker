@@ -53,30 +53,32 @@ async def resend_send_template(
     api_key: str,
     from_addr: str,
     to: str,
-    subject: str,
     template_id: str,
     variables: dict[str, str],
+    subject: str | None = None,
     reply_to: list[str] | None = None,
     headers: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Send using a published Resend Dashboard template (id or alias).
 
     Payload format per Resend docs: POST /emails with "template": {"id": ..., "variables": {...}}.
-    Do NOT include html/text/react alongside template — Resend returns 422 if you do.
-    Reserved variable names that Resend blocks: FIRST_NAME, LAST_NAME, EMAIL, UNSUBSCRIBE_URL.
-    Variable keys: ASCII letters, digits, underscores only; max 50 chars; max value 2000 chars.
+    - Do NOT include html/text/react alongside template.
+    - subject/from/reply_to in payload override the template defaults.
+      If subject is None/empty, the template's own subject is used (recommended).
+    - Reserved variable names Resend blocks: FIRST_NAME, LAST_NAME, EMAIL, UNSUBSCRIBE_URL.
     """
     tid = template_id.strip()
-    # Filter out reserved Resend variable names and empty keys
     _RESERVED = {"FIRST_NAME", "LAST_NAME", "EMAIL", "UNSUBSCRIBE_URL"}
     safe_vars = {k: v for k, v in variables.items() if k and k.upper() not in _RESERVED}
 
     payload: dict[str, Any] = {
         "from": from_addr,
         "to": [to],
-        "subject": subject,
         "template": {"id": tid, "variables": safe_vars},
     }
+    # Only override subject if explicitly provided (otherwise Resend uses template's subject)
+    if subject:
+        payload["subject"] = subject
     if reply_to:
         payload["reply_to"] = reply_to
     if headers:
