@@ -278,9 +278,15 @@ export default function AdminEmailSend() {
   };
 
   const onClearPendingQueue = async (id: string) => {
-    const n = id === "post_optimize_winback" ? (postWinback?.pending_queue_count ?? 0) : (automations?.global_pending_queue_count ?? 0);
-    if (!window.confirm(t("admin.email.send.clearQueueConfirm").replace("{n}", String(n)))) return;
-    if (!window.confirm(t("admin.email.send.clearQueueConfirmFinal"))) return;
+    const item = automations?.items.find((x) => x.id === id);
+    if (id === "analyze_optimize_stagger_campaign") {
+      if (!window.confirm(t("admin.email.send.staggerClearQueueConfirm"))) return;
+      if (!window.confirm(t("admin.email.send.staggerClearQueueConfirmFinal"))) return;
+    } else {
+      const n = item?.pending_queue_count ?? 0;
+      if (!window.confirm(t("admin.email.send.clearQueueConfirm").replace("{n}", String(n)))) return;
+      if (!window.confirm(t("admin.email.send.clearQueueConfirmFinal"))) return;
+    }
     setAutoFlowBusy("clear-" + id);
     setAutomationsErr(null);
     try {
@@ -755,6 +761,14 @@ export default function AdminEmailSend() {
                       className={ui.btnGhost}
                     >
                       {t("admin.email.send.btnResume")}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={autoFlowBusy != null}
+                      onClick={() => void onClearPendingQueue("analyze_optimize_stagger_campaign")}
+                      className={ui.btnDanger}
+                    >
+                      {t("admin.email.send.staggerBtnClearQueue")}
                     </button>
                   </div>
                 </div>

@@ -46,7 +46,8 @@ AUTOMATION_DEFINITIONS: list[AutomationDef] = [
         "channel": "queue",
         "dedupe_summary": (
             "Rows in email_stagger_campaign_recipient + email_stagger_sent_log (per user, campaign_kind). "
-            "No second snapshot while pending/processing rows exist for the same kind."
+            "No second snapshot while pending/processing rows exist for the same kind. "
+            "Admin: clear-pending-queue for this automation id removes pending/processing recipients (not sent_log)."
         ),
         "conditions_code": (
             "Eligible: usage_audit_log has successful analyze_ats_score or analyze_insights AND optimize_complete; "

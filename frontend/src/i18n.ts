@@ -600,6 +600,10 @@ const en = {
           "All {total} rows are still waiting for their send time. Nothing goes out until each row’s run_at is in the past and something calls the stagger process endpoint (cron or the button below). This is expected right after Enroll.",
         staggerQueuePausedNoSends: "Stagger is Paused — resume it so due rows can be processed.",
         staggerDueShort: "due now",
+        staggerBtnClearQueue: "Clear stagger queue (reset)",
+        staggerClearQueueConfirm:
+          "Remove all pending and in-flight (processing) stagger rows for this campaign? You can run Enroll again afterward. Users who already received an email stay deduped (sent_log is not cleared).",
+        staggerClearQueueConfirmFinal: "Final confirm: delete stagger queue rows?",
         automationDetailPlaceholder:
           "This flow is listed for visibility only. Controls will appear here when it is wired on the backend.",
         mainFlowsTitle: "Active automation",

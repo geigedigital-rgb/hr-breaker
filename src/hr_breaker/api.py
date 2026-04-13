@@ -117,6 +117,7 @@ from hr_breaker.services.db import (
     email_winback_pending_list_for_user,
     email_stagger_pending_count,
     email_stagger_due_pending_count,
+    email_stagger_delete_all_pending_and_processing,
     optimization_snapshot_get_by_id_for_user,
     optimization_snapshot_get_latest_valid,
     optimization_snapshot_insert,
@@ -4219,7 +4220,7 @@ def _build_admin_automation_list_out(
             pend = pending_stagger
             sup_en = False
             sup_pause = True
-            sup_clear = False
+            sup_clear = True
         else:
             enabled = False
             pend = None
@@ -4309,10 +4310,15 @@ async def api_admin_email_automations_clear_queue(
     if pool is None:
         raise HTTPException(503, "Database not configured")
     aid = (automation_id or "").strip()
-    if aid != "post_optimize_winback":
-        raise HTTPException(400, "Only post_optimize_winback uses the shared pending queue today.")
-    n = await email_winback_delete_all_pending(pool)
-    return AdminEmailClearQueueOut(deleted=n)
+    if aid == "post_optimize_winback":
+        n = await email_winback_delete_all_pending(pool)
+        return AdminEmailClearQueueOut(deleted=n)
+    if aid == "analyze_optimize_stagger_campaign":
+        from hr_breaker.services.email_stagger_campaign import CAMPAIGN_KIND_ANALYZE_OPTIMIZE_UNPAID
+
+        n = await email_stagger_delete_all_pending_and_processing(pool, campaign_kind=CAMPAIGN_KIND_ANALYZE_OPTIMIZE_UNPAID)
+        return AdminEmailClearQueueOut(deleted=n)
+    raise HTTPException(400, "Unknown automation for clear-pending-queue.")
 
 
 @router.get("/admin/email/stagger-campaign/preview", response_model=AdminEmailStaggerPreviewOut)

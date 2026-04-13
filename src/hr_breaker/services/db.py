@@ -2280,3 +2280,33 @@ async def email_stagger_due_pending_count(pool, *, campaign_kind: str | None = N
                 """
             )
     return int(row["c"]) if row else 0
+
+
+async def email_stagger_delete_all_pending_and_processing(pool, *, campaign_kind: str | None = None) -> int:
+    """Remove pending/processing stagger recipients so a new snapshot can run. Does not touch email_stagger_sent_log."""
+    async with pool.acquire() as conn:
+        if campaign_kind:
+            tag = await conn.execute(
+                f"""
+                DELETE FROM {EMAIL_STAGGER_RECIPIENT_TABLE} r
+                USING {EMAIL_STAGGER_RUN_TABLE} run
+                WHERE r.run_id = run.id
+                  AND run.campaign_kind = $1
+                  AND r.status IN ('pending', 'processing')
+                """,
+                campaign_kind,
+            )
+        else:
+            tag = await conn.execute(
+                f"""
+                DELETE FROM {EMAIL_STAGGER_RECIPIENT_TABLE} r
+                WHERE r.status IN ('pending', 'processing')
+                """
+            )
+    s = str(tag)
+    if s.upper().startswith("DELETE "):
+        try:
+            return int(s.split()[-1])
+        except Exception:
+            return 0
+    return 0
