@@ -2246,6 +2246,39 @@ async def email_stagger_claim_next_due(pool) -> dict[str, Any] | None:
     return d
 
 
+async def email_stagger_claim_batch_pending(pool, *, n: int) -> list[dict[str, Any]]:
+    """Claim up to n pending rows regardless of run_at (for manual batch send). Returns claimed rows."""
+    n = max(1, min(int(n), 100))
+    await email_stagger_reset_stale_processing(pool)
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            rows = await conn.fetch(
+                f"""
+                SELECT r.id::text AS id, r.user_id::text AS user_id, r.template_id,
+                       run.campaign_kind, run.id::text AS run_id
+                FROM {EMAIL_STAGGER_RECIPIENT_TABLE} r
+                INNER JOIN {EMAIL_STAGGER_RUN_TABLE} run ON r.run_id = run.id
+                WHERE r.status = 'pending'
+                ORDER BY r.run_at ASC
+                LIMIT $1
+                FOR UPDATE OF r SKIP LOCKED
+                """,
+                n,
+            )
+            if not rows:
+                return []
+            ids = [str(r["id"]) for r in rows]
+            await conn.execute(
+                f"""
+                UPDATE {EMAIL_STAGGER_RECIPIENT_TABLE}
+                SET status = 'processing', claimed_at = NOW()
+                WHERE id = ANY($1::uuid[])
+                """,
+                ids,
+            )
+    return [dict(r) for r in rows]
+
+
 async def email_stagger_mark_sent(pool, *, recipient_id: str) -> None:
     async with pool.acquire() as conn:
         await conn.execute(

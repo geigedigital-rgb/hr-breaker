@@ -13,6 +13,7 @@ from hr_breaker.services.email_automation_registry import is_analyze_optimize_st
 from hr_breaker.services.db import (
     admin_email_settings_get,
     email_stagger_active_recipient_exists,
+    email_stagger_claim_batch_pending,
     email_stagger_claim_next_due,
     email_stagger_eligible_count,
     email_stagger_eligible_sample_emails,
@@ -174,51 +175,15 @@ async def process_stagger_next_send(
         await email_stagger_mark_failed(pool, recipient_id=rid, message="template_id is empty")
         return {"ok": True, "processed": True, "recipient_id": rid, "result": "failed", "detail": "no template_id"}
 
-    try:
-        u = await user_get_by_id(pool, uid)
-        if not u or u.get("admin_blocked"):
-            await email_stagger_mark_failed(pool, recipient_id=rid, message="user missing or blocked")
-            return {"ok": True, "processed": True, "recipient_id": rid, "result": "failed", "detail": "user missing"}
-        email = (u.get("email") or "").strip()
-        if not email:
-            await email_stagger_mark_failed(pool, recipient_id=rid, message="no email")
-            return {"ok": True, "processed": True, "recipient_id": rid, "result": "failed", "detail": "no email"}
-        if u.get("marketing_emails_opt_in") is False:
-            await email_stagger_mark_skipped_marketing(pool, recipient_id=rid)
-            return {"ok": True, "processed": True, "recipient_id": rid, "result": "skipped_marketing"}
-        sub = await user_get_subscription(pool, uid)
-        if _user_is_paid(sub):
-            await email_stagger_mark_skipped_paid(pool, recipient_id=rid)
-            return {"ok": True, "processed": True, "recipient_id": rid, "result": "skipped_paid"}
-
-        # Build personalised variables (same as Quick Send)
-        resume_url = await latest_email_cta_url_for_user(pool, s, uid)
-        unsub = build_unsubscribe_url(s, uid)
-        extras = resend_transactional_extras(s, unsubscribe_url=unsub)
-
-        # subject omitted → Resend template's own subject is used (from dashboard)
-        await resend_send_template(
-            api_key=api_key,
-            from_addr=from_addr,
-            to=email,
-            template_id=tmpl,
-            variables=resend_variables_for_send(
-                public_base=public_base,
-                unsubscribe_url=unsub,
-                resume_url=resume_url,
-            ),
-            reply_to=extras.get("reply_to"),
-            headers=extras.get("headers"),
-        )
-        await email_stagger_mark_sent(pool, recipient_id=rid)
-        await email_stagger_sent_log_upsert(pool, user_id=uid, campaign_kind=kind, run_id=run_id)
-        logger.info("Stagger sent %s → %s template=%s", uid, email, tmpl)
-        return {"ok": True, "processed": True, "recipient_id": rid, "result": "sent", "email": email}
-    except Exception as e:
-        msg = str(e)[:2000]
-        logger.exception("Stagger send failed rid=%s uid=%s tmpl=%s: %s", rid, uid, tmpl, e)
-        await email_stagger_mark_failed(pool, recipient_id=rid, message=msg)
-        return {"ok": True, "processed": True, "recipient_id": rid, "result": "failed", "detail": msg}
+    result = await _send_one_row(
+        pool,
+        {"id": rid, "user_id": uid, "template_id": tmpl, "campaign_kind": kind, "run_id": run_id},
+        s=s,
+        api_key=api_key,
+        from_addr=from_addr,
+        public_base=public_base,
+    )
+    return result
 
 
 async def process_stagger_due_batch(
@@ -258,5 +223,111 @@ async def process_stagger_due_batch(
         "skipped_marketing": skipped_marketing,
         "skipped_paid": skipped_paid,
         "last_message": last.get("message") if runs else None,
+        "runs": runs,
+    }
+
+
+async def _send_one_row(pool, row: dict, *, s: Settings, api_key: str, from_addr: str, public_base: str) -> dict[str, object]:
+    """Send a single claimed row. Used by both normal and force-batch processors."""
+    rid = str(row["id"])
+    uid = str(row["user_id"])
+    tmpl = str(row["template_id"] or "").strip()
+    kind = str(row["campaign_kind"] or CAMPAIGN_KIND_ANALYZE_OPTIMIZE_UNPAID)
+    run_id = str(row["run_id"])
+
+    if not tmpl:
+        await email_stagger_mark_failed(pool, recipient_id=rid, message="template_id is empty")
+        return {"ok": True, "processed": True, "recipient_id": rid, "result": "failed", "detail": "no template_id"}
+    try:
+        u = await user_get_by_id(pool, uid)
+        if not u or u.get("admin_blocked"):
+            await email_stagger_mark_failed(pool, recipient_id=rid, message="user missing or blocked")
+            return {"ok": True, "processed": True, "recipient_id": rid, "result": "failed", "detail": "user missing"}
+        email = (u.get("email") or "").strip()
+        if not email:
+            await email_stagger_mark_failed(pool, recipient_id=rid, message="no email")
+            return {"ok": True, "processed": True, "recipient_id": rid, "result": "failed", "detail": "no email"}
+        if u.get("marketing_emails_opt_in") is False:
+            await email_stagger_mark_skipped_marketing(pool, recipient_id=rid)
+            return {"ok": True, "processed": True, "recipient_id": rid, "result": "skipped_marketing", "email": email}
+        sub = await user_get_subscription(pool, uid)
+        if _user_is_paid(sub):
+            await email_stagger_mark_skipped_paid(pool, recipient_id=rid)
+            return {"ok": True, "processed": True, "recipient_id": rid, "result": "skipped_paid", "email": email}
+
+        resume_url = await latest_email_cta_url_for_user(pool, s, uid)
+        unsub = build_unsubscribe_url(s, uid)
+        extras = resend_transactional_extras(s, unsubscribe_url=unsub)
+
+        await resend_send_template(
+            api_key=api_key,
+            from_addr=from_addr,
+            to=email,
+            template_id=tmpl,
+            variables=resend_variables_for_send(
+                public_base=public_base,
+                unsubscribe_url=unsub,
+                resume_url=resume_url,
+            ),
+            reply_to=extras.get("reply_to"),
+            headers=extras.get("headers"),
+        )
+        await email_stagger_mark_sent(pool, recipient_id=rid)
+        await email_stagger_sent_log_upsert(pool, user_id=uid, campaign_kind=kind, run_id=run_id)
+        logger.info("Stagger sent %s → %s template=%s", uid, email, tmpl)
+        return {"ok": True, "processed": True, "recipient_id": rid, "result": "sent", "email": email}
+    except Exception as e:
+        msg = str(e)[:2000]
+        logger.exception("Stagger send failed rid=%s uid=%s tmpl=%s: %s", rid, uid, tmpl, e)
+        await email_stagger_mark_failed(pool, recipient_id=rid, message=msg)
+        return {"ok": True, "processed": True, "recipient_id": rid, "result": "failed", "detail": msg}
+
+
+async def process_stagger_batch_force(
+    pool,
+    *,
+    n: int = 20,
+    settings: Settings | None = None,
+) -> dict[str, object]:
+    """Claim and send up to n pending rows immediately, ignoring run_at schedule.
+
+    Deduplication still applies: email_stagger_sent_log prevents double-sends across page reloads.
+    """
+    s = settings or get_settings()
+    api_key = (s.resend_api_key or "").strip()
+    from_addr = (s.resend_from or "").strip()
+    public_base = (s.email_public_base_url or s.frontend_url or "").strip().rstrip("/")
+
+    if not api_key:
+        return {"ok": False, "error": "RESEND_API_KEY is not set", "sent": 0, "failed": 0}
+    if not from_addr:
+        return {"ok": False, "error": "RESEND_FROM is not set", "sent": 0, "failed": 0}
+
+    cfg = await admin_email_settings_get(pool)
+    if is_analyze_optimize_stagger_paused(cfg):
+        return {"ok": True, "paused": True, "sent": 0, "failed": 0, "message": "stagger paused"}
+
+    rows = await email_stagger_claim_batch_pending(pool, n=n)
+    if not rows:
+        return {"ok": True, "sent": 0, "failed": 0, "claimed": 0, "message": "no pending rows"}
+
+    runs: list[dict[str, object]] = []
+    for row in rows:
+        r = await _send_one_row(pool, row, s=s, api_key=api_key, from_addr=from_addr, public_base=public_base)
+        runs.append(r)
+
+    sent = sum(1 for x in runs if x.get("result") == "sent")
+    failed = sum(1 for x in runs if x.get("result") == "failed")
+    skipped = sum(1 for x in runs if (x.get("result") or "").startswith("skipped"))
+    failed_details = [x.get("detail") for x in runs if x.get("result") == "failed" and x.get("detail")]
+
+    return {
+        "ok": True,
+        "paused": False,
+        "claimed": len(rows),
+        "sent": sent,
+        "failed": failed,
+        "skipped": skipped,
+        "failed_details": failed_details[:10],
         "runs": runs,
     }

@@ -1488,6 +1488,28 @@ export type AdminEmailStaggerProcess = {
   email?: string | null;
 };
 
+export type AdminEmailStaggerBatch = {
+  ok: boolean;
+  paused?: boolean;
+  error?: string | null;
+  message?: string | null;
+  claimed: number;
+  sent: number;
+  failed: number;
+  skipped: number;
+  failed_details?: string[];
+};
+
+export async function postAdminEmailStaggerSendBatch(n = 20): Promise<AdminEmailStaggerBatch> {
+  const r = await fetch(`${API}/admin/email/stagger-campaign/send-batch?n=${n}`, {
+    method: "POST",
+    headers: authHeaders(),
+  });
+  const data = await parseJsonOrThrow<AdminEmailStaggerBatch & { detail?: string }>(r);
+  if (!r.ok) throw new Error((data as { detail?: string }).detail || r.statusText);
+  return data;
+}
+
 export async function postAdminEmailStaggerProcess(): Promise<AdminEmailStaggerProcess> {
   const r = await fetch(`${API}/admin/email/stagger-campaign/process`, {
     method: "POST",

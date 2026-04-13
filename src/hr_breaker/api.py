@@ -4426,7 +4426,7 @@ async def api_admin_email_stagger_snapshot(
 
 @router.post("/admin/email/stagger-campaign/process", response_model=AdminEmailStaggerProcessOut)
 async def api_admin_email_stagger_process(_admin: dict = Depends(get_admin_user)) -> AdminEmailStaggerProcessOut:
-    """One stagger send. For cron use POST /admin/email/queue/process (win-back + stagger together)."""
+    """One stagger send (respects run_at schedule). For cron use POST /admin/email/queue/process."""
     pool = await get_pool()
     if pool is None:
         raise HTTPException(503, "Database not configured")
@@ -4434,6 +4434,45 @@ async def api_admin_email_stagger_process(_admin: dict = Depends(get_admin_user)
 
     raw = await process_stagger_next_send(pool)
     return AdminEmailStaggerProcessOut(**raw)
+
+
+class AdminEmailStaggerBatchOut(BaseModel):
+    ok: bool
+    paused: bool = False
+    error: str | None = None
+    message: str | None = None
+    claimed: int = 0
+    sent: int = 0
+    failed: int = 0
+    skipped: int = 0
+    failed_details: list[str] = Field(default_factory=list)
+
+
+@router.post("/admin/email/stagger-campaign/send-batch", response_model=AdminEmailStaggerBatchOut)
+async def api_admin_email_stagger_send_batch(
+    n: int = Query(20, ge=1, le=100, description="Number of emails to send immediately (ignores run_at schedule)."),
+    _admin: dict = Depends(get_admin_user),
+) -> AdminEmailStaggerBatchOut:
+    """Send up to n pending stagger emails NOW, ignoring run_at schedule.
+    Deduplication via email_stagger_sent_log — already-sent users are never re-sent even after page reload.
+    """
+    pool = await get_pool()
+    if pool is None:
+        raise HTTPException(503, "Database not configured")
+    from hr_breaker.services.email_stagger_campaign import process_stagger_batch_force
+
+    raw = await process_stagger_batch_force(pool, n=n)
+    return AdminEmailStaggerBatchOut(
+        ok=bool(raw.get("ok", True)),
+        paused=bool(raw.get("paused", False)),
+        error=str(raw["error"]) if raw.get("error") else None,
+        message=str(raw["message"]) if raw.get("message") else None,
+        claimed=int(raw.get("claimed", 0)),
+        sent=int(raw.get("sent", 0)),
+        failed=int(raw.get("failed", 0)),
+        skipped=int(raw.get("skipped", 0)),
+        failed_details=[str(x) for x in (raw.get("failed_details") or [])],
+    )
 
 
 @router.get("/admin/email/user-journey", response_model=AdminUserJourneyOut)

@@ -12,6 +12,8 @@ import {
   postAdminEmailQueueProcess,
   getAdminEmailStaggerPreview,
   postAdminEmailStaggerSnapshot,
+  postAdminEmailStaggerSendBatch,
+  type AdminEmailStaggerBatch,
   type AdminEmailAutomationItem,
   type AdminEmailAutomationsList,
   type AdminEmailControl,
@@ -139,6 +141,8 @@ export default function AdminEmailSend() {
   const [staggerErr, setStaggerErr] = useState<string | null>(null);
   const [staggerBusy, setStaggerBusy] = useState<string | null>(null);
   const [staggerInfo, setStaggerInfo] = useState<string | null>(null);
+  const [batchResult, setBatchResult] = useState<AdminEmailStaggerBatch | null>(null);
+  const [batchBusy, setBatchBusy] = useState(false);
   const [staggerLastSnapshot, setStaggerLastSnapshot] = useState<{
     first_run_at: string | null;
     last_run_at: string | null;
@@ -411,6 +415,30 @@ export default function AdminEmailSend() {
       setJourneyErr(e instanceof Error ? e.message : t("admin.email.send.journeyErr"));
     } finally {
       setJourneyBusy(false);
+    }
+  };
+
+  const onSendBatch = async (n: number) => {
+    setBatchBusy(true);
+    setBatchResult(null);
+    logEmailAdmin("stagger_batch", `POST stagger-campaign/send-batch?n=${n} (force, ignores run_at)`);
+    try {
+      const r = await postAdminEmailStaggerSendBatch(n);
+      setBatchResult(r);
+      logEmailAdmin("stagger_batch", `Batch done`, {
+        sent: r.sent,
+        failed: r.failed,
+        skipped: r.skipped,
+        claimed: r.claimed,
+        ...(r.failed_details?.length ? { resend_errors: r.failed_details } : {}),
+      });
+      void reload();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setBatchResult({ ok: false, claimed: 0, sent: 0, failed: 0, skipped: 0, error: msg });
+      logEmailAdmin("stagger_batch", "Batch request failed", { error: msg });
+    } finally {
+      setBatchBusy(false);
     }
   };
 
@@ -847,28 +875,43 @@ export default function AdminEmailSend() {
                   <p className="text-xs font-medium text-emerald-800">{staggerInfo}</p>
                 ) : null}
 
-                {/* Send next / process controls */}
+                {/* Batch send controls */}
                 {(staggerFlow?.pending_queue_count ?? 0) > 0 ? (
-                  <div className="space-y-2 rounded-xl border border-black/[0.06] bg-black/[0.02] p-3">
+                  <div className="space-y-3 rounded-xl border border-black/[0.06] bg-black/[0.02] p-3">
                     <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        disabled={busy === "queue" || staggerBusy != null || !!staggerFlow?.paused}
-                        onClick={() => void onProcessQueue()}
-                        className={ui.btnPrimary}
-                      >
-                        {busy === "queue" ? "…" : t("admin.email.send.staggerSendNext")}
-                      </button>
+                      {[20, 50, 100].map((n) => (
+                        <button
+                          key={n}
+                          type="button"
+                          disabled={batchBusy || !!staggerFlow?.paused}
+                          onClick={() => void onSendBatch(n)}
+                          className={ui.btnPrimary}
+                        >
+                          {batchBusy ? "…" : `Send ${n} now`}
+                        </button>
+                      ))}
                       <span className="text-xs text-[var(--text-muted)]">
-                        {typeof staggerFlow?.pending_due_count === "number"
-                          ? `${staggerFlow.pending_due_count} due now of ${staggerFlow.pending_queue_count ?? 0} pending`
-                          : `${staggerFlow?.pending_queue_count ?? 0} pending`}
+                        {staggerFlow?.pending_queue_count ?? 0} pending
                       </span>
                     </div>
-                    {queueResult ? (
-                      <pre className="max-h-28 overflow-auto rounded-lg border border-black/[0.06] bg-white p-2 text-[10px] text-[var(--text)]">
-                        {JSON.stringify((queueResult as Record<string, unknown>).stagger ?? queueResult, null, 2)}
-                      </pre>
+                    <p className="text-[11px] text-[var(--text-tertiary)]">
+                      Ignores schedule — sends immediately. Already-sent users are skipped automatically.
+                    </p>
+                    {batchResult ? (
+                      <div className="space-y-1">
+                        <p className="text-xs font-medium text-[var(--text)]">
+                          Sent: <span className="text-emerald-700">{batchResult.sent}</span>
+                          {batchResult.failed > 0 ? <> · Failed: <span className="text-red-700">{batchResult.failed}</span></> : null}
+                          {batchResult.skipped > 0 ? <> · Skipped: {batchResult.skipped}</> : null}
+                          {" "}/ {batchResult.claimed} claimed
+                        </p>
+                        {batchResult.failed_details?.map((d, i) => (
+                          <p key={i} className="text-[10px] text-red-700 font-mono break-all">{d}</p>
+                        ))}
+                        {batchResult.error ? (
+                          <p className="text-xs text-red-700">{batchResult.error}</p>
+                        ) : null}
+                      </div>
                     ) : null}
                   </div>
                 ) : null}
