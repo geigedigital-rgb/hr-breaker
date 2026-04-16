@@ -12,7 +12,7 @@ import {
 } from "@heroicons/react/24/outline";
 import * as api from "../api";
 import { useAuth } from "../contexts/AuthContext";
-import { t } from "../i18n";
+import { t, tFormat } from "../i18n";
 
 function StepItem({
   label,
@@ -74,7 +74,7 @@ const SUBSCRIPTION_BENEFITS: { text: string; icon: string }[] = [
   { text: "Get noticed by recruiters faster", icon: "bag.svg" },
   { text: "Make sure your resume gets past ATS filters", icon: "puzle.svg" },
   { text: "Become a top 1% candidate", icon: "0fficedress.svg" },
-  { text: "7-day money-back guarantee", icon: "time.svg" },
+  { text: "PDF download right after checkout", icon: "time.svg" },
   { text: "24/7 support whenever you need help", icon: "chat.svg" },
 ];
 
@@ -118,6 +118,7 @@ export default function DownloadCheckout() {
   const [error, setError] = useState<string | null>(null);
   const [selectedPlan, setSelectedPlan] = useState<"trial" | "monthly">("trial");
   const [socialProofCount] = useState(() => 412 + Math.floor(Math.random() * (670 - 412 + 1)));
+  const [downloadsToday] = useState(() => 1188 + Math.floor(Math.random() * 120));
 
   const fromState = location.state as { pendingExportToken?: string; returnTo?: string } | null;
   const pendingExportToken = (fromState?.pendingExportToken || params.get("pending") || "").trim();
@@ -129,8 +130,16 @@ export default function DownloadCheckout() {
     const n = Date.parse(expiresAtRaw);
     return Number.isFinite(n) ? n : null;
   }, [expiresAtRaw]);
+  const [sessionFallbackEndMs] = useState(() => Date.now() + 15 * 60 * 1000);
+  const effectiveEndMs = expiresAtMs ?? sessionFallbackEndMs;
+  const [savedMinutesHeadline] = useState(() =>
+    Math.max(1, Math.ceil((effectiveEndMs - Date.now()) / 60000)),
+  );
   const [nowMs, setNowMs] = useState(Date.now());
-  const remainingSeconds = expiresAtMs ? Math.max(0, Math.floor((expiresAtMs - nowMs) / 1000)) : null;
+  const remainingSeconds =
+    !sandboxMode && pendingExportToken
+      ? Math.max(0, Math.floor((effectiveEndMs - nowMs) / 1000))
+      : null;
   const timerLabel = useMemo(() => {
     if (remainingSeconds == null) return null;
     const mm = Math.floor(remainingSeconds / 60);
@@ -139,10 +148,10 @@ export default function DownloadCheckout() {
   }, [remainingSeconds]);
 
   useEffect(() => {
-    if (expiresAtMs == null || sandboxMode) return;
+    if (sandboxMode || !pendingExportToken) return;
     const id = window.setInterval(() => setNowMs(Date.now()), 1000);
     return () => window.clearInterval(id);
-  }, [expiresAtMs, sandboxMode]);
+  }, [sandboxMode, pendingExportToken]);
 
   const successUrl = useMemo(() => {
     const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
@@ -230,18 +239,30 @@ export default function DownloadCheckout() {
         {showCheckoutSubtitle ? (
           <div className="mb-4 space-y-2 text-[13px] text-[#5B6378] max-w-2xl mx-auto text-center leading-relaxed">
             {!sandboxMode && pendingExportToken ? (
-              <>
-                <p>
-                  Your optimized resume is saved for this session. After payment you return to your result page and
-                  download the PDF.
+              <div className="space-y-3">
+                <p className="text-base sm:text-lg font-semibold text-[#111827] tracking-tight">
+                  {tFormat(t("upgrade.downloadCheckoutSavedForMinutes"), {
+                    minutes: String(savedMinutesHeadline),
+                  })}
+                </p>
+                <p className="text-[13px] sm:text-sm text-[#5B6378] leading-snug">
+                  {t("upgrade.downloadCheckoutDeleteWarning")}
                 </p>
                 {timerLabel ? (
-                  <p className="text-[#111827]">
-                    <span className="text-[#6B7280]">Saved for</span>{" "}
-                    <span className="font-semibold tabular-nums">{timerLabel}</span>
-                  </p>
+                  <div className="pt-1">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#6B7280]">
+                      {t("upgrade.downloadCheckoutTimeLeft")}
+                    </p>
+                    <p
+                      className="mt-1 text-4xl sm:text-5xl font-bold tabular-nums tracking-tight text-[#111827]"
+                      aria-live="polite"
+                      aria-atomic="true"
+                    >
+                      {timerLabel}
+                    </p>
+                  </div>
                 ) : null}
-              </>
+              </div>
             ) : !sandboxMode ? (
               <p className="text-amber-900/90">No saved session. Go back to Optimize and tap Download PDF again.</p>
             ) : null}
@@ -466,7 +487,14 @@ export default function DownloadCheckout() {
                 {loadingPlan !== null ? t("upgrade.redirectingStripe") : t("upgrade.checkoutContinue")}
               </button>
               <p className="mt-2 text-center text-[11px] leading-snug text-[#6B7280]">
-                {t("upgrade.checkoutMoneyBackGuarantee")}
+                <span className="font-semibold text-[#374151]">
+                  {tFormat(t("upgrade.downloadCheckoutDownloadsToday"), {
+                    count: new Intl.NumberFormat(undefined).format(downloadsToday),
+                  })}
+                </span>
+                <span className="mt-0.5 block text-[#9CA3AF] font-medium normal-case tracking-normal">
+                  {t("upgrade.downloadCheckoutToday")}
+                </span>
               </p>
             </div>
           </aside>
@@ -487,7 +515,14 @@ export default function DownloadCheckout() {
             {loadingPlan !== null ? t("upgrade.redirectingStripe") : t("upgrade.checkoutContinue")}
           </button>
           <p className="mt-2 text-center text-[11px] leading-snug text-[#6B7280]">
-            {t("upgrade.checkoutMoneyBackGuarantee")}
+            <span className="font-semibold text-[#374151]">
+              {tFormat(t("upgrade.downloadCheckoutDownloadsToday"), {
+                count: new Intl.NumberFormat(undefined).format(downloadsToday),
+              })}
+            </span>
+            <span className="mt-0.5 block text-[#9CA3AF] font-medium normal-case tracking-normal">
+              {t("upgrade.downloadCheckoutToday")}
+            </span>
           </p>
         </div>
       </div>
