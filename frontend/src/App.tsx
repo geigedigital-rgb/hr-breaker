@@ -8,6 +8,7 @@ import RouteFallback from "./components/RouteFallback";
 import { t } from "./i18n";
 
 const Home = lazy(() => import("./pages/Home"));
+const ImproveResume = lazy(() => import("./pages/ImproveResume"));
 const Optimize = lazy(() => import("./pages/Optimize"));
 const History = lazy(() => import("./pages/History"));
 const Progress = lazy(() => import("./pages/Progress"));
@@ -157,6 +158,7 @@ function App() {
             />
             <Route path="/" element={<RequireAuth><Layout /></RequireAuth>}>
               <Route index element={<Home />} />
+              <Route path="improve" element={<ImproveResume />} />
               <Route path="optimize" element={<Optimize />} />
               <Route path="history" element={<History />} />
               <Route path="progress" element={<Progress />} />

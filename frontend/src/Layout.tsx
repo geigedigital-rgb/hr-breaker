@@ -10,6 +10,7 @@ import {
   ShieldCheckIcon,
   Bars3Icon,
   XMarkIcon,
+  SparklesIcon,
 } from "@heroicons/react/24/outline";
 import { useAuth } from "./contexts/AuthContext";
 import { isAdminUser } from "./api";
@@ -26,6 +27,7 @@ import AdminPipelineConsole from "./components/AdminPipelineConsole";
 
 const nav = [
   { to: "/", label: t("nav.home"), icon: HomeIcon },
+  { to: "/improve", label: t("nav.improve"), icon: SparklesIcon },
   { to: "/history", label: t("nav.history"), icon: DocumentTextIcon },
 ];
 

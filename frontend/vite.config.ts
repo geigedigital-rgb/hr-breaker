@@ -10,6 +10,10 @@ export default defineConfig({
       '/api': {
         target: 'http://127.0.0.1:8000', // бэкенд; если на 8001 — поменяйте на :8001
         changeOrigin: true,
+        // WeasyPrint + сеть (@font-face) на render-pdf могут занимать десятки секунд; дефолтный
+        // таймаут http-proxy короткий → в логе Vite «socket hang up», хотя uvicorn ещё рендерит.
+        timeout: 180_000,
+        proxyTimeout: 180_000,
       },
     },
   },

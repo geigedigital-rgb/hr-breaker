@@ -10,7 +10,8 @@ import {
   adminExtractResumeSchema,
   adminExtractResumeSchemaFromFile,
   adminRenderTemplatePdf,
-  getAdminTemplates,
+  getTemplates,
+  sortResumeTemplatesForUi,
   type AdminTemplateListItem,
   type UnifiedResumeSchema,
 } from "../../api";
@@ -363,9 +364,9 @@ export default function AdminTemplatesLab() {
   }, [runBulkPrefetchTemplates]);
 
   useEffect(() => {
-    getAdminTemplates()
+    getTemplates()
       .then((res) => {
-        const sorted = [...res.items].sort((a, b) => b.pdf_stability_score - a.pdf_stability_score);
+        const sorted = sortResumeTemplatesForUi(res.items);
         setTemplates(sorted);
         if (sorted.length > 0) setTemplateId((prev) => prev || sorted[0].id);
       })

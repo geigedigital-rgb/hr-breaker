@@ -371,6 +371,7 @@ export async function analyze(params: {
   resume_content: string;
   job_text?: string;
   job_url?: string;
+  improve_mode?: boolean;
   output_language?: string;
   session_template_id?: string;
 }): Promise<AnalyzeResponse> {
@@ -455,6 +456,7 @@ export async function optimize(params: {
   resume_content: string;
   job_text?: string;
   job_url?: string;
+  improve_mode?: boolean;
   max_iterations?: number;
   parallel?: boolean;
   aggressive_tailoring?: boolean;
@@ -531,6 +533,7 @@ export async function optimizeStream(
     resume_content: string;
     job_text?: string;
     job_url?: string;
+    improve_mode?: boolean;
     max_iterations?: number;
     parallel?: boolean;
     aggressive_tailoring?: boolean;
@@ -1019,6 +1022,11 @@ export type AdminTemplateListItem = {
 
 export type AdminTemplateListResponse = { items: AdminTemplateListItem[] };
 
+/** Same ordering as Templates Lab: higher `pdf_stability_score` first. */
+export function sortResumeTemplatesForUi(items: AdminTemplateListItem[]): AdminTemplateListItem[] {
+  return [...items].sort((a, b) => b.pdf_stability_score - a.pdf_stability_score);
+}
+
 function logTemplatesLabStep(step: string, message: string, data?: Record<string, unknown>): void {
   if (!isAdminPipelineCaptureEnabled()) return;
   appendAdminPipelineLog({
@@ -1113,6 +1121,7 @@ export async function adminExtractResumeSchemaFromFile(params: {
   return out;
 }
 
+/** Resume PDF layouts from `GET /api/templates` — same catalog for Optimize (tailor + improve) and admin Templates Lab. */
 export async function getTemplates(): Promise<AdminTemplateListResponse> {
   const r = await fetch(`${API}/templates`, { headers: authHeaders() });
   const data = await parseJsonOrThrow<AdminTemplateListResponse & { detail?: string }>(r);

@@ -76,6 +76,7 @@ type ThumbState = "loading" | "error" | string;
 export function PostResultResumeStudio({
   qualityPct,
   jobTitle,
+  isImproveMode = false,
   fallbackPreviewUrl,
   schemaJson,
   initialTemplateId,
@@ -89,6 +90,7 @@ export function PostResultResumeStudio({
 }: {
   qualityPct: number;
   jobTitle: string;
+  isImproveMode?: boolean;
   fallbackPreviewUrl: string | null;
   schemaJson: string;
   initialTemplateId?: string;
@@ -133,10 +135,14 @@ export function PostResultResumeStudio({
       try {
         const res = await api.getTemplates();
         if (cancelled) return;
-        setTemplates(res.items);
-        if (res.items.length && !selectedId) {
-          setSelectedId(res.items[0].id);
-          onTemplateChange(res.items[0].id);
+        const items = api.sortResumeTemplatesForUi(res.items);
+        setTemplates(items);
+        if (items.length) {
+          const ids = new Set(items.map((x) => x.id));
+          const want = (initialTemplateId || "").trim();
+          const next = want && ids.has(want) ? want : items[0].id;
+          setSelectedId(next);
+          onTemplateChange(next);
         }
       } catch {
         if (!cancelled) {
@@ -270,7 +276,9 @@ export function PostResultResumeStudio({
   };
 
   const pct = Math.max(0, Math.min(100, Math.round(qualityPct)));
-  const previewMatchHeadline = t("optimize.postResultPreviewMatchStrong");
+  const previewMatchHeadline = isImproveMode
+    ? t("optimize.templateHeaderImproveMode")
+    : t("optimize.postResultPreviewMatchStrong");
   const showFallbackPreview = templatesLoadError || !templates.length;
   const effectivePreviewUrl = showFallbackPreview ? fallbackPreviewUrl : mainPreviewUrl;
 
@@ -337,7 +345,7 @@ export function PostResultResumeStudio({
             })}
             {templates.length === 0 && prefetchDone && (
               <div className="flex gap-3">
-                {["Even", "Classic", "Flat", "Onyx"].map((label, i) => (
+                {["Classic", "Flat", "Onyx", "Vega"].map((label, i) => (
                   <div
                     key={label}
                     className="w-[100px] shrink-0 text-center opacity-80"
@@ -411,11 +419,20 @@ export function PostResultResumeStudio({
 
       <section className="relative w-full overflow-hidden rounded-2xl border border-[#E8ECF4] bg-white shadow-[0_8px_40px_-12px_rgba(15,23,42,0.12)]">
         <div className="flex flex-wrap items-center gap-3 border-b border-[#EDF1F7] bg-[#FAFAFC] px-4 py-3 sm:px-5">
-          <span className="inline-flex h-9 min-w-[2.25rem] items-center justify-center gap-1 rounded-full bg-[#ECFDF5] px-2.5 text-[13px] font-bold text-[#166534] ring-1 ring-[#BBF7D0]">
+          <span className={`inline-flex h-9 min-w-[2.25rem] items-center justify-center gap-1 rounded-full px-2.5 text-[13px] font-bold ring-1 ${
+            isImproveMode
+              ? "bg-[#EEF2FF] text-[#4558ff] ring-[#C7D2FE]"
+              : "bg-[#ECFDF5] text-[#166534] ring-[#BBF7D0]"
+          }`}>
             <CheckIcon className="h-4 w-4 shrink-0" strokeWidth={2.5} />
             <span className="tabular-nums">{pct}%</span>
           </span>
-          <p className="text-[14px] font-semibold text-[#181819] leading-snug">{previewMatchHeadline}</p>
+          <div className="min-w-0">
+            <p className="text-[14px] font-semibold text-[#181819] leading-snug">{previewMatchHeadline}</p>
+            {!isImproveMode && (
+              <p className="text-[11px] text-[#6B7280] mt-0.5">{t("optimize.interviewChances")}</p>
+            )}
+          </div>
         </div>
         <div ref={mainHostRef} className="relative min-h-[200px] bg-[#F4F6FA]">
           {mainLoading && !showFallbackPreview && (
@@ -455,8 +472,15 @@ export function PostResultResumeStudio({
             style={{ WebkitBackdropFilter: "blur(24px) saturate(1.8)", backdropFilter: "blur(24px) saturate(1.8)" }}
           >
             <p className="w-full text-xl font-semibold tracking-tight text-[#181819] sm:text-2xl break-words whitespace-normal">
-              {tFormat(t("optimize.resultReadyForRole"), { jobTitle })}
+              {isImproveMode
+                ? t("optimize.resultReadyImproved")
+                : tFormat(t("optimize.resultReadyForRole"), { jobTitle })}
             </p>
+            {!isImproveMode && (
+              <p className="mt-1 text-[13px] text-[#6B7280]">
+                {t("optimize.interviewChances")}: <span className="font-semibold text-[#166534]">{pct}%</span>
+              </p>
+            )}
             <div className="mt-6 flex w-full max-w-[280px] sm:max-w-[320px] flex-col gap-3">
               <button
                 type="button"

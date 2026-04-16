@@ -7,7 +7,6 @@ import {
   ArrowDownTrayIcon,
   EyeIcon,
   TrashIcon,
-  ChartBarIcon,
 } from "@heroicons/react/24/outline";
 import * as api from "../api";
 import { useAuth } from "../contexts/AuthContext";
@@ -83,7 +82,7 @@ function useResumeDocuments() {
 
 export default function Home() {
   const navigate = useNavigate();
-  const { documents, editedDocuments, loading, error, refetch } = useResumeDocuments();
+  const { documents, loading, error, refetch } = useResumeDocuments();
   const { user, refreshUser } = useAuth();
   const [thumbnailErrors, setThumbnailErrors] = useState<Set<string>>(new Set());
   const [addUploading, setAddUploading] = useState(false);
@@ -112,11 +111,11 @@ export default function Home() {
     setImprovingFilename(item.filename);
     try {
       const content = await api.getHistoryOriginalText(item.filename);
-      navigate("/optimize", {
+      navigate("/improve", {
         state: { resumeContent: content, uploadedFileName: item.filename, sourceWasPdf: item.source_was_pdf }
       });
     } catch {
-      navigate("/optimize");
+      navigate("/improve");
     } finally {
       setImprovingFilename(null);
     }
@@ -166,28 +165,32 @@ export default function Home() {
 
   return (
     <div className="space-y-6">
-      {/* Banner: Resume match score — same block style as other sections */}
+      {/* Banner: Resume match score */}
       <Link
-        to="/optimize"
-        className="block rounded-2xl border border-[#EBEDF5] bg-white overflow-hidden focus:outline-none focus:ring-2 focus:ring-[#4578FC]/30 focus:ring-offset-2"
+        to="/improve"
+        className="block rounded-2xl overflow-hidden focus:outline-none focus:ring-2 focus:ring-white/40 focus:ring-offset-2 focus:ring-offset-[#324BF4]"
+        style={{ background: "#324BF4" }}
       >
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-5 px-5 py-4 sm:p-5">
-          <div className="flex items-start gap-4 min-w-0">
-            <div className="shrink-0 w-12 h-12 rounded-xl flex items-center justify-center bg-[#F5F6FA] border border-[#EBEDF5] text-[#6366f1]">
-              <ChartBarIcon className="w-6 h-6" strokeWidth={1.75} />
-            </div>
-            <div className="min-w-0">
-              <h2 className="text-base font-semibold tracking-tight text-[#181819]">
-                {t("home.resumeMatchScore")}
-              </h2>
-              <p className="text-sm text-[var(--text-muted)] mt-0.5 leading-relaxed max-w-xl">
-                {t("home.resumeMatchDesc")}
-              </p>
-            </div>
+        <div className="relative flex items-center min-h-[9rem] sm:min-h-[11rem] px-6 py-5 gap-4 overflow-hidden">
+          {/* Illustration — bottom-left, partially cropped */}
+          <div className="absolute left-0 bottom-0 top-0 w-48 sm:w-64 pointer-events-none select-none overflow-hidden">
+            <img src="/banner.svg" alt="" className="absolute bottom-0 left-0 w-full" draggable={false} />
           </div>
-          <div className="shrink-0">
-            <span className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-semibold text-[#4578FC] bg-transparent border-2 border-[#4578FC] transition-colors hover:bg-[#4578FC]/5">
-              {t("home.checkChance")}
+
+          {/* Center text */}
+          <div className="relative flex-1 flex flex-col items-start text-left pl-48 sm:pl-64 pr-4 min-w-0">
+            <h2 className="text-xl sm:text-2xl font-bold text-white leading-tight tracking-tight">
+              {t("home.resumeMatchScore")}
+            </h2>
+            <p className="text-sm sm:text-base text-white/70 mt-2 leading-relaxed max-w-sm">
+              {t("home.resumeMatchDesc")}
+            </p>
+          </div>
+
+          {/* CTA button — right, vertically centered */}
+          <div className="relative shrink-0 mr-4 sm:mr-6">
+            <span className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-semibold text-[#324BF4] bg-white shadow-sm transition-opacity hover:opacity-90">
+              {t("home.startNow")}
               <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
               </svg>

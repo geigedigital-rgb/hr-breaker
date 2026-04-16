@@ -480,6 +480,7 @@ class OptimizeRequest(BaseModel):
     resume_content: str
     job_text: str | None = None
     job_url: str | None = None
+    improve_mode: bool = False  # True = general resume improvement (no job matching)
     max_iterations: int | None = None
     parallel: bool = True
     aggressive_tailoring: bool = False  # True = add skills from job (with user warning)
@@ -497,6 +498,7 @@ class AnalyzeRequest(BaseModel):
     resume_content: str
     job_text: str | None = None
     job_url: str | None = None
+    improve_mode: bool = False  # True = general resume improvement (no job matching)
     output_language: str | None = None  # e.g. "en", "ru". Default: English
     session_template_id: str | None = Field(None, max_length=200)
 
@@ -2894,7 +2896,9 @@ async def api_analyze(req: AnalyzeRequest, user: dict | None = Depends(get_optio
     )
 
     job_text = req.job_text
-    if req.job_url and not job_text:
+    if req.improve_mode and not job_text:
+        job_text = None  # Will use IMPROVE_MODE_JOB below
+    elif req.job_url and not job_text:
         url = _sanitize_url(req.job_url)
         if _is_job_list_url(url):
             raise HTTPException(
@@ -2920,23 +2924,27 @@ async def api_analyze(req: AnalyzeRequest, user: dict | None = Depends(get_optio
                 pool, audit_uid, "analyze_job_scrape", None, success=False, error_message=str(e)[:2000]
             )
             raise HTTPException(422, str(e))
-    if not job_text:
+    if not job_text and not req.improve_mode:
         raise HTTPException(400, "Provide job_text or job_url")
 
-    if not req.job_url:
-        alog("job_input", "Using pasted job description (no URL)", {"job_text_chars": len(job_text)})
+    if req.improve_mode and not job_text:
+        from hr_breaker.orchestration import IMPROVE_MODE_JOB
+        job = IMPROVE_MODE_JOB
+    else:
+        if not req.job_url:
+            alog("job_input", "Using pasted job description (no URL)", {"job_text_chars": len(job_text or "")})
 
-    _job_cache_key = _cache_key("job:", job_text)
-    job = _cache_get(_job_cache_key)
-    if job is None:
-        try:
-            job = await parse_job_posting(job_text, audit_user_id=audit_uid)
-        except Exception as e:
-            logger.exception("analyze job parse failed: %s", e)
-            if _is_api_key_invalid(e):
-                raise HTTPException(401, _API_KEY_INVALID_MSG)
-            raise HTTPException(500, f"Job parse failed: {e!s}")
-        _cache_set(_job_cache_key, job)
+        _job_cache_key = _cache_key("job:", job_text or "")
+        job = _cache_get(_job_cache_key)
+        if job is None:
+            try:
+                job = await parse_job_posting(job_text, audit_user_id=audit_uid)
+            except Exception as e:
+                logger.exception("analyze job parse failed: %s", e)
+                if _is_api_key_invalid(e):
+                    raise HTTPException(401, _API_KEY_INVALID_MSG)
+                raise HTTPException(500, f"Job parse failed: {e!s}")
+            _cache_set(_job_cache_key, job)
 
     alog(
         "parse_job",
@@ -3119,56 +3127,57 @@ async def _run_optimize(
         },
     )
     job_text = req.job_text
-    if req.job_url and not job_text:
-        url = _sanitize_url(req.job_url)
-        if _is_job_list_url(url):
-            return OptimizeResponse(
-                success=False,
-                validation=ValidationResultOut(passed=False, results=[]),
-                job=JobPostingOut(title="", company="", requirements=[], keywords=[], description=""),
-                error="This is a job search page link. Use a link to a single job posting (e.g. indeed.com/viewjob?jk=...).",
-            )
-        _put_progress(progress_queue, 2, "Loading job from URL…")
-        try:
-            job_text = await asyncio.to_thread(scrape_job_posting, url)
-            _put_progress(progress_queue, 5, "Job loaded")
-            _put_admin_log(
-                progress_queue,
-                user,
-                {"step": "scrape", "message": "Job URL scraped to text", "data": {"job_text_chars": len(job_text)}},
-            )
-        except CloudflareBlockedError:
-            pool = await get_pool()
-            await log_usage_event(
-                pool, audit_uid, "optimize_job_scrape", None, success=False, error_message="Cloudflare blocked"
-            )
-            return OptimizeResponse(
-                success=False,
-                validation=ValidationResultOut(passed=False, results=[]),
-                job=JobPostingOut(title="", company="", requirements=[], keywords=[], description=""),
-                error="Job URL blocked by bot protection. Paste job text instead.",
-            )
-        except Exception as e:
-            pool = await get_pool()
-            await log_usage_event(
-                pool, audit_uid, "optimize_job_scrape", None, success=False, error_message=str(e)[:2000]
-            )
-            return OptimizeResponse(
-                success=False,
-                validation=ValidationResultOut(passed=False, results=[]),
-                job=JobPostingOut(title="", company="", requirements=[], keywords=[], description=""),
-                error=str(e),
-            )
-    if not job_text:
-        raise HTTPException(400, "Provide job_text or job_url")
+    if not req.improve_mode:
+        if req.job_url and not job_text:
+            url = _sanitize_url(req.job_url)
+            if _is_job_list_url(url):
+                return OptimizeResponse(
+                    success=False,
+                    validation=ValidationResultOut(passed=False, results=[]),
+                    job=JobPostingOut(title="", company="", requirements=[], keywords=[], description=""),
+                    error="This is a job search page link. Use a link to a single job posting (e.g. indeed.com/viewjob?jk=...).",
+                )
+            _put_progress(progress_queue, 2, "Loading job from URL…")
+            try:
+                job_text = await asyncio.to_thread(scrape_job_posting, url)
+                _put_progress(progress_queue, 5, "Job loaded")
+                _put_admin_log(
+                    progress_queue,
+                    user,
+                    {"step": "scrape", "message": "Job URL scraped to text", "data": {"job_text_chars": len(job_text)}},
+                )
+            except CloudflareBlockedError:
+                pool = await get_pool()
+                await log_usage_event(
+                    pool, audit_uid, "optimize_job_scrape", None, success=False, error_message="Cloudflare blocked"
+                )
+                return OptimizeResponse(
+                    success=False,
+                    validation=ValidationResultOut(passed=False, results=[]),
+                    job=JobPostingOut(title="", company="", requirements=[], keywords=[], description=""),
+                    error="Job URL blocked by bot protection. Paste job text instead.",
+                )
+            except Exception as e:
+                pool = await get_pool()
+                await log_usage_event(
+                    pool, audit_uid, "optimize_job_scrape", None, success=False, error_message=str(e)[:2000]
+                )
+                return OptimizeResponse(
+                    success=False,
+                    validation=ValidationResultOut(passed=False, results=[]),
+                    job=JobPostingOut(title="", company="", requirements=[], keywords=[], description=""),
+                    error=str(e),
+                )
+        if not job_text:
+            raise HTTPException(400, "Provide job_text or job_url")
 
     _put_admin_log(
         progress_queue,
         user,
         {
             "step": "job_text",
-            "message": "Job description text ready for pipeline",
-            "data": {"chars": len(job_text), "from_scrape": bool(req.job_url and req.job_text is None)},
+            "message": "Job description text ready for pipeline" if not req.improve_mode else "Improve mode — no job text",
+            "data": {"chars": len(job_text or ""), "improve_mode": req.improve_mode, "from_scrape": bool(req.job_url and req.job_text is None)},
         },
     )
 
@@ -3224,12 +3233,12 @@ async def _run_optimize(
         _put_admin_log(progress_queue, user, entry)
 
     out_lang = (req.output_language or "en").strip().lower() or "en"
-    _job_cache_key = _cache_key("job:", job_text)
-    _cached_job = _cache_get(_job_cache_key)
+    _job_cache_key = _cache_key("job:", job_text or "__improve_mode__") if not req.improve_mode else None
+    _cached_job = _cache_get(_job_cache_key) if _job_cache_key else None
     try:
         optimized, validation, job = await optimize_for_job(
             source,
-            job_text=job_text if _cached_job is None else None,
+            job_text=job_text if _cached_job is None and not req.improve_mode else None,
             job=_cached_job,
             max_iterations=1,
             parallel=req.parallel,
@@ -3240,9 +3249,10 @@ async def _run_optimize(
             audit_user_id=audit_uid,
             pre_ats_score=req.pre_ats_score,
             pre_keyword_score=req.pre_keyword_score,
+            improve_mode=req.improve_mode,
         )
         # Store result for future reuse if it wasn't cached already
-        if _cached_job is None:
+        if _cached_job is None and _job_cache_key is not None:
             _cache_set(_job_cache_key, job)
     except Exception as e:
         logger.exception("Optimize failed")

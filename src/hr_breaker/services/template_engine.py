@@ -33,16 +33,6 @@ class SkillLayoutConfig:
 
 _TEMPLATES: list[TemplateManifest] = [
     TemplateManifest(
-        id="jsonresume-even-inspired",
-        name="Even",
-        source="jsonresume",
-        supports_photo=False,
-        supports_columns=False,
-        pdf_stability_score=0.95,
-        default_css_vars={"accent": "#2f40df"},
-        layout="standard",
-    ),
-    TemplateManifest(
         id="jsonresume-flat-inspired",
         name="Flat",
         source="jsonresume",
@@ -84,16 +74,6 @@ _TEMPLATES: list[TemplateManifest] = [
         layout="rx_ditto",
     ),
     TemplateManifest(
-        id="reactive-gengar",
-        name="Gengar",
-        source="reactive-resume",
-        supports_photo=True,
-        supports_columns=True,
-        pdf_stability_score=0.88,
-        default_css_vars={"accent": "#6b21a8"},
-        layout="rx_gengar",
-    ),
-    TemplateManifest(
         id="reactive-onyx",
         name="Onyx",
         source="reactive-resume",
@@ -122,6 +102,26 @@ _TEMPLATES: list[TemplateManifest] = [
         pdf_stability_score=0.87,
         default_css_vars={"accent": "#0f766e"},
         layout="rx_ditgar",
+    ),
+    TemplateManifest(
+        id="reactive-vega",
+        name="Vega",
+        source="reactive-resume",
+        supports_photo=True,
+        supports_columns=True,
+        pdf_stability_score=0.88,
+        default_css_vars={"accent": "#006a80"},
+        layout="rx_vega",
+    ),
+    TemplateManifest(
+        id="reactive-cobalt",
+        name="Cobalt",
+        source="reactive-resume",
+        supports_photo=True,
+        supports_columns=True,
+        pdf_stability_score=0.87,
+        default_css_vars={"accent": "#005ebd"},
+        layout="rx_cobalt",
     ),
 ]
 
@@ -180,10 +180,11 @@ def _get_skill_layout(layout_key: str) -> SkillLayoutConfig:
         "standard-two": SkillLayoutConfig(max_groups=5, max_items_per_group=5),
         "rx_chikorita": SkillLayoutConfig(max_groups=4, max_items_per_group=4, dense=True),
         "rx_ditto": SkillLayoutConfig(max_groups=4, max_items_per_group=4, dense=True),
-        "rx_gengar": SkillLayoutConfig(max_groups=4, max_items_per_group=4, dense=True),
         "rx_onyx": SkillLayoutConfig(max_groups=5, max_items_per_group=5),
         "rx_lapras": SkillLayoutConfig(max_groups=4, max_items_per_group=4),
         "rx_ditgar": SkillLayoutConfig(max_groups=4, max_items_per_group=4, dense=True),
+        "rx_vega": SkillLayoutConfig(max_groups=5, max_items_per_group=6, dense=True),
+        "rx_cobalt": SkillLayoutConfig(max_groups=6, max_items_per_group=8, dense=True),
     }
     return presets.get(layout_key, SkillLayoutConfig(max_groups=4, max_items_per_group=5))
 
@@ -366,57 +367,6 @@ def _render_rx_ditto(schema: UnifiedResumeSchema, accent: str) -> str:
 """.strip()
 
 
-def _render_rx_gengar(schema: UnifiedResumeSchema, accent: str) -> str:
-    b = schema.basics
-    name = escape(b.name or "Candidate")
-    label = f'<p class="label">{escape(b.label)}</p>' if b.label else ""
-    contacts = _contacts_line(schema)
-    summary_band = (
-        f'<div class="rx-sum"><p>{escape(b.summary)}</p></div>' if b.summary else ""
-    )
-
-    photo_html = ""
-    if getattr(b, "image", None):
-        photo_html = f'<div class="rx-photo-container"><img src="{b.image}" class="rx-photo" alt="Photo" /></div>'
-
-    return f"""
-<style>
-{_css_base(accent)}
-  /* flex-start: avoid stretching main to sidebar height (WeasyPrint then paginates badly — main jumps to page 2). */
-  .rx-gengar .rx-row {{ display: flex; align-items: flex-start; width: 100%; }}
-  .rx-gengar .rx-side {{
-    width: 32%; max-width: 210px; min-width: 150px; flex-shrink: 0;
-    padding: 0 16px 20px 20px;
-    background: color-mix(in srgb, var(--accent) 18%, var(--paper));
-  }}
-  .rx-gengar .rx-sidehead {{
-    background: var(--accent); color: var(--paper); padding: 18px 16px; margin: 0 -16px 14px -20px;
-    display: flex; flex-direction: column;
-  }}
-  .rx-gengar .rx-photo-container {{ width: 80px; height: 80px; margin-bottom: 12px; border-radius: 4px; overflow: hidden; flex-shrink: 0; align-self: flex-start; }}
-  .rx-gengar .rx-photo {{ width: 100%; height: 100%; object-fit: cover; aspect-ratio: 1/1; }}
-  .rx-gengar .rx-sidehead h1 {{ color: var(--paper); font-size: 22px; }}
-  .rx-gengar .rx-sidehead .label {{ color: rgba(255,255,255,.9); }}
-  .rx-gengar .rx-sidehead .contacts {{ color: rgba(255,255,255,.88); }}
-  .rx-gengar .rx-main {{ flex: 1; min-width: 0; padding: 20px 24px 20px 12px; }}
-  .rx-gengar .rx-sum {{
-    background: color-mix(in srgb, var(--accent) 22%, var(--paper));
-    padding: 14px 16px; margin-bottom: 14px; border-radius: 4px;
-  }}
-  .rx-gengar .rx-sum p {{ margin: 0; }}
-</style>
-<div class="resume rx-gengar">
-  <div class="rx-row">
-    <div class="rx-side">
-      <div class="rx-sidehead">{photo_html}<h1>{name}</h1>{label}{contacts}</div>
-      {_side_column(schema, "rx_gengar")}
-    </div>
-    <div class="rx-main">{summary_band}{_main_column(schema)}</div>
-  </div>
-</div>
-""".strip()
-
-
 def _render_rx_onyx(schema: UnifiedResumeSchema, accent: str) -> str:
     b = schema.basics
     name = escape(b.name or "Candidate")
@@ -525,13 +475,564 @@ def _render_rx_ditgar(schema: UnifiedResumeSchema, accent: str) -> str:
 """.strip()
 
 
+def _render_vega_contacts(schema: UnifiedResumeSchema) -> str:
+    """Contacts line with simple icon prefixes, WeasyPrint-safe inline layout."""
+    b = schema.basics
+    location = b.location.compact() if b.location else ""
+    items: list[str] = []
+    if b.email:
+        items.append(f'<span class="rx-ci">@ {escape(b.email)}</span>')
+    if b.phone:
+        items.append(f'<span class="rx-ci">&#x2706; {escape(b.phone)}</span>')
+    if b.url:
+        items.append(f'<span class="rx-ci">&#x2192; {escape(b.url)}</span>')
+    if location:
+        items.append(f'<span class="rx-ci">&#x25AA; {escape(location)}</span>')
+    separator = ' <span class="rx-sep">&#x2022;</span> '
+    return f'<p class="rx-contacts">{separator.join(items)}</p>' if items else ""
+
+
+def _render_vega_work(schema: UnifiedResumeSchema) -> str:
+    """Work entries with accent-colored company name and entry separators."""
+    parts: list[str] = []
+    for item in schema.work:
+        dates = " \u2013 ".join(x for x in [item.start_date, item.end_date] if x)
+        date_html = f'<span class="rx-date">{escape(dates)}</span>' if dates else ""
+        company = f'<p class="rx-org">{escape(item.name)}</p>' if item.name else ""
+        loc = getattr(item, "location", "") or ""
+        loc_html = f' <span class="rx-loc">{escape(loc)}</span>' if loc else ""
+        bullets = "".join(f"<li>{escape(x)}</li>" for x in item.highlights if x.strip())
+        ul = f"<ul>{bullets}</ul>" if bullets else ""
+        parts.append(
+            f'<article>'
+            f'<div class="rx-entry-head"><h3>{escape(item.position)}{loc_html}</h3>{date_html}</div>'
+            f'{company}{ul}'
+            f'</article>'
+        )
+    if not parts:
+        return ""
+    return f"<section><h2>Experience</h2>{''.join(parts)}</section>"
+
+
+def _render_vega_education(schema: UnifiedResumeSchema) -> str:
+    """Education entries with accent-colored institution name."""
+    parts: list[str] = []
+    for item in schema.education:
+        degree = " ".join(x for x in [item.study_type, item.area] if x)
+        dates = " \u2013 ".join(x for x in [item.start_date, item.end_date] if x)
+        date_html = f'<span class="rx-date">{escape(dates)}</span>' if dates else ""
+        institution = f'<p class="rx-org">{escape(item.institution)}</p>' if item.institution else ""
+        loc = getattr(item, "location", "") or ""
+        loc_html = f' <span class="rx-loc">{escape(loc)}</span>' if loc else ""
+        parts.append(
+            f'<article>'
+            f'<div class="rx-entry-head"><h3>{escape(degree)}{loc_html}</h3>{date_html}</div>'
+            f'{institution}'
+            f'</article>'
+        )
+    if not parts:
+        return ""
+    return f"<section><h2>Education</h2>{''.join(parts)}</section>"
+
+
+def _render_vega_projects(schema: UnifiedResumeSchema) -> str:
+    parts: list[str] = []
+    for item in schema.projects:
+        bullets = "".join(f"<li>{escape(x)}</li>" for x in item.highlights if x.strip())
+        desc = f"<p>{escape(item.description)}</p>" if item.description else ""
+        parts.append(f"<article><h3>{escape(item.name)}</h3>{desc}<ul>{bullets}</ul></article>")
+    if not parts:
+        return ""
+    return f"<section><h2>Projects</h2>{''.join(parts)}</section>"
+
+
+def _render_skills_pills(schema: UnifiedResumeSchema) -> str:
+    """Render skills as tinted pill badges."""
+    all_items: list[str] = []
+    for group in schema.skills[:6]:
+        for kw in group.keywords[:6]:
+            if kw.strip():
+                all_items.append(kw.strip())
+    if not all_items:
+        return ""
+    pills = "".join(f'<span class="rx-pill">{escape(item)}</span>' for item in all_items)
+    return f"<section class='rx-skills'><h2>Skills</h2><div class='rx-pills'>{pills}</div></section>"
+
+
+def _render_rx_vega(schema: UnifiedResumeSchema, accent: str) -> str:
+    """Full-width colored header with photo top-right; Experience left, sidebar right.
+    Serif corporate font, icons in contacts, accent-colored org names, section separators."""
+    b = schema.basics
+    name = escape(b.name or "Candidate")
+    label = f'<p class="rx-label">{escape(b.label)}</p>' if b.label else ""
+    summary_html = (
+        f'<div class="rx-summary"><p>{escape(b.summary)}</p></div>' if b.summary else ""
+    )
+
+    contacts_html = _render_vega_contacts(schema)
+
+    photo_html = ""
+    if getattr(b, "image", None):
+        photo_html = f'<img src="{b.image}" class="rx-photo" alt="Photo" />'
+
+    # Languages with level text
+    lang_parts: list[str] = []
+    for item in schema.languages:
+        fluency = (
+            f'<span class="rx-lang-level">{escape(item.fluency)}</span>' if item.fluency else ""
+        )
+        lang_parts.append(
+            f'<div class="rx-lang-row"><span>{escape(item.language)}</span>{fluency}</div>'
+        )
+    langs_html = (
+        f"<section class='rx-langs'><h2>Languages</h2>"
+        f"<div class='rx-lang-list'>{''.join(lang_parts)}</div></section>"
+        if lang_parts else ""
+    )
+
+    side = f"{summary_html}{_render_skills_pills(schema)}{langs_html}"
+    main = (
+        f"{_render_vega_work(schema)}"
+        f"{_render_vega_projects(schema)}"
+        f"{_render_vega_education(schema)}"
+    )
+
+    return f"""
+<style>
+@page {{ margin: 0; }}
+  :root {{ --accent: {accent}; --text: #1a1a2e; --muted: #5f6880; --paper: #ffffff; }}
+  * {{ box-sizing: border-box; }}
+  /* Serif corporate font — Georgia available on all platforms */
+  body {{
+    font-family: 'Georgia', 'Palatino Linotype', 'Book Antiqua', Palatino, serif;
+    color: var(--text); margin: 0; font-size: 13px; line-height: 1.4;
+  }}
+  h1 {{ font-size: 26px; margin: 0; line-height: 1.1; font-family: 'Georgia', serif; }}
+  h2 {{
+    font-family: 'Georgia', serif;
+    font-size: 10px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase;
+    color: var(--accent);
+    border-bottom: 1.5px solid color-mix(in srgb, var(--accent) 22%, transparent);
+    padding-bottom: 4px; margin: 16px 0 10px;
+  }}
+  h3 {{ margin: 0 0 2px; font-size: 13px; font-weight: 700; }}
+  p {{ margin: 3px 0; line-height: 1.4; }}
+  ul {{ margin: 5px 0 0 16px; padding: 0; }}
+  li {{ margin: 2px 0; line-height: 1.35; font-size: 11.5px; }}
+  .rx-vega {{ display: flex; flex-direction: column; min-height: 100vh; }}
+  /* ── Header ── */
+  .rx-vega .rx-head {{
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--accent); color: var(--paper);
+    padding: 24px 32px 22px 32px; gap: 24px;
+  }}
+  .rx-vega .rx-head-text {{ flex: 1; min-width: 0; }}
+  .rx-vega .rx-head-text h1 {{ color: var(--paper); font-size: 24px; margin-bottom: 4px; }}
+  .rx-vega .rx-label {{
+    color: rgba(255,255,255,.88); font-size: 12.5px; font-style: italic; margin: 2px 0 0;
+  }}
+  .rx-vega .rx-contacts {{
+    color: rgba(255,255,255,.80); font-size: 11.5px; margin-top: 10px; line-height: 1.6;
+  }}
+  .rx-vega .rx-ci {{ display: inline; white-space: nowrap; }}
+  .rx-vega .rx-sep {{ color: rgba(255,255,255,.45); margin: 0 2px; }}
+  .rx-vega .rx-photo {{
+    width: 84px; height: 84px; object-fit: cover; border-radius: 7px;
+    flex-shrink: 0; display: block;
+    border: 2px solid rgba(255,255,255,.35);
+  }}
+  /* ── Body ── */
+  .rx-vega .rx-body {{ display: flex; align-items: flex-start; flex: 1; }}
+  .rx-vega .rx-main {{ flex: 1; min-width: 0; padding: 18px 16px 22px 26px; }}
+  .rx-vega .rx-side {{ width: 270px; flex-shrink: 0; padding: 18px 26px 22px 18px; }}
+  .rx-vega .rx-main h2:first-child, .rx-vega .rx-side > *:first-child h2 {{ margin-top: 0; }}
+  /* ── Entry layout ── */
+  .rx-vega .rx-entry-head {{
+    display: flex; justify-content: space-between; align-items: baseline; gap: 8px;
+  }}
+  .rx-vega .rx-date {{
+    font-size: 10px; color: var(--muted); white-space: nowrap; flex-shrink: 0;
+  }}
+  .rx-vega .rx-org {{ color: var(--accent); font-size: 12px; font-weight: 600; margin: 1px 0 3px; }}
+  .rx-vega .rx-loc {{ font-size: 11px; color: var(--muted); font-weight: 400; }}
+  /* ── Article separators ── */
+  .rx-vega article {{
+    padding-bottom: 9px; margin-bottom: 9px;
+    border-bottom: 1px solid rgba(0,0,0,.07);
+  }}
+  .rx-vega section > article:last-child {{ border-bottom: none; margin-bottom: 0; padding-bottom: 0; }}
+  /* ── Summary ── */
+  .rx-vega .rx-summary p {{ font-size: 11.5px; line-height: 1.5; color: var(--text); margin: 0; }}
+  .rx-vega .rx-summary {{ margin-bottom: 4px; }}
+  /* ── Skills pills ── */
+  .rx-vega .rx-skills {{ }}
+  .rx-vega .rx-pills {{ display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }}
+  .rx-vega .rx-pill {{
+    display: inline-block; font-size: 10px; padding: 2px 9px; border-radius: 20px;
+    background: color-mix(in srgb, var(--accent) 9%, var(--paper));
+    color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
+    white-space: nowrap; font-family: 'Georgia', serif;
+  }}
+  /* ── Languages ── */
+  .rx-vega .rx-langs {{ margin-top: 14px; }}
+  .rx-vega .rx-lang-list {{ display: flex; flex-direction: column; gap: 5px; margin-top: 6px; }}
+  .rx-vega .rx-lang-row {{
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-size: 11.5px;
+    padding-bottom: 5px; border-bottom: 1px solid rgba(0,0,0,.07);
+  }}
+  .rx-vega .rx-lang-list .rx-lang-row:last-child {{ border-bottom: none; padding-bottom: 0; }}
+  .rx-vega .rx-lang-level {{ color: var(--muted); font-size: 10px; font-style: italic; }}
+</style>
+<div class="resume rx-vega">
+  <div class="rx-head">
+    <div class="rx-head-text">
+      <h1>{name}</h1>
+      {label}
+      {contacts_html}
+    </div>
+    {photo_html}
+  </div>
+  <div class="rx-body">
+    <div class="rx-main">{main}</div>
+    <div class="rx-side">{side}</div>
+  </div>
+</div>
+""".strip()
+
+
+def _render_cobalt_skills(schema: UnifiedResumeSchema) -> str:
+    """Plain text skills only: one line per keyword, bold bullet — no invented proficiency bars."""
+    cfg = _get_skill_layout("rx_cobalt")
+    items: list[str] = []
+    for group in schema.skills[: cfg.max_groups]:
+        for kw in group.keywords[: cfg.max_items_per_group]:
+            t = kw.strip()
+            if not t:
+                continue
+            items.append(f"<li>{escape(t)}</li>")
+    if not items:
+        return ""
+    return (
+        "<section class='rx-c-side-sec rx-c-skills'>"
+        "<h2>Skills</h2>"
+        f"<ul class='rx-c-side-bullets'>{''.join(items)}</ul>"
+        "</section>"
+    )
+
+
+def _render_cobalt_languages(schema: UnifiedResumeSchema) -> str:
+    """Language + optional fluency text from schema — no dot scale (we do not infer levels)."""
+    items: list[str] = []
+    for item in schema.languages:
+        lang = escape(item.language)
+        flu = (item.fluency or "").strip()
+        if flu:
+            items.append(
+                "<li>"
+                f"{lang}<span class='rx-c-lang-sep'> — </span>"
+                f"<span class='rx-c-lang-fl'>{escape(flu)}</span>"
+                "</li>"
+            )
+        else:
+            items.append(f"<li>{lang}</li>")
+    if not items:
+        return ""
+    return (
+        "<section class='rx-c-side-sec rx-c-langs'>"
+        "<h2>Languages</h2>"
+        f"<ul class='rx-c-side-bullets'>{''.join(items)}</ul>"
+        "</section>"
+    )
+
+
+def _render_cobalt_contacts_block(schema: UnifiedResumeSchema) -> str:
+    """Stacked contact lines with simple symbols (WeasyPrint-safe)."""
+    b = schema.basics
+    location = b.location.compact() if b.location else ""
+    lines: list[str] = []
+    if b.phone:
+        lines.append(
+            f'<div class="rx-c-contact-line">'
+            f'<span class="rx-c-cicon" aria-hidden="true">&#x260E;</span> {escape(b.phone)}</div>'
+        )
+    if b.email:
+        lines.append(
+            f'<div class="rx-c-contact-line">'
+            f'<span class="rx-c-cicon" aria-hidden="true">@</span> {escape(b.email)}</div>'
+        )
+    if location:
+        lines.append(
+            f'<div class="rx-c-contact-line">'
+            f'<span class="rx-c-cicon" aria-hidden="true">&#x25AA;</span> {escape(location)}</div>'
+        )
+    if b.url:
+        lines.append(
+            f'<div class="rx-c-contact-line">'
+            f'<span class="rx-c-cicon" aria-hidden="true">&#x2192;</span> {escape(b.url)}</div>'
+        )
+    if not lines:
+        return ""
+    return (
+        "<section class='rx-c-side-sec rx-c-contact'>"
+        "<h2>Contact</h2>"
+        f"<div class='rx-c-contact-stack'>{''.join(lines)}</div>"
+        "</section>"
+    )
+
+
+def _render_rx_cobalt(schema: UnifiedResumeSchema, accent: str) -> str:
+    """Right blue band (~280px), main column for experience/education, sidebar for photo,
+    summary, contacts, bullet-list skills and languages (text only — no inferred rating bars).
+    System UI sans stack only (no remote @font-face — avoids WeasyPrint SSL / fetch failures)."""
+    b = schema.basics
+    name = escape(b.name or "Candidate")
+    label = f'<p class="rx-c-title">{escape(b.label)}</p>' if b.label else ""
+    summary_block = (
+        "<section class='rx-c-side-sec rx-c-summary-sec'><h2>Summary</h2>"
+        f"<div class='rx-c-summary'><p>{escape(b.summary)}</p></div></section>"
+        if b.summary
+        else ""
+    )
+    if getattr(b, "image", None):
+        photo_html = (
+            '<div class="rx-c-photo-wrap">'
+            f'<img src="{b.image}" class="rx-c-photo" alt="Photo" />'
+            "</div>"
+        )
+    else:
+        photo_html = '<div class="rx-c-photo-wrap rx-c-photo-empty" aria-hidden="true"></div>'
+    side_inner = (
+        f'<div class="rx-c-photo-outer">{photo_html}</div>'
+        f"{summary_block}"
+        f"{_render_cobalt_contacts_block(schema)}"
+        f"{_render_cobalt_skills(schema)}"
+        f"{_render_cobalt_languages(schema)}"
+    )
+    main = (
+        f'<header class="rx-c-header"><h1>{name}</h1>{label}</header>'
+        f"{_render_vega_work(schema)}"
+        f"{_render_vega_projects(schema)}"
+        f"{_render_vega_education(schema)}"
+    )
+    return f"""
+<style>
+@page {{ margin: 0; }}
+  :root {{
+    --accent: {accent};
+    --rx-ink: rgba(0, 6, 38, 0.92);
+    --rx-ink-soft: rgba(0, 6, 38, 0.72);
+    --rx-rule: rgba(0, 17, 102, 0.1);
+    --rx-side-text: rgba(255, 255, 255, 0.92);
+    --rx-side-muted: rgba(255, 255, 255, 0.78);
+    --rx-paper: #ffffff;
+  }}
+  * {{ box-sizing: border-box; }}
+  .rx-cobalt {{
+    position: relative;
+    font-family: system-ui, -apple-system, "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-size: 12.5px;
+    line-height: 1.4;
+    color: var(--rx-ink);
+    background: var(--rx-paper);
+  }}
+  .rx-cobalt .rx-c-band {{
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 280px;
+    background: var(--accent);
+    z-index: 0;
+  }}
+  .rx-cobalt .rx-c-inner {{
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: flex-start;
+    gap: 40px;
+    padding: 26px 22px 28px 26px;
+  }}
+  .rx-cobalt .rx-c-main {{
+    flex: 1;
+    min-width: 0;
+    padding-right: 4px;
+  }}
+  /* min-width:0 — иначе min-content дочерних строк (навык + точки) раздувает колонку за 240px */
+  .rx-cobalt .rx-c-side {{
+    flex: 0 0 240px;
+    width: 240px;
+    max-width: 240px;
+    min-width: 0;
+    box-sizing: border-box;
+    overflow-wrap: anywhere;
+    color: var(--rx-side-text);
+    padding-top: 2px;
+  }}
+  .rx-cobalt .rx-c-side-sec {{
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }}
+  .rx-cobalt .rx-c-header h1 {{
+    margin: 0 0 4px;
+    font-size: 1.55em;
+    font-weight: 700;
+    line-height: 1.15;
+    color: var(--rx-ink);
+    letter-spacing: -0.01em;
+  }}
+  .rx-cobalt .rx-c-title {{
+    margin: 0 0 10px;
+    font-size: 0.95em;
+    font-weight: 600;
+    color: var(--accent);
+  }}
+  /* Main column sections (shared Vega article markup) */
+  .rx-cobalt .rx-c-main section > h2 {{
+    margin: 18px 0 10px;
+    padding-bottom: 6px;
+    font-size: 1.12em;
+    font-weight: 700;
+    color: var(--rx-ink);
+    border-bottom: 2px solid var(--rx-rule);
+    text-transform: none;
+    letter-spacing: 0;
+  }}
+  .rx-cobalt .rx-c-main section:first-of-type > h2 {{ margin-top: 0; }}
+  .rx-cobalt .rx-c-main .rx-entry-head {{
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 10px;
+    margin-bottom: 2px;
+  }}
+  .rx-cobalt .rx-c-main h3 {{
+    margin: 0;
+    font-size: 0.95em;
+    font-weight: 700;
+    color: var(--rx-ink);
+  }}
+  .rx-cobalt .rx-c-main .rx-date {{
+    font-size: 0.72em;
+    color: var(--rx-ink-soft);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }}
+  .rx-cobalt .rx-c-main .rx-org {{
+    margin: 2px 0 4px;
+    font-size: 0.88em;
+    font-weight: 600;
+    color: var(--accent);
+  }}
+  .rx-cobalt .rx-c-main .rx-loc {{ font-size: 0.78em; color: var(--rx-ink-soft); font-weight: 400; }}
+  .rx-cobalt .rx-c-main ul {{ margin: 4px 0 12px 16px; padding: 0; }}
+  .rx-cobalt .rx-c-main li {{ margin: 2px 0; font-size: 0.78em; line-height: 1.38; color: var(--rx-ink-soft); }}
+  .rx-cobalt .rx-c-main article {{
+    padding-bottom: 8px;
+    margin-bottom: 8px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  }}
+  .rx-cobalt .rx-c-main section > article:last-child {{
+    border-bottom: none;
+    margin-bottom: 0;
+    padding-bottom: 0;
+  }}
+  /* Sidebar */
+  .rx-cobalt .rx-c-photo-outer {{ display: flex; justify-content: center; margin-bottom: 10px; }}
+  .rx-cobalt .rx-c-photo-wrap {{
+    width: 118px;
+    height: 118px;
+    border-radius: 8px;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.12);
+  }}
+  .rx-cobalt .rx-c-photo-empty {{
+    border: 2px dashed rgba(255, 255, 255, 0.35);
+    min-height: 118px;
+    box-sizing: border-box;
+  }}
+  .rx-cobalt .rx-c-photo {{ width: 100%; height: 100%; object-fit: cover; display: block; }}
+  .rx-cobalt .rx-c-side-sec h2 {{
+    margin: 14px 0 8px;
+    padding-bottom: 6px;
+    font-size: 1.08em;
+    font-weight: 700;
+    color: #fff;
+    border-bottom: 2px solid rgba(255, 255, 255, 0.14);
+    text-transform: none;
+    letter-spacing: 0;
+  }}
+  .rx-cobalt .rx-c-side-sec:first-child h2,
+  .rx-cobalt .rx-c-photo-outer + .rx-c-side-sec h2 {{ margin-top: 0; }}
+  .rx-cobalt .rx-c-summary p {{
+    margin: 0;
+    font-size: 0.78em;
+    line-height: 1.45;
+    color: var(--rx-side-muted);
+  }}
+  .rx-cobalt .rx-c-contact-stack {{ display: flex; flex-direction: column; gap: 7px; }}
+  .rx-cobalt .rx-c-contact-line {{
+    font-size: 0.76em;
+    line-height: 1.35;
+    color: var(--rx-side-muted);
+    overflow-wrap: anywhere;
+  }}
+  .rx-cobalt .rx-c-cicon {{
+    display: inline-block;
+    width: 1.1em;
+    margin-right: 2px;
+    color: rgba(255, 255, 255, 0.95);
+    font-weight: 600;
+  }}
+  .rx-cobalt .rx-c-side-bullets {{
+    list-style: none;
+    margin: 4px 0 0;
+    padding: 0;
+    width: 100%;
+    max-width: 100%;
+  }}
+  .rx-cobalt .rx-c-side-bullets li {{
+    position: relative;
+    padding-left: 14px;
+    margin: 0 0 8px;
+    font-size: 0.76em;
+    line-height: 1.42;
+    color: var(--rx-side-muted);
+    overflow-wrap: anywhere;
+  }}
+  .rx-cobalt .rx-c-side-bullets li:last-child {{ margin-bottom: 0; }}
+  .rx-cobalt .rx-c-side-bullets li::before {{
+    content: "\\2022";
+    position: absolute;
+    left: 0;
+    top: -0.02em;
+    font-weight: 900;
+    font-size: 1.25em;
+    line-height: 1.2;
+    color: #fff;
+  }}
+  .rx-cobalt .rx-c-lang-sep {{ font-weight: 400; color: rgba(255, 255, 255, 0.45); }}
+  .rx-cobalt .rx-c-lang-fl {{ font-weight: 500; color: rgba(255, 255, 255, 0.62); }}
+</style>
+<div class="resume rx-cobalt">
+  <div class="rx-c-band" aria-hidden="true"></div>
+  <div class="rx-c-inner">
+    <div class="rx-c-main">{main}</div>
+    <aside class="rx-c-side">{side_inner}</aside>
+  </div>
+</div>
+""".strip()
+
+
 _RX_DISPATCH: dict[str, Callable[[UnifiedResumeSchema, str], str]] = {
     "rx_chikorita": _render_rx_chikorita,
     "rx_ditto": _render_rx_ditto,
-    "rx_gengar": _render_rx_gengar,
     "rx_onyx": _render_rx_onyx,
     "rx_lapras": _render_rx_lapras,
     "rx_ditgar": _render_rx_ditgar,
+    "rx_vega": _render_rx_vega,
+    "rx_cobalt": _render_rx_cobalt,
 }
 
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useLayoutEffect, useRef, useId } from "react";
+import { useState, useEffect, useLayoutEffect, useRef, useId, useMemo } from "react";
 import { useLocation, useNavigate, useSearchParams, Link } from "react-router-dom";
 import { Disclosure, DisclosureButton, DisclosurePanel } from "@headlessui/react";
 import { SparklesIcon, ArrowUpTrayIcon, ArrowDownTrayIcon, ArrowPathIcon, ArrowLeftIcon, BriefcaseIcon, ClipboardDocumentIcon, ExclamationTriangleIcon, CheckCircleIcon, CheckIcon, ChevronDownIcon } from "@heroicons/react/24/outline";
@@ -6,6 +6,7 @@ import * as api from "../api";
 import { useAuth } from "../contexts/AuthContext";
 import { t, tFormat } from "../i18n";
 import { PostResultResumeStudio } from "../components/PostResultResumeStudio";
+import { PipelineStepper } from "../components/PipelineStepper";
 
 const RESUME_FILE_ACCEPT = ".txt,.md,.html,.htm,.tex,.pdf,.doc,.docx";
 const RESUME_TEXT_EXTS = ["txt", "md", "html", "htm", "tex", "pdf", "doc", "docx"];
@@ -245,70 +246,46 @@ function LoaderFactCard({ fact }: { fact: string }) {
   const body = stripFactPrefix(fact);
   if (!body) return null;
   return (
-    <p className="mt-10 max-w-[min(22rem,90vw)] text-center text-[13px] leading-relaxed text-[var(--text-tertiary)]">
-      {body}
-    </p>
-  );
-}
-
-/** Minimal “AI wait” indicator — three soft dots, no heavy chrome */
-function LoaderDots() {
-  return (
-    <div className="mb-10 flex items-center justify-center gap-1.5" aria-hidden>
-      {[0, 1, 2].map((i) => (
-        <span
-          key={i}
-          className="h-1.5 w-1.5 rounded-full bg-[#4578FC]/55 motion-safe:animate-[loader-dot_1.2s_ease-in-out_infinite]"
-          style={{ animationDelay: `${i * 160}ms` }}
-        />
-      ))}
-      <style>{`
-        @keyframes loader-dot {
-          0%, 80%, 100% { opacity: 0.28; transform: translateY(0); }
-          40% { opacity: 1; transform: translateY(-2px); }
-        }
-      `}</style>
+    <div className="mt-8 max-w-[min(28rem,92vw)] px-2">
+      <p className="text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-[#4558ff]/75 mb-2">
+        {t("optimize.quickFactLabel")}
+      </p>
+      <p className="text-center text-[15px] sm:text-[17px] md:text-lg leading-relaxed font-medium text-[#334155]">
+        {body}
+      </p>
     </div>
   );
 }
 
-function OptimizeLoaderCard({
-  title,
-  subtitle,
-  progress,
-  progressAriaLabel,
+function OptimizePipelineLoader({
+  labels,
+  completedSteps,
   fact,
+  microLine,
+  topHint,
+  ariaLabel,
 }: {
-  title: string;
-  subtitle: string;
-  progress?: number;
-  progressAriaLabel?: string;
+  labels: readonly string[];
+  completedSteps: number;
   fact?: string;
+  microLine?: string;
+  topHint?: string;
+  ariaLabel: string;
 }) {
-  const safeProgress = progress == null ? undefined : Math.max(0, Math.min(100, Math.round(progress)));
   return (
-    <div className="flex w-full max-w-lg flex-col items-center px-5 text-center">
-      <LoaderDots />
-
-      <h2 className="text-[15px] font-medium tracking-[-0.01em] text-[#181819] sm:text-base">{title}</h2>
-      <p className="mt-2 max-w-sm text-[13px] leading-relaxed text-[var(--text-muted)] sm:text-[14px]">{subtitle}</p>
-
-      {safeProgress != null ? (
-        <div className="mt-8 w-full max-w-[200px]">
-          <div className="h-px w-full overflow-hidden rounded-full bg-[#E4E7EF]">
-            <div
-              className="h-full rounded-full bg-[#4578FC]/90 transition-[width] duration-300 ease-out"
-              style={{ width: `${safeProgress}%` }}
-              role="progressbar"
-              aria-valuenow={safeProgress}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-label={progressAriaLabel}
-            />
-          </div>
-        </div>
+    <div
+      className="flex w-full max-w-xl flex-col items-center px-2 sm:px-4 text-center"
+      role="status"
+      aria-live="polite"
+      aria-label={ariaLabel}
+    >
+      {topHint ? (
+        <p className="mb-3 max-w-sm text-[10px] font-medium uppercase tracking-wider text-[#94a3b8]">{topHint}</p>
       ) : null}
-
+      <PipelineStepper labels={labels} completedSteps={completedSteps} />
+      {microLine ? (
+        <p className="mt-4 max-w-sm text-[11px] leading-snug text-[#94a3b8]">{microLine}</p>
+      ) : null}
       {fact ? <LoaderFactCard fact={fact} /> : null}
     </div>
   );
@@ -1295,6 +1272,7 @@ export default function Optimize() {
   const autoImproveStartedRef = useRef(false);
   const [loadingHintIndex, setLoadingHintIndex] = useState(0);
   const [improveHintIndex, setImproveHintIndex] = useState(0);
+  const [analysisPipelineCompleted, setAnalysisPipelineCompleted] = useState(0);
   const [resumeSummaryFromApi, setResumeSummaryFromApi] = useState<api.ExtractResumeSummaryResponse | null>(null);
   const [_isFetchingJobUrl, _setIsFetchingJobUrl] = useState(false);
   const [resumeInputMode, setResumeInputMode] = useState<"file" | "text">("file");
@@ -1314,12 +1292,34 @@ export default function Optimize() {
   const resumeHydratedTokenRef = useRef<string | null>(null);
   const resumeGuestRedirectStartedRef = useRef(false);
   const [resumeBootstrapping, setResumeBootstrapping] = useState(false);
+  const [bootstrapPipelineCompleted, setBootstrapPipelineCompleted] = useState(0);
+  /** When true, user came from /improve → "Improve my resume" mode (no job required). */
+  const [isImproveMode, setIsImproveMode] = useState(false);
+  const pipelineAnalysisLabels = useMemo(
+    () =>
+      [1, 2, 3, 4, 5].map((i) =>
+        isImproveMode ? t(`optimize.pipelineAnalysisImprove${i}`) : t(`optimize.pipelineAnalysisTailor${i}`),
+      ),
+    [isImproveMode],
+  );
+  const pipelineOptimizeLabels = useMemo(
+    () =>
+      [1, 2, 3, 4, 5].map((i) =>
+        isImproveMode ? t(`optimize.pipelineOptimizeImprove${i}`) : t(`optimize.pipelineOptimizeTailor${i}`),
+      ),
+    [isImproveMode],
+  );
+  /** When true, auto-start scan immediately after resume+job state is hydrated. */
+  const autoStartPendingRef = useRef(false);
   const autoImproveGateRef = useRef<{
     preScores: api.AnalyzeResponse | null;
     resumeContent: string;
     jobInput: string;
     stage: Stage;
   }>({ preScores: null, resumeContent: "", jobInput: "", stage: "landing" });
+  const prevStagePipelineRef = useRef<Stage | null>(null);
+  const scanSessionStartedAtRef = useRef<number | null>(null);
+  const assessEnteredAtRef = useRef<number | null>(null);
 
   const plan = user?.subscription?.plan || "free";
   const subStatus = user?.subscription?.status || "free";
@@ -1614,11 +1614,26 @@ export default function Optimize() {
 
   // Редирект с главной после загрузки файла — сразу шаг 2 (файл уже есть)
   useEffect(() => {
-    const state = location.state as { resumeContent?: string; uploadedFileName?: string; sourceWasPdf?: boolean } | null;
+    const state = location.state as {
+      resumeContent?: string;
+      uploadedFileName?: string;
+      sourceWasPdf?: boolean;
+      improveMode?: boolean;
+      jobInputPreset?: string;
+      autoStart?: boolean;
+    } | null;
     if (state?.resumeContent != null && state.resumeContent !== "") {
       setResumeContent(state.resumeContent);
       setUploadedFileName(state.uploadedFileName ?? null);
       setResumeSourceWasPdf(state.sourceWasPdf ?? false);
+      if (state.improveMode) {
+        setIsImproveMode(true);
+        autoStartPendingRef.current = true;
+      }
+      if (state.jobInputPreset) {
+        setJobInput(state.jobInputPreset);
+        if (state.autoStart) autoStartPendingRef.current = true;
+      }
       setStage("idle");
       setResult(null);
       setResumeName(null);
@@ -1628,7 +1643,16 @@ export default function Optimize() {
 
   const hasResume = !!resumeContent.trim();
   const hasJobInput = !!jobInput.trim();
-  const hasJob = hasJobInput;
+  const hasJob = hasJobInput || isImproveMode;
+
+  // Auto-start scan when navigated from /improve with autoStart flag
+  useEffect(() => {
+    if (!autoStartPendingRef.current) return;
+    if (!hasResume || !hasJob) return;
+    if (stage !== "idle") return;
+    autoStartPendingRef.current = false;
+    setStage("scanning");
+  }, [hasResume, hasJob, stage]);
   const canImprove = hasResume && hasJob && stage === "assessment" && result === null;
 
   const freeLimitIdleBlock =
@@ -1730,11 +1754,16 @@ export default function Optimize() {
     if (stage !== "scanning" || !hasResume || !hasJob || result != null) return;
     setIsAnalyzing(true);
     setPreScores(null);
-    const jobPayload = jobMode === "text" ? { job_text: jobInput.trim() } : { job_url: jobInput.trim() };
+    const jobPayload = isImproveMode
+      ? {}
+      : jobMode === "text"
+        ? { job_text: jobInput.trim() }
+        : { job_url: jobInput.trim() };
     api
       .analyze({
         resume_content: resumeContent.trim(),
         ...jobPayload,
+        ...(isImproveMode ? { improve_mode: true } : {}),
         output_language: api.getOutputLanguage(),
         session_template_id: selectedTemplateId.trim() || undefined,
       })
@@ -2049,8 +2078,9 @@ export default function Optimize() {
     setDisplayLoadProgress(0);
     const params = {
       resume_content: resumeContent.trim(),
-      job_text: jobMode === "text" ? jobInput.trim() : undefined,
-      job_url: jobMode === "url" ? jobInput.trim() : undefined,
+      job_text: isImproveMode ? undefined : (jobMode === "text" ? jobInput.trim() : undefined),
+      job_url: isImproveMode ? undefined : (jobMode === "url" ? jobInput.trim() : undefined),
+      improve_mode: isImproveMode || undefined,
       max_iterations: 1,
       parallel: true,
       aggressive_tailoring: true,
@@ -2130,7 +2160,7 @@ export default function Optimize() {
       };
       
       const res = await api.renderTemplatePdf({
-        template_id: selectedTemplateId || "jsonresume-even-inspired", // Fallback to a default if empty
+        template_id: selectedTemplateId || "jsonresume-classic-inspired", // Fallback if empty
         schema: schemaWithPhoto as any,
       });
       
@@ -2227,8 +2257,9 @@ export default function Optimize() {
     const currentKwForRetry = keywordsValue?.score ?? preScores?.keyword_score;
     const params = {
       resume_content: improvedContent,
-      job_text: jobMode === "text" ? jobInput.trim() : undefined,
-      job_url: jobMode === "url" ? jobInput.trim() : undefined,
+      job_text: isImproveMode ? undefined : (jobMode === "text" ? jobInput.trim() : undefined),
+      job_url: isImproveMode ? undefined : (jobMode === "url" ? jobInput.trim() : undefined),
+      improve_mode: isImproveMode || undefined,
       parallel: true,
       aggressive_tailoring: true,
       max_iterations: 1,
@@ -2292,6 +2323,60 @@ export default function Optimize() {
   const awaitingLandingClaim = stage === "scanning" && claimGate && (!hasResume || !hasJob);
   const isLoadingAssessment =
     awaitingLandingClaim || stage === "scanning" || (stage === "assessment" && preScores == null);
+
+  useEffect(() => {
+    const prev = prevStagePipelineRef.current;
+    if (stage === "scanning" && prev !== "scanning") {
+      scanSessionStartedAtRef.current = Date.now();
+    }
+    if (stage === "assessment" && prev !== "assessment") {
+      assessEnteredAtRef.current = Date.now();
+    }
+    if (stage === "idle" || stage === "landing") {
+      scanSessionStartedAtRef.current = null;
+      assessEnteredAtRef.current = null;
+    }
+    prevStagePipelineRef.current = stage;
+  }, [stage]);
+
+  useEffect(() => {
+    if (!isLoadingAssessment) {
+      setAnalysisPipelineCompleted(0);
+      return;
+    }
+    const tick = () => {
+      if (preScores) {
+        setAnalysisPipelineCompleted(5);
+        return;
+      }
+      if (awaitingLandingClaim) {
+        const t0 = scanSessionStartedAtRef.current ?? Date.now();
+        scanSessionStartedAtRef.current = t0;
+        const elapsed = Date.now() - t0;
+        setAnalysisPipelineCompleted(elapsed < 900 ? 0 : 1);
+        return;
+      }
+      if (stage === "scanning") {
+        const sp = scanProgress;
+        if (sp < 30) setAnalysisPipelineCompleted(0);
+        else if (sp < 58) setAnalysisPipelineCompleted(1);
+        else if (sp < 90) setAnalysisPipelineCompleted(2);
+        else setAnalysisPipelineCompleted(3);
+        return;
+      }
+      if (stage === "assessment") {
+        const at = assessEnteredAtRef.current ?? Date.now();
+        assessEnteredAtRef.current = at;
+        const elapsed = Date.now() - at;
+        const bump = Math.min(2, Math.floor(elapsed / 9000));
+        setAnalysisPipelineCompleted(Math.min(4, 3 + bump));
+      }
+    };
+    tick();
+    const id = setInterval(tick, 400);
+    return () => clearInterval(id);
+  }, [isLoadingAssessment, stage, scanProgress, preScores, awaitingLandingClaim]);
+
   const loadingHints =
     stage === "scanning"
       ? [
@@ -2335,6 +2420,8 @@ export default function Optimize() {
   ];
   const activeImproveLoadingHint = improveLoadingHints[improveHintIndex % improveLoadingHints.length];
   const visibleLoadProgress = stage === "loading" ? displayLoadProgress : loadProgress;
+  const optimizePipelineCompleted =
+    stage === "loading" ? Math.min(5, Math.floor(visibleLoadProgress / 20)) : 0;
 
   useEffect(() => {
     if (!isLoadingAssessment) {
@@ -2382,6 +2469,21 @@ export default function Optimize() {
       document.body.style.overflow = previous;
     };
   }, [stage]);
+
+  useEffect(() => {
+    if (!resumeBootstrapping) {
+      setBootstrapPipelineCompleted(0);
+      return;
+    }
+    const bootStart = Date.now();
+    const tick = () => {
+      const elapsed = Date.now() - bootStart;
+      setBootstrapPipelineCompleted(Math.min(3, Math.floor(elapsed / 500)));
+    };
+    tick();
+    const id = setInterval(tick, 400);
+    return () => clearInterval(id);
+  }, [resumeBootstrapping]);
 
   const summaryData = showSummaryBlocks
     ? (() => {
@@ -2522,15 +2624,17 @@ export default function Optimize() {
     <div className="relative flex flex-col gap-4 sm:gap-5 w-full min-w-0 min-h-0 overflow-x-hidden pb-28 sm:pb-12">
         {resumeBootstrapping && (
           <div
-            className="fixed inset-0 z-[60] flex flex-col items-center justify-center bg-[#F2F3F9]/92 backdrop-blur-[6px] px-6"
+            className="fixed inset-0 z-[60] flex flex-col items-center justify-center bg-[linear-gradient(180deg,#F2F3F9_0%,#FAFBFE_42%,#ffffff_100%)] px-4"
             role="status"
             aria-live="polite"
           >
-            <div className="flex w-full max-w-sm flex-col items-center text-center">
-              <LoaderDots />
-              <p className="mt-2 text-[15px] font-medium text-[#181819]">{t("optimize.restoringResumeSession")}</p>
-              <p className="mt-2 text-[13px] leading-relaxed text-[var(--text-muted)]">{t("optimize.doNotClosePage")}</p>
-            </div>
+            <OptimizePipelineLoader
+              labels={[t("optimize.pipelineRestore1"), t("optimize.pipelineRestore2"), t("optimize.pipelineRestore3")]}
+              completedSteps={bootstrapPipelineCompleted}
+              microLine={t("optimize.doNotClosePage")}
+              topHint={t("optimize.restoringResumeSession")}
+              ariaLabel={t("optimize.restoringResumeSession")}
+            />
           </div>
         )}
         {error && !isOfferPasteAsTextError(error) && (
@@ -2552,7 +2656,9 @@ export default function Optimize() {
             ];
             return (
               <section className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-4 sm:p-5">
-                <p className="text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider mb-3">{t("optimize.overallMatchScore")}</p>
+                <p className="text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider mb-3">
+                  {isImproveMode ? t("optimize.resumeQuality") : t("optimize.interviewChances")}
+                </p>
                 <div
                   className={`rounded-xl border p-3.5 sm:p-4.5 ${
                     resultViewOk ? "bg-[#F0FDF4] border-[#BBF7D0]" : "bg-white border-[#ECEFF5]"
@@ -2635,10 +2741,14 @@ export default function Optimize() {
                               resultViewOk ? "text-[#166534]" : "text-[#6B7280]"
                             }`}
                           >
-                            {t("optimize.resumeQuality")} ({getQualityLevelLabel(q)})
+                            {isImproveMode
+                              ? `${t("optimize.resumeQuality")} (${getQualityLevelLabel(q)})`
+                              : `${t("optimize.interviewChances")} (${getQualityLevelLabel(q)})`}
                           </p>
                           <p className="mt-1.5 sm:mt-1 text-[11px] sm:text-[12px] text-[#6B7280] leading-relaxed max-w-[280px] mx-auto sm:mx-0">
-                            {resultViewOk ? t("optimize.resumeQualityHintHigh") : t("optimize.resumeQualityHintLow")}
+                            {isImproveMode
+                              ? (resultViewOk ? t("optimize.resumeQualityHintHigh") : t("optimize.resumeQualityHintLow"))
+                              : (resultViewOk ? t("optimize.interviewChancesHintHigh") : t("optimize.interviewChancesHintLow"))}
                           </p>
                         </div>
                       </div>
@@ -2908,6 +3018,7 @@ export default function Optimize() {
                   <PostResultResumeStudio
                     qualityPct={summaryData.qualityPct}
                     jobTitle={resultJobTitleLabel}
+                    isImproveMode={isImproveMode}
                     fallbackPreviewUrl={resumeThumbnailUrlRef.current}
                     schemaJson={result.schema_json || "{}"}
                     initialTemplateId={selectedTemplateId}
@@ -3343,34 +3454,33 @@ export default function Optimize() {
           (hasResume && hasJob || awaitingLandingClaim) && (
           <>
             {(stage === "scanning" || (stage === "assessment" && preScores == null)) && (
-              <OptimizeLoaderCard
-                title={
+              <OptimizePipelineLoader
+                labels={pipelineAnalysisLabels}
+                completedSteps={analysisPipelineCompleted}
+                fact={!awaitingLandingClaim ? activeLoadingHint : undefined}
+                microLine={t("optimize.loaderMicroHint")}
+                topHint={
+                  awaitingLandingClaim
+                    ? t("optimize.preparingLandingCheckSub")
+                    : undefined
+                }
+                ariaLabel={
                   awaitingLandingClaim
                     ? t("optimize.preparingLandingCheck")
                     : stage === "scanning"
                       ? t("optimize.scanningLabel")
                       : t("optimize.analysisLabel")
                 }
-                subtitle={
-                  awaitingLandingClaim
-                    ? t("optimize.preparingLandingCheckSub")
-                    : stage === "scanning"
-                      ? `${t("optimize.analyzingResume")}. ${t("optimize.doNotClosePage")}`
-                      : `${t("optimize.analysisSubLabel")}. ${t("optimize.doNotClosePage")}`
-                }
-                progress={awaitingLandingClaim ? 40 : stage === "scanning" ? scanProgress : undefined}
-                progressAriaLabel={awaitingLandingClaim ? t("optimize.scanProgressAria") : stage === "scanning" ? t("optimize.scanProgressAria") : undefined}
-                fact={!awaitingLandingClaim ? activeLoadingHint : undefined}
               />
             )}
 
             {stage === "loading" && (
-              <OptimizeLoaderCard
-                title={t("optimize.improvingResume")}
-                subtitle={`${t("optimize.doNotClosePage")} ${t("optimize.doNotClosePageHint")}`}
-                progress={visibleLoadProgress}
-                progressAriaLabel={t("optimize.improveProgressAria")}
+              <OptimizePipelineLoader
+                labels={pipelineOptimizeLabels}
+                completedSteps={optimizePipelineCompleted}
                 fact={activeImproveLoadingHint}
+                microLine={`${t("optimize.loaderMicroHint")} ${t("optimize.doNotClosePageHint")}`}
+                ariaLabel={t("optimize.improvingResume")}
               />
             )}
 

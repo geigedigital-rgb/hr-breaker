@@ -41,10 +41,11 @@ def test_templates_have_recommended_whitelist():
     assert rx_ids >= {
         "reactive-chikorita",
         "reactive-ditto",
-        "reactive-gengar",
         "reactive-onyx",
         "reactive-lapras",
         "reactive-ditgar",
+        "reactive-vega",
+        "reactive-cobalt",
     }
 
 

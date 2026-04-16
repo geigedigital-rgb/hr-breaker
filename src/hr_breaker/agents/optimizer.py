@@ -116,6 +116,56 @@ STRICT RULES - NEVER VIOLATE:
 - Do not cut critical content (like work experience, education, etc) if you can cut something else (like summary)
 """
 
+OPTIMIZER_IMPROVE_BASE = r"""
+You are a professional resume improvement expert. Your task is to rewrite and enhance the resume for maximum clarity, impact, and professional quality — without tailoring it to any specific job posting.
+
+INPUT: The user's resume text (any format).
+
+OUTPUT: Generate HTML for the <body> of a resume PDF. Do NOT include <html>, <head>, or <body> tags - only the content.
+
+IMPROVEMENT GOALS:
+- Rewrite achievement bullets to be impact-focused and quantifiable (add numbers, percentages, or concrete outcomes where clearly supported by the source)
+- Improve language quality, clarity, and professional tone
+- Ensure consistent, clean formatting and logical structure
+- Strengthen the professional summary to highlight key strengths
+- Remove filler words, redundant phrases, and weak passive language
+- Ensure ATS-friendliness: use standard section headers, clear job titles, recognizable skill names
+- Preserve and showcase all real work experience, education, skills, and achievements
+- Use strong action verbs to open each bullet
+
+CONTENT RULES:
+- NEVER fabricate job titles, companies, degrees, certifications, dates, metrics, or achievements not in original
+- NEVER add named tools, technologies, or skills absent from the original resume
+- Preserve all contact information exactly as in the original
+- Preserve all URLs from the original resume
+- If content is too long for one page, cut the least impactful sections (e.g. old roles, obvious skills), not core content
+- Exclude: hobbies, location, language proficiency, age — unless in the original
+- Add a strong 2-3 sentence summary section if none exists
+- The Skills section must reflect demonstrated strengths from the resume, not keyword lists
+- Never use the em dash symbol, the word "delve", or other common LLM-generated text markers
+- NEVER add <script> tags
+- Always use "PUBLICATIONS" (plural) as section title even for a single item
+
+CONTENT BUDGET:
+- Target: ~500 words, ~4000 characters (rough estimates; actual fit depends on formatting)
+- The ONLY authoritative check is page_count from check_content_length
+
+TOOLS:
+- REQUIRED: call check_content_length(html) with your final HTML before returning
+  - Returns actual page_count from rendered PDF (authoritative)
+  - If page_count > 1, trim content and call again until fits_one_page=true
+- OPTIONAL: validate_structure(html) - Check HTML has proper headers/sections
+- OPTIONAL: preview_resume(html) - Renders PDF preview image
+
+LINKS:
+- Preserve all contact info and never delete it
+- Preserve URLs from the original resume
+- Use full URLs (include https://) in href attributes
+- Link display text must NOT start with https:// or http://
+
+{resume_guide}
+"""
+
 OPTIMIZER_LENIENT_RULES = """
 ALLOWED:
 - You CAN make light assumptions only when a concrete experience in the source strongly supports them
@@ -153,17 +203,22 @@ class OptimizerResult(BaseModel):
 
 
 def get_optimizer_agent(
-    job: JobPosting, source: ResumeSource, no_shame: bool = False
+    job: JobPosting, source: ResumeSource, no_shame: bool = False, improve_mode: bool = False
 ) -> Agent:
     """Create optimizer agent with job/source context for filter tools."""
     settings = get_settings()
     resume_guide = _load_resume_guide()
-    content_rules = OPTIMIZER_LENIENT_RULES if no_shame else OPTIMIZER_STRICT_RULES
-    system_prompt = OPTIMIZER_BASE.format(
-        content_rules=content_rules, resume_guide=resume_guide
-    )
+    if improve_mode:
+        system_prompt = OPTIMIZER_IMPROVE_BASE.format(resume_guide=resume_guide)
+    else:
+        content_rules = OPTIMIZER_LENIENT_RULES if no_shame else OPTIMIZER_STRICT_RULES
+        system_prompt = OPTIMIZER_BASE.format(
+            content_rules=content_rules, resume_guide=resume_guide
+        )
+    # Improve mode uses flash model — no job matching needed, simpler task
+    model_name = settings.gemini_flash_model if improve_mode else settings.gemini_pro_model
     agent = Agent(
-        f"google-gla:{settings.gemini_pro_model}",
+        f"google-gla:{model_name}",
         output_type=OptimizerResult,
         system_prompt=system_prompt,
         model_settings=get_model_settings(),
@@ -286,8 +341,9 @@ async def optimize_resume(
     audit_user_id: str | None = None,
     pre_ats_score: int | None = None,
     pre_keyword_score: float | None = None,
+    improve_mode: bool = False,
 ) -> OptimizedResume:
-    """Optimize resume for job posting.
+    """Optimize resume for job posting (or general improvement when improve_mode=True).
     output_language: Preferred language for all LLM output (e.g. 'en', 'ru'). Default: English."""
     lang_override = ""
     out_lang = (output_language or "en").strip().lower() or "en"
@@ -299,13 +355,25 @@ LANGUAGE OVERRIDE: Write ALL output (HTML body text, key changes categories, des
 """
     else:
         lang_override = f"\n\nLANGUAGE: Write ALL output in this language only: {out_lang}. Do not use the job posting language for output.\n"
-    _pre_kw = check_keywords(context.original_resume, job)
-    _missing_kw_hint = (
-        f"- Top missing keywords (vs original resume, use only if source-backed): {', '.join(_pre_kw.missing_keywords[:8])}\n"
-        if _pre_kw.missing_keywords
-        else ""
-    )
-    prompt = f"""## Original Resume:
+    if improve_mode:
+        prompt = f"""## Original Resume:
+{context.original_resume}
+{lang_override}
+## Improvement objective:
+- This is a general resume improvement request (no specific job posting).
+- Focus on clarity, impact, professional presentation, and ATS-friendliness.
+- Make achievement bullets concrete and quantifiable where source supports it.
+- Strengthen language, remove weak phrases, use strong action verbs.
+- Keep all claims truthful to the source resume.
+"""
+    else:
+        _pre_kw = check_keywords(context.original_resume, job)
+        _missing_kw_hint = (
+            f"- Top missing keywords (vs original resume, use only if source-backed): {', '.join(_pre_kw.missing_keywords[:8])}\n"
+            if _pre_kw.missing_keywords
+            else ""
+        )
+        prompt = f"""## Original Resume:
 {context.original_resume}
 
 ## Job Posting:
@@ -326,13 +394,13 @@ Description: {job.description}
 - Prefer precise overlap from the source resume over broader "close enough" substitutions.
 - Keep every claim truthful to source resume content.
 """
-    if pre_ats_score is not None or pre_keyword_score is not None:
-        pre_kw_pct = (
-            round(pre_keyword_score * 100)
-            if pre_keyword_score is not None and pre_keyword_score <= 1
-            else round(pre_keyword_score or 0)
-        )
-        prompt += f"""
+        if pre_ats_score is not None or pre_keyword_score is not None:
+            pre_kw_pct = (
+                round(pre_keyword_score * 100)
+                if pre_keyword_score is not None and pre_keyword_score <= 1
+                else round(pre_keyword_score or 0)
+            )
+            prompt += f"""
 ## Baseline analysis before improvement:
 - ATS score: {pre_ats_score if pre_ats_score is not None else "unknown"}%
 - Keyword score: {pre_kw_pct if pre_keyword_score is not None else "unknown"}%
@@ -341,8 +409,8 @@ Optimization target for this single deep pass:
 - Maximize truthful alignment with vacancy requirements and keywords.
 - Aim for strong match quality (about 75%+ when realistically achievable from source resume).
 """
-    if no_shame:
-        prompt += """
+        if no_shame:
+            prompt += """
 NOTE: The user has chosen "aggressive tailoring". You MAY strengthen alignment with the job posting, but only through wording and terminology that remain clearly grounded in the source resume. Do not paste unsupported job-posting skills into the resume, and do not turn generic adjacent experience into exact tool or methodology claims unless the source resume already supports them. The user will verify the result before sending.
 """
 
@@ -400,7 +468,7 @@ Output ONLY valid JSON. The html field should contain the raw HTML string.
 
     settings = get_settings()
     model = settings.gemini_pro_model
-    agent = get_optimizer_agent(job, source, no_shame=no_shame)
+    agent = get_optimizer_agent(job, source, no_shame=no_shame, improve_mode=improve_mode)
     try:
         result = await agent.run(prompt)
     except Exception as e:

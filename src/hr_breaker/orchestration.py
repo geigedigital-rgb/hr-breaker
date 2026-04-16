@@ -41,14 +41,21 @@ def log_time(operation: str):
     logger.debug(f"{operation}: {elapsed:.2f}s")
 
 
+# Filters that compare resume against a specific job — meaningless without a real job posting
+_JOB_SPECIFIC_FILTERS = {"KeywordMatcher", "VectorSimilarityMatcher", "LLMChecker", "AIGeneratedChecker"}
+
+
 async def run_filters(
     optimized: OptimizedResume,
     job: JobPosting,
     source: ResumeSource,
     parallel: bool = False,
+    improve_mode: bool = False,
 ) -> ValidationResult:
     """Run filters, either sequentially (early exit) or in parallel."""
-    filters = FilterRegistry.all()
+    all_filters = FilterRegistry.all()
+    # In improve mode, skip job-specific filters — they add time with no value
+    filters = [f for f in all_filters if not improve_mode or f.name not in _JOB_SPECIFIC_FILTERS]
 
     if parallel:
         # Run all filters concurrently
@@ -108,6 +115,21 @@ def _progress_percent_iteration(iteration: int, max_iterations: int, step: str) 
     return int(15 + chunk * (iteration + 1))
 
 
+IMPROVE_MODE_JOB = JobPosting(
+    title="General Resume Improvement",
+    company="",
+    requirements=[
+        "Clear professional communication",
+        "Impact-focused achievement descriptions",
+        "Quantifiable results",
+        "ATS-friendly formatting",
+        "Strong professional summary",
+    ],
+    keywords=["professional", "achievements", "leadership", "results", "skills", "experience"],
+    description="General resume improvement for professional use — not targeting a specific job posting.",
+)
+
+
 async def optimize_for_job(
     source: ResumeSource,
     job_text: str | None = None,
@@ -122,19 +144,21 @@ async def optimize_for_job(
     audit_user_id: str | None = None,
     pre_ats_score: int | None = None,
     pre_keyword_score: float | None = None,
+    improve_mode: bool = False,
 ) -> tuple[OptimizedResume, ValidationResult, JobPosting]:
     """
     Core optimization loop.
 
     Args:
         source: Source resume
-        job_text: Job posting text (required if job not provided)
+        job_text: Job posting text (required if job not provided and improve_mode=False)
         max_iterations: Max optimization iterations (default from settings)
         on_iteration: Optional callback(iteration, optimized, validation)
         on_progress: Optional callback(percent: 0-100, message: str) for real progress
         job: Pre-parsed job posting (optional, skips parsing if provided)
         no_shame: If True, use lenient rules (add skills from job posting where plausible)
         output_language: Preferred language for LLM output (e.g. "en", "ru"). Default: English.
+        improve_mode: If True, improve resume without tailoring to a specific job.
 
     Returns:
         (optimized_resume, validation_result, job_posting)
@@ -155,7 +179,11 @@ async def optimize_for_job(
 
     renderer = HTMLRenderer()
 
-    if job is None:
+    if improve_mode and job is None:
+        job = IMPROVE_MODE_JOB
+        if on_progress:
+            on_progress(15, "Preparing improvement…")
+    elif job is None:
         if job_text is None:
             raise ValueError("Either job_text or job must be provided")
         alog("parse_job", "Parsing job posting (LLM)", {"job_text_chars": len(job_text)})
@@ -221,6 +249,7 @@ async def optimize_for_job(
                     audit_user_id=audit_user_id,
                     pre_ats_score=pre_ats_score,
                     pre_keyword_score=pre_keyword_score,
+                    improve_mode=improve_mode,
                 )
         finally:
             if heartbeat_task is not None:
@@ -284,7 +313,7 @@ async def optimize_for_job(
                     "pdf_text_chars": len(optimized.pdf_text or ""),
                 },
             )
-            validation = await run_filters(optimized, job, source, parallel=parallel)
+            validation = await run_filters(optimized, job, source, parallel=parallel, improve_mode=improve_mode)
             for r in validation.results:
                 alog(
                     "filter",
