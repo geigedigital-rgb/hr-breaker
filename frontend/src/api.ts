@@ -986,6 +986,8 @@ export type UnifiedResumeSchema = {
     phone?: string | null;
     url?: string | null;
     summary?: string | null;
+    /** Matches backend `SchemaLocation` (e.g. Cobalt Contact block + location icon). */
+    location?: { city?: string | null; region?: string | null; country?: string | null } | null;
   };
   work: Array<{
     name: string;

@@ -53,12 +53,6 @@ export function PipelineStepper({ labels, completedSteps, id }: PipelineStepperP
                 />
               ) : null}
               <div className="relative flex w-[4.75rem] shrink-0 justify-center sm:w-[5.35rem]">
-                {active ? (
-                  <span
-                    className="absolute -top-1 left-1/2 z-[2] -translate-x-1/2 w-0 h-0 border-l-[4px] border-r-[4px] border-t-[5px] border-l-transparent border-r-transparent border-t-[#4558ff]/85"
-                    aria-hidden
-                  />
-                ) : null}
                 <div
                   className={`relative z-[1] flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-full text-[10px] sm:text-[11px] font-bold transition-all duration-300 ease-out ${
                     done

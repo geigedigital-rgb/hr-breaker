@@ -475,21 +475,62 @@ def _render_rx_ditgar(schema: UnifiedResumeSchema, accent: str) -> str:
 """.strip()
 
 
+# Vega header + Cobalt sidebar: light icons on accent / blue band; explicit SVG stroke for WeasyPrint.
+_RX_CONTACT_ICON_STROKE = "rgba(255, 255, 255, 0.92)"
+
+
+def _rx_contact_icon_svg(kind: str, stroke: str) -> str:
+    """Inline SVG (phone, email, location, url); stroke on each shape for PDF renderers."""
+    sh = f' fill="none" stroke="{stroke}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"'
+    if kind == "phone":
+        inner = f'<path{sh} d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>'
+    elif kind == "email":
+        inner = (
+            f'<rect x="2" y="4" width="20" height="16" rx="2"{sh}/>'
+            f'<path{sh} d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>'
+        )
+    elif kind == "location":
+        inner = (
+            f'<path{sh} d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/>'
+            f'<circle cx="12" cy="10" r="3"{sh}/>'
+        )
+    elif kind == "url":
+        inner = (
+            f'<path{sh} d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>'
+            f'<path{sh} d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>'
+        )
+    else:
+        return ""
+    return f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">{inner}</svg>'
+
+
 def _render_vega_contacts(schema: UnifiedResumeSchema) -> str:
-    """Contacts line with simple icon prefixes, WeasyPrint-safe inline layout."""
+    """Header: each contact is one block (icon + text); bullets only between blocks."""
     b = schema.basics
     location = b.location.compact() if b.location else ""
-    items: list[str] = []
+    s = _RX_CONTACT_ICON_STROKE
+    blocks: list[str] = []
+
+    def _block(kind: str, text: str) -> str:
+        return (
+            f'<span class="rx-contact-item"><span class="rx-contact-ico" aria-hidden="true">'
+            f'{_rx_contact_icon_svg(kind, s)}</span>'
+            f'<span class="rx-citext">{escape(text)}</span></span>'
+        )
+
     if b.email:
-        items.append(f'<span class="rx-ci">@ {escape(b.email)}</span>')
+        blocks.append(_block("email", b.email))
     if b.phone:
-        items.append(f'<span class="rx-ci">&#x2706; {escape(b.phone)}</span>')
+        blocks.append(_block("phone", b.phone))
     if b.url:
-        items.append(f'<span class="rx-ci">&#x2192; {escape(b.url)}</span>')
+        blocks.append(_block("url", b.url))
     if location:
-        items.append(f'<span class="rx-ci">&#x25AA; {escape(location)}</span>')
-    separator = ' <span class="rx-sep">&#x2022;</span> '
-    return f'<p class="rx-contacts">{separator.join(items)}</p>' if items else ""
+        blocks.append(_block("location", location))
+    if not blocks:
+        return ""
+    sep = '<span class="rx-sep">&bull;</span>'
+    inner = sep.join(blocks)
+    return f'<div class="rx-contacts">{inner}</div>'
 
 
 def _render_vega_work(schema: UnifiedResumeSchema) -> str:
@@ -632,10 +673,82 @@ def _render_rx_vega(schema: UnifiedResumeSchema, accent: str) -> str:
     color: rgba(255,255,255,.88); font-size: 12.5px; font-style: italic; margin: 2px 0 0;
   }}
   .rx-vega .rx-contacts {{
-    color: rgba(255,255,255,.80); font-size: 11.5px; margin-top: 10px; line-height: 1.6;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    align-content: center;
+    margin: 10px 0 0;
+    padding: 0;
+    row-gap: 10px;
+    column-gap: 0;
+    color: rgba(255,255,255,.88);
+    font-size: 11.5px;
+    line-height: 1.45;
   }}
-  .rx-vega .rx-ci {{ display: inline; white-space: nowrap; }}
-  .rx-vega .rx-sep {{ color: rgba(255,255,255,.45); margin: 0 2px; }}
+  /* .rx-contact-item = icon + text; .rx-sep only between blocks — equal padding L/R so gap block↔•↔block is symmetric. */
+  .rx-vega .rx-contact-item {{
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 10px;
+    flex-shrink: 0;
+    white-space: nowrap;
+    margin: 0;
+    padding: 0;
+    color: rgba(255,255,255,.88);
+    font-size: inherit;
+    line-height: 1.45;
+  }}
+  .rx-vega .rx-citext {{
+    color: inherit;
+    font-size: inherit;
+    line-height: 1.45;
+    margin: 0;
+    padding: 0;
+  }}
+  .rx-vega .rx-contact-ico {{
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 1.1em;
+    height: 1.1em;
+    line-height: 0;
+    margin-right: 14px;
+  }}
+  .rx-vega .rx-contact-ico svg {{
+    width: 100%;
+    height: 100%;
+    display: block;
+    margin: 0;
+    padding: 0;
+    vertical-align: middle;
+  }}
+  .rx-vega .rx-contact-ico svg path,
+  .rx-vega .rx-contact-ico svg rect,
+  .rx-vega .rx-contact-ico svg circle {{
+    stroke: rgba(255, 255, 255, 0.92);
+    fill: none;
+  }}
+  .rx-vega .rx-sep {{
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    box-sizing: border-box;
+    width: 1.5em;
+    min-width: 1.5em;
+    max-width: 1.5em;
+    margin: 0 10px;
+    padding: 0;
+    font-weight: 700;
+    font-size: 1.15em;
+    line-height: 1;
+    letter-spacing: 0;
+    color: rgba(255,255,255,0.72);
+  }}
   .rx-vega .rx-photo {{
     width: 84px; height: 84px; object-fit: cover; border-radius: 7px;
     flex-shrink: 0; display: block;
@@ -747,36 +860,35 @@ def _render_cobalt_languages(schema: UnifiedResumeSchema) -> str:
 
 
 def _render_cobalt_contacts_block(schema: UnifiedResumeSchema) -> str:
-    """Stacked contact lines with simple symbols (WeasyPrint-safe)."""
+    """Cobalt sidebar contacts: one table row per field (icon | text) — stable in WeasyPrint."""
     b = schema.basics
     location = b.location.compact() if b.location else ""
-    lines: list[str] = []
+    rows: list[str] = []
+
+    def _row(kind: str, text: str) -> None:
+        rows.append(
+            "<tr>"
+            f'<td class="rx-c-cicon" aria-hidden="true">{_rx_contact_icon_svg(kind, _RX_CONTACT_ICON_STROKE)}</td>'
+            f'<td class="rx-c-ctext">{escape(text)}</td>'
+            "</tr>"
+        )
+
     if b.phone:
-        lines.append(
-            f'<div class="rx-c-contact-line">'
-            f'<span class="rx-c-cicon" aria-hidden="true">&#x260E;</span> {escape(b.phone)}</div>'
-        )
+        _row("phone", b.phone)
     if b.email:
-        lines.append(
-            f'<div class="rx-c-contact-line">'
-            f'<span class="rx-c-cicon" aria-hidden="true">@</span> {escape(b.email)}</div>'
-        )
+        _row("email", b.email)
     if location:
-        lines.append(
-            f'<div class="rx-c-contact-line">'
-            f'<span class="rx-c-cicon" aria-hidden="true">&#x25AA;</span> {escape(location)}</div>'
-        )
+        _row("location", location)
     if b.url:
-        lines.append(
-            f'<div class="rx-c-contact-line">'
-            f'<span class="rx-c-cicon" aria-hidden="true">&#x2192;</span> {escape(b.url)}</div>'
-        )
-    if not lines:
+        _row("url", b.url)
+    if not rows:
         return ""
     return (
         "<section class='rx-c-side-sec rx-c-contact'>"
         "<h2>Contact</h2>"
-        f"<div class='rx-c-contact-stack'>{''.join(lines)}</div>"
+        "<table class='rx-c-contact-table' role='presentation'><tbody>"
+        f"{''.join(rows)}"
+        "</tbody></table>"
         "</section>"
     )
 
@@ -971,19 +1083,43 @@ def _render_rx_cobalt(schema: UnifiedResumeSchema, accent: str) -> str:
     line-height: 1.45;
     color: var(--rx-side-muted);
   }}
-  .rx-cobalt .rx-c-contact-stack {{ display: flex; flex-direction: column; gap: 7px; }}
-  .rx-cobalt .rx-c-contact-line {{
-    font-size: 0.76em;
-    line-height: 1.35;
-    color: var(--rx-side-muted);
+  .rx-cobalt .rx-c-contact-table {{
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    border: none;
+    border-collapse: separate;
+    border-spacing: 0 8px;
+    table-layout: fixed;
+  }}
+  .rx-cobalt .rx-c-contact-table td {{
+    padding: 0;
+    vertical-align: top;
+  }}
+  .rx-cobalt .rx-c-contact-table .rx-c-cicon {{
+    width: 13px;
+    padding: 0;
+    line-height: 0;
+  }}
+  .rx-cobalt .rx-c-contact-table .rx-c-ctext {{
+    padding-left: 14px;
+    font-size: 0.86em;
+    line-height: 1.3;
+    color: var(--rx-side-text);
     overflow-wrap: anywhere;
   }}
-  .rx-cobalt .rx-c-cicon {{
-    display: inline-block;
-    width: 1.1em;
-    margin-right: 2px;
-    color: rgba(255, 255, 255, 0.95);
-    font-weight: 600;
+  .rx-cobalt .rx-c-cicon svg {{
+    width: 13px;
+    height: 13px;
+    display: block;
+    margin: 0;
+    padding: 0;
+  }}
+  .rx-cobalt .rx-c-cicon svg path,
+  .rx-cobalt .rx-c-cicon svg rect,
+  .rx-cobalt .rx-c-cicon svg circle {{
+    stroke: var(--rx-side-text);
+    fill: none;
   }}
   .rx-cobalt .rx-c-side-bullets {{
     list-style: none;

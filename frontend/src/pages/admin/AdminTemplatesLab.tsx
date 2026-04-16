@@ -39,7 +39,8 @@ const STEPS = ["Contacts", "Experience", "Education", "Skills", "Summary", "Fina
 type Step = (typeof STEPS)[number];
 
 const STEP_HINT: Record<Step, string> = {
-  Contacts: "Name, contacts, and optional AI import from text or file.",
+  Contacts:
+    "Name, phone, email, URL, and location (city/region/country). Reactive Cobalt shows SVG contact icons in the sidebar preview.",
   Experience: "List roles starting with the most recent. Add bullets per role.",
   Education: "Degrees and schools. Add as many entries as you need.",
   Skills: "Skill groups and keywords. Add or remove groups freely.",
@@ -91,6 +92,15 @@ function normalizeSchemaForRender(schema: UnifiedResumeSchema): UnifiedResumeSch
       phone: cleanText(schema.basics.phone),
       url: cleanText(schema.basics.url),
       summary: cleanText(schema.basics.summary),
+      location: (() => {
+        const loc = schema.basics.location;
+        if (!loc) return undefined;
+        const city = cleanText(loc.city);
+        const region = cleanText(loc.region);
+        const country = cleanText(loc.country);
+        if (!city && !region && !country) return undefined;
+        return { city, region, country };
+      })(),
     },
     work: schema.work
       .map((w) => ({
@@ -653,6 +663,48 @@ export default function AdminTemplatesLab() {
                   value={schema.basics.url ?? ""}
                   onChange={(e) => setSchema((s) => ({ ...s, basics: { ...s.basics, url: e.target.value } }))}
                   placeholder="Website / LinkedIn"
+                  className={`${inputClass} sm:col-span-2`}
+                />
+                <input
+                  value={schema.basics.location?.city ?? ""}
+                  onChange={(e) =>
+                    setSchema((s) => ({
+                      ...s,
+                      basics: {
+                        ...s.basics,
+                        location: { ...s.basics.location, city: e.target.value, region: s.basics.location?.region, country: s.basics.location?.country },
+                      },
+                    }))
+                  }
+                  placeholder="City"
+                  className={inputClass}
+                />
+                <input
+                  value={schema.basics.location?.region ?? ""}
+                  onChange={(e) =>
+                    setSchema((s) => ({
+                      ...s,
+                      basics: {
+                        ...s.basics,
+                        location: { ...s.basics.location, city: s.basics.location?.city, region: e.target.value, country: s.basics.location?.country },
+                      },
+                    }))
+                  }
+                  placeholder="Region / state"
+                  className={inputClass}
+                />
+                <input
+                  value={schema.basics.location?.country ?? ""}
+                  onChange={(e) =>
+                    setSchema((s) => ({
+                      ...s,
+                      basics: {
+                        ...s.basics,
+                        location: { ...s.basics.location, city: s.basics.location?.city, region: s.basics.location?.region, country: e.target.value },
+                      },
+                    }))
+                  }
+                  placeholder="Country"
                   className={`${inputClass} sm:col-span-2`}
                 />
               </div>

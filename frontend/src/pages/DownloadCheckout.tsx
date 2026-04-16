@@ -40,7 +40,7 @@ function CheckoutResumeReserveBlock({
       <div className="flex min-w-0 items-center justify-between gap-2 sm:gap-3">
         <div className="flex min-w-0 flex-1 items-center gap-2.5">
           <img
-            src="/pdf-icon.svg"
+            src="/media/pdf-icon.svg"
             alt=""
             width={28}
             height={28}
@@ -319,6 +319,15 @@ export default function DownloadCheckout() {
           </span>
           {t("upgrade.checkoutPageTitleSuffix")}
         </h1>
+
+        <div className="mb-5 w-full md:hidden">
+          <img
+            src="/media/best-resume-download.svg"
+            alt=""
+            className="mx-auto h-auto w-full max-w-full object-contain object-center max-h-[min(58vh,480px)]"
+            decoding="async"
+          />
+        </div>
 
         {showCheckoutSubtitle ? (
           <div className="mb-4 space-y-2 text-[13px] text-[#5B6378] max-w-2xl mx-auto text-center leading-relaxed">

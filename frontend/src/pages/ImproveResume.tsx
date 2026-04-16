@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { CloudArrowUpIcon, DocumentCheckIcon } from "@heroicons/react/24/outline";
+import { CloudArrowUpIcon } from "@heroicons/react/24/outline";
 import * as api from "../api";
 import { useAuth } from "../contexts/AuthContext";
 import { t } from "../i18n";
@@ -134,6 +134,10 @@ export default function ImproveResume() {
     <div className="max-w-2xl mx-auto py-2 space-y-5">
       {/* Upload zone — shown while no file yet */}
       {!resumeContent ? (
+        <>
+        <h1 className="text-xl font-bold text-[#181819] text-center tracking-tight">
+          {t("improveResume.uploadSectionHeading")}
+        </h1>
         <div
           className={`rounded-2xl border-2 border-dashed transition-colors cursor-pointer ${
             isDragging
@@ -184,10 +188,18 @@ export default function ImproveResume() {
             aria-label={t("improveResume.uploadTitle")}
           />
         </div>
+        </>
       ) : (
         /* Uploaded indicator */
         <div className="flex items-center gap-3 rounded-2xl border border-[#EBEDF5] bg-white px-4 py-3">
-          <DocumentCheckIcon className="w-5 h-5 text-[#22c55e] shrink-0" />
+          <img
+            src="/media/pdf-icon.svg"
+            alt=""
+            width={40}
+            height={40}
+            className="h-10 w-10 shrink-0 object-contain"
+            decoding="async"
+          />
           <div className="min-w-0 flex-1">
             <p className="text-sm font-medium text-[#181819] truncate">{uploadedDisplayName}</p>
             <p className="text-xs text-[var(--text-muted)]">{t("improveResume.uploadedLabel")}</p>

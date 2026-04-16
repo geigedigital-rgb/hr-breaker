@@ -246,8 +246,8 @@ function LoaderFactCard({ fact }: { fact: string }) {
   const body = stripFactPrefix(fact);
   if (!body) return null;
   return (
-    <div className="mt-8 max-w-[min(28rem,92vw)] px-2">
-      <p className="text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-[#4558ff]/75 mb-2">
+    <div className="mt-5 max-w-[min(28rem,92vw)] px-2">
+      <p className="mb-1.5 text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-[#4558ff]/75">
         {t("optimize.quickFactLabel")}
       </p>
       <p className="text-center text-[15px] sm:text-[17px] md:text-lg leading-relaxed font-medium text-[#334155]">
@@ -257,6 +257,10 @@ function LoaderFactCard({ fact }: { fact: string }) {
   );
 }
 
+/** Visible main column height: below app header and main pt/pb (matches Layout `<main>`). Fallback when `--app-header-height` unset (e.g. admin shell). */
+const MAIN_LOADER_HEIGHT =
+  "min-h-0 h-[calc(100dvh-var(--app-header-height,3.5rem)-2rem)] max-h-[calc(100dvh-var(--app-header-height,3.5rem)-2rem)]";
+
 function OptimizePipelineLoader({
   labels,
   completedSteps,
@@ -264,6 +268,7 @@ function OptimizePipelineLoader({
   microLine,
   topHint,
   ariaLabel,
+  variant = "main",
 }: {
   labels: readonly string[];
   completedSteps: number;
@@ -271,22 +276,32 @@ function OptimizePipelineLoader({
   microLine?: string;
   topHint?: string;
   ariaLabel: string;
+  /** `overlay`: parent is `fixed inset-0` — fill it without nested 100dvh. */
+  variant?: "main" | "overlay";
 }) {
   return (
     <div
-      className="flex w-full max-w-xl flex-col items-center px-2 sm:px-4 text-center"
+      className={
+        variant === "overlay"
+          ? "flex h-full min-h-0 w-full flex-col items-center justify-center text-center"
+          : `flex w-full flex-col items-center justify-center overflow-y-auto bg-[linear-gradient(180deg,#F2F3F9_0%,#FAFBFE_42%,#ffffff_100%)] text-center ${MAIN_LOADER_HEIGHT}`
+      }
       role="status"
       aria-live="polite"
       aria-label={ariaLabel}
     >
-      {topHint ? (
-        <p className="mb-3 max-w-sm text-[10px] font-medium uppercase tracking-wider text-[#94a3b8]">{topHint}</p>
-      ) : null}
-      <PipelineStepper labels={labels} completedSteps={completedSteps} />
-      {microLine ? (
-        <p className="mt-4 max-w-sm text-[11px] leading-snug text-[#94a3b8]">{microLine}</p>
-      ) : null}
-      {fact ? <LoaderFactCard fact={fact} /> : null}
+      <div className="flex w-full max-w-lg flex-col items-center gap-2.5 sm:gap-3 px-0">
+        {topHint ? (
+          <p className="text-[10px] font-medium uppercase tracking-wider text-[#94a3b8]">{topHint}</p>
+        ) : null}
+        {microLine ? (
+          <p className="text-sm font-normal leading-relaxed text-[#475569]">{microLine}</p>
+        ) : null}
+        <div className="w-full pt-1">
+          <PipelineStepper labels={labels} completedSteps={completedSteps} />
+        </div>
+        {fact ? <LoaderFactCard fact={fact} /> : null}
+      </div>
     </div>
   );
 }
@@ -1271,7 +1286,6 @@ export default function Optimize() {
   const checkoutSnapshotRestoredRef = useRef(false);
   const autoImproveStartedRef = useRef(false);
   const [loadingHintIndex, setLoadingHintIndex] = useState(0);
-  const [improveHintIndex, setImproveHintIndex] = useState(0);
   const [analysisPipelineCompleted, setAnalysisPipelineCompleted] = useState(0);
   const [resumeSummaryFromApi, setResumeSummaryFromApi] = useState<api.ExtractResumeSummaryResponse | null>(null);
   const [_isFetchingJobUrl, _setIsFetchingJobUrl] = useState(false);
@@ -2323,8 +2337,15 @@ export default function Optimize() {
   });
   /** Ждём claim `/landing/claim` после ?pending= — показываем лоадер вместо hero */
   const awaitingLandingClaim = stage === "scanning" && claimGate && (!hasResume || !hasJob);
+  const showFullBleedPipelineLoader =
+    !showSummaryBlocks &&
+    (stage === "scanning" || stage === "loading" || (stage === "assessment" && preScores == null)) &&
+    ((hasResume && hasJob) || awaitingLandingClaim);
   const isLoadingAssessment =
     awaitingLandingClaim || stage === "scanning" || (stage === "assessment" && preScores == null);
+  /** Include optimize (`loading`) so fact lines keep rotating; `isLoadingAssessment` stays scan/analyze-only for pipeline ticks. */
+  const rotateLoadingHints =
+    isLoadingAssessment || stage === "loading";
 
   useEffect(() => {
     const prev = prevStagePipelineRef.current;
@@ -2406,38 +2427,22 @@ export default function Optimize() {
           t("optimize.loadingHintAnalyze10"),
         ];
   const activeLoadingHint = loadingHints[loadingHintIndex % loadingHints.length];
-  const improveLoadingHints = [
-    t("optimize.loadingImproveUser1"),
-    t("optimize.loadingImproveUser2"),
-    t("optimize.loadingImproveUser3"),
-    t("optimize.loadingImproveUser4"),
-    t("optimize.loadingImproveUser5"),
-    t("optimize.loadingImproveUser6"),
-    t("optimize.loadingImproveUser7"),
-    t("optimize.loadingImproveUser8"),
-    t("optimize.loadingImproveUser9"),
-    t("optimize.loadingImproveUser10"),
-    t("optimize.loadingImproveUser11"),
-    t("optimize.loadingImproveUser12"),
-  ];
-  const activeImproveLoadingHint = improveLoadingHints[improveHintIndex % improveLoadingHints.length];
   const visibleLoadProgress = stage === "loading" ? displayLoadProgress : loadProgress;
   const optimizePipelineCompleted =
     stage === "loading" ? Math.min(5, Math.floor(visibleLoadProgress / 20)) : 0;
 
   useEffect(() => {
-    if (!isLoadingAssessment) {
+    if (!rotateLoadingHints) {
       setLoadingHintIndex(0);
       return;
     }
     const timer = setInterval(() => setLoadingHintIndex((idx) => idx + 1), LOADING_FACT_ROTATE_MS);
     return () => clearInterval(timer);
-  }, [isLoadingAssessment]);
+  }, [rotateLoadingHints]);
 
   useEffect(() => {
     if (stage !== "loading") {
       setDisplayLoadProgress(0);
-      setImproveHintIndex(0);
       return;
     }
     const baseStep = (OPTIMIZE_LOAD_SSE_CAP_BEFORE_DONE * OPTIMIZE_LOAD_TICK_MS) / OPTIMIZE_LOAD_TARGET_MS;
@@ -2455,11 +2460,7 @@ export default function Optimize() {
         return Math.min(cap, prev + step);
       });
     }, OPTIMIZE_LOAD_TICK_MS);
-    const textTimer = setInterval(() => setImproveHintIndex((idx) => idx + 1), LOADING_FACT_ROTATE_MS);
-    return () => {
-      clearInterval(progressTimer);
-      clearInterval(textTimer);
-    };
+    return () => clearInterval(progressTimer);
   }, [stage]);
 
   useEffect(() => {
@@ -2623,14 +2624,19 @@ export default function Optimize() {
   }
 
   return (
-    <div className="relative flex flex-col gap-4 sm:gap-5 w-full min-w-0 min-h-0 overflow-x-hidden pb-28 sm:pb-12">
+    <div
+      className={`relative flex w-full min-w-0 flex-col overflow-x-hidden ${
+        showFullBleedPipelineLoader ? "min-h-0 gap-0 pb-0" : "min-h-0 gap-4 sm:gap-5 pb-28 sm:pb-12"
+      }`}
+    >
         {resumeBootstrapping && (
           <div
-            className="fixed inset-0 z-[60] flex flex-col items-center justify-center bg-[linear-gradient(180deg,#F2F3F9_0%,#FAFBFE_42%,#ffffff_100%)] px-4"
+            className="fixed inset-0 z-[60] flex flex-col overflow-hidden bg-[linear-gradient(180deg,#F2F3F9_0%,#FAFBFE_42%,#ffffff_100%)] px-4"
             role="status"
             aria-live="polite"
           >
             <OptimizePipelineLoader
+              variant="overlay"
               labels={[t("optimize.pipelineRestore1"), t("optimize.pipelineRestore2"), t("optimize.pipelineRestore3")]}
               completedSteps={bootstrapPipelineCompleted}
               microLine={t("optimize.doNotClosePage")}
@@ -3451,46 +3457,43 @@ export default function Optimize() {
         )}
         </div>
       ) : (
-      <div className="flex min-h-[100dvh] w-full min-w-0 flex-col items-center justify-center overflow-x-hidden bg-[linear-gradient(180deg,#F2F3F9_0%,#FAFBFE_42%,#ffffff_100%)] px-4 pb-28 pt-8 sm:pb-16">
-        {(stage === "scanning" || stage === "loading" || (stage === "assessment" && preScores == null)) &&
-          (hasResume && hasJob || awaitingLandingClaim) && (
-          <>
-            {(stage === "scanning" || (stage === "assessment" && preScores == null)) && (
-              <OptimizePipelineLoader
-                labels={pipelineAnalysisLabels}
-                completedSteps={analysisPipelineCompleted}
-                fact={!awaitingLandingClaim ? activeLoadingHint : undefined}
-                microLine={t("optimize.loaderMicroHint")}
-                topHint={
-                  awaitingLandingClaim
-                    ? t("optimize.preparingLandingCheckSub")
-                    : undefined
-                }
-                ariaLabel={
-                  awaitingLandingClaim
-                    ? t("optimize.preparingLandingCheck")
-                    : stage === "scanning"
-                      ? t("optimize.scanningLabel")
-                      : t("optimize.analysisLabel")
-                }
-              />
-            )}
+        <>
+          {(stage === "scanning" || stage === "loading" || (stage === "assessment" && preScores == null)) &&
+            (hasResume && hasJob || awaitingLandingClaim) && (
+            <>
+              {(stage === "scanning" || (stage === "assessment" && preScores == null)) && (
+                <OptimizePipelineLoader
+                  labels={pipelineAnalysisLabels}
+                  completedSteps={analysisPipelineCompleted}
+                  fact={!awaitingLandingClaim ? activeLoadingHint : undefined}
+                  microLine={t("optimize.loaderMicroHint")}
+                  topHint={
+                    awaitingLandingClaim
+                      ? t("optimize.preparingLandingCheckSub")
+                      : undefined
+                  }
+                  ariaLabel={
+                    awaitingLandingClaim
+                      ? t("optimize.preparingLandingCheck")
+                      : stage === "scanning"
+                        ? t("optimize.scanningLabel")
+                        : t("optimize.analysisLabel")
+                  }
+                />
+              )}
 
-            {stage === "loading" && (
-              <OptimizePipelineLoader
-                labels={pipelineOptimizeLabels}
-                completedSteps={optimizePipelineCompleted}
-                fact={activeImproveLoadingHint}
-                microLine={`${t("optimize.loaderMicroHint")} ${t("optimize.doNotClosePageHint")}`}
-                ariaLabel={t("optimize.improvingResume")}
-              />
-            )}
-
-            {/* При showSummaryBlocks контент (Режим улучшения + результат) рендерится в сетке выше */}
-          </>
-        )}
-
-      </div>
+              {stage === "loading" && (
+                <OptimizePipelineLoader
+                  labels={pipelineOptimizeLabels}
+                  completedSteps={optimizePipelineCompleted}
+                  fact={activeLoadingHint}
+                  microLine={t("optimize.loaderMicroHint")}
+                  ariaLabel={t("optimize.improvingResume")}
+                />
+              )}
+            </>
+          )}
+        </>
       )}
 
       {optimizePaywallOpen && (

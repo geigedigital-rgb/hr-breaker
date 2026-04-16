@@ -437,13 +437,15 @@ export function PostResultResumeStudio({
         <div ref={mainHostRef} className="relative min-h-[200px] bg-[#F4F6FA]">
           {mainLoading && !showFallbackPreview && (
             <div
-              className="absolute inset-0 z-10 flex flex-col gap-3 bg-white/75 p-6 backdrop-blur-[2px]"
+              className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-[#F4F6FA]/88"
               aria-busy="true"
               aria-label={t("optimize.templatesLoading")}
             >
-              <div className="mx-auto h-4 w-48 max-w-full rounded-md bg-[#e8ecf4] animate-pulse" />
-              <div className="mx-auto min-h-[220px] w-full max-w-[520px] flex-1 rounded-lg border border-[#eef1f6] bg-gradient-to-b from-[#f8fafc] to-[#eef2f8] animate-pulse" />
-              <div className="mx-auto h-3 w-[66%] max-w-sm rounded bg-[#f1f5f9] animate-pulse" />
+              <span
+                className="h-10 w-10 shrink-0 rounded-full border-2 border-[#4578FC]/25 border-t-[#4578FC] animate-spin"
+                aria-hidden
+              />
+              <p className="text-[13px] font-medium text-[#64748B]">{t("optimize.templatesLoading")}</p>
             </div>
           )}
           <div className="relative w-full">
@@ -457,9 +459,13 @@ export function PostResultResumeStudio({
               <div className="flex min-h-[320px] flex-col items-center justify-center gap-3 bg-white px-6 text-[13px] text-[#9CA3AF]">
                 {!prefetchDone && templates.length > 0 ? (
                   <>
-                    <div className="h-3 w-40 rounded bg-[#e8ecf4] animate-pulse" />
-                    <div className="mt-2 min-h-[200px] w-full max-w-md rounded-lg bg-gradient-to-b from-[#f8fafc] to-[#eef2f8] animate-pulse" />
-                    <p className="text-center">{t("optimize.templatesLoading")}</p>
+                    <span
+                      className="h-10 w-10 rounded-full border-2 border-[#4578FC]/25 border-t-[#4578FC] animate-spin"
+                      aria-hidden
+                    />
+                    <p className="text-center text-[13px] font-medium text-[#64748B]">
+                      {t("optimize.templatesLoading")}
+                    </p>
                   </>
                 ) : (
                   t("optimize.templatePreviewError")

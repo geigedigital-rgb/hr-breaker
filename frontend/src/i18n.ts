@@ -80,6 +80,7 @@ const en = {
     withdraw: "Withdraw",
   },
   improveResume: {
+    uploadSectionHeading: "Upload your resume",
     pageTitle: "How would you like to improve your resume?",
     uploadTitle: "Upload your resume to get started",
     uploadHint: "PDF, Word, TXT, MD, HTML, TEX — drag here or click to browse",
@@ -286,7 +287,8 @@ const en = {
     starting: "Starting…",
     waitingResponse: "Waiting for response…",
     quickFactLabel: "Fact",
-    loaderMicroHint: "Keep this tab open — we’ll finish in a moment.",
+    loaderMicroHint:
+      "Keep this tab open — we\u2019ll finish in a moment. This step can take up to 60 seconds.",
     pipelineRestore1: "Secure session",
     pipelineRestore2: "Loading snapshot",
     pipelineRestore3: "Preparing editor",
