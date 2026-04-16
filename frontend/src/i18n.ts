@@ -568,7 +568,7 @@ const en = {
     downloadCheckoutDeleteWarningShort: "Deleted when the timer ends.",
     downloadCheckoutSocialProofDownloads: "{count} users downloaded in the last 24 h",
     downloadCheckoutReserveUrgencyLine:
-      "Your improved resume will be deleted. Download now while you can!",
+      "Your improved resume will be deleted in 15 minutes. Download it before it\u2019s gone",
     downloadCheckoutReservedFileHintNoTimer:
       "Your improved resume is only saved for a short while. Finish checkout to download when you\u2019re ready.",
     checkoutPageTitlePrefix: "Get a resume that's ",

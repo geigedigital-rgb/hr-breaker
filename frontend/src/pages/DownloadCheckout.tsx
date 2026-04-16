@@ -309,7 +309,7 @@ export default function DownloadCheckout() {
       </header>
 
       <main className="max-w-[1200px] mx-auto px-6 pb-32 pt-3 lg:px-8 lg:pb-14 lg:pt-8">
-        <h1 className="text-2xl sm:text-3xl md:text-[2rem] font-semibold tracking-tight text-[#111827] text-center mb-3 lg:mb-5">
+        <h1 className="text-3xl leading-[1.15] md:text-[2rem] md:leading-tight font-semibold tracking-tight text-[#111827] text-center mb-3 lg:mb-5">
           {t("upgrade.checkoutPageTitlePrefix")}
           <span className="font-bold" style={{ color: "#222DC4" }}>
             x2
