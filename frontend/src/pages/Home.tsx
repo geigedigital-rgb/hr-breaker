@@ -171,27 +171,51 @@ export default function Home() {
         className="block rounded-2xl overflow-hidden focus:outline-none focus:ring-2 focus:ring-white/40 focus:ring-offset-2 focus:ring-offset-[#324BF4]"
         style={{ background: "#324BF4" }}
       >
-        <div className="relative flex items-center min-h-[9rem] sm:min-h-[11rem] px-6 py-5 gap-4 overflow-hidden">
-          {/* Illustration — bottom-left, partially cropped */}
-          <div className="absolute left-0 bottom-0 top-0 w-48 sm:w-64 pointer-events-none select-none overflow-hidden">
-            <img src="/banner.svg" alt="" className="absolute bottom-0 left-0 w-full" draggable={false} />
-          </div>
-
-          {/* Center text */}
-          <div className="relative flex-1 flex flex-col items-start text-left pl-48 sm:pl-64 pr-4 min-w-0">
-            <h2 className="text-xl sm:text-2xl font-bold text-white leading-tight tracking-tight">
+        {/* Mobile: image left, copy top-right, CTA full width below */}
+        <div className="relative px-4 py-4 md:hidden">
+          <div className="grid grid-cols-[minmax(0,5.75rem)_1fr] gap-x-3 gap-y-1.5">
+            <div className="pointer-events-none row-span-2 select-none self-start overflow-hidden">
+              <img
+                src="/banner.svg"
+                alt=""
+                className="block w-full max-h-[7rem] object-contain object-left object-top"
+                draggable={false}
+              />
+            </div>
+            <h2 className="col-start-2 min-w-0 text-lg font-bold leading-tight tracking-tight text-white">
               {t("home.resumeMatchScore")}
             </h2>
-            <p className="text-sm sm:text-base text-white/70 mt-2 leading-relaxed max-w-sm">
+            <p className="col-start-2 min-w-0 text-xs leading-relaxed text-white/70 sm:text-sm">
               {t("home.resumeMatchDesc")}
             </p>
           </div>
-
-          {/* CTA button — right, vertically centered */}
-          <div className="relative shrink-0 mr-4 sm:mr-6">
-            <span className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-semibold text-[#324BF4] bg-white shadow-sm transition-opacity hover:opacity-90">
+          <div className="mt-4">
+            <span className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-white px-4 py-2.5 text-sm font-semibold text-[#324BF4] shadow-sm transition-opacity hover:opacity-90">
               {t("home.startNow")}
-              <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+              </svg>
+            </span>
+          </div>
+        </div>
+
+        {/* Tablet/desktop: illustration anchored left, copy + CTA in a row */}
+        <div className="relative hidden min-h-[11rem] items-center gap-4 overflow-hidden px-6 py-5 md:flex">
+          <div className="pointer-events-none absolute bottom-0 left-0 top-0 w-64 select-none overflow-hidden">
+            <img src="/banner.svg" alt="" className="absolute bottom-0 left-0 w-full" draggable={false} />
+          </div>
+          <div className="relative flex min-w-0 flex-1 flex-col items-start pl-64 pr-4 text-left">
+            <h2 className="text-xl font-bold leading-tight tracking-tight text-white sm:text-2xl">
+              {t("home.resumeMatchScore")}
+            </h2>
+            <p className="mt-2 max-w-sm text-sm leading-relaxed text-white/70 sm:text-base">
+              {t("home.resumeMatchDesc")}
+            </p>
+          </div>
+          <div className="relative mr-6 shrink-0">
+            <span className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2.5 text-sm font-semibold text-[#324BF4] shadow-sm transition-opacity hover:opacity-90">
+              {t("home.startNow")}
+              <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
               </svg>
             </span>

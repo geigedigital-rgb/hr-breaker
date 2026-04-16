@@ -2066,6 +2066,8 @@ export default function Optimize() {
     q.set("return_to", "/optimize");
     if (result?.pending_export_token) q.set("pending", result.pending_export_token);
     if (result?.pending_export_expires_at) q.set("exp", result.pending_export_expires_at);
+    const docName = (result?.pdf_filename || uploadedFileName || "Resume.pdf").trim();
+    if (docName) q.set("doc", docName);
     navigate(`/checkout/download-resume?${q.toString()}`);
   }
 

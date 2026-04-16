@@ -14,6 +14,72 @@ import * as api from "../api";
 import { useAuth } from "../contexts/AuthContext";
 import { t, tFormat } from "../i18n";
 
+/** Short label for checkout (filename-style, ends with .pdf); stem often starts with the candidate name. */
+function shortenResumeFileLabel(raw: string, maxChars = 34): string {
+  let s = raw.trim() || "Resume.pdf";
+  if (!/\.pdf$/i.test(s)) s = `${s.replace(/\.[^/.]+$/, "")}.pdf`;
+  if (s.length <= maxChars) return s;
+  const ext = ".pdf";
+  const stem = s.slice(0, -ext.length) || "Resume";
+  const budget = maxChars - ext.length - 1;
+  const keep = Math.max(6, budget);
+  return `${stem.slice(0, keep)}…${ext}`;
+}
+
+function CheckoutResumeReserveBlock({
+  fileShort,
+  fileRaw,
+  countdownLabel,
+}: {
+  fileShort: string;
+  fileRaw: string;
+  countdownLabel: string | null;
+}) {
+  return (
+    <div className="mb-3 rounded-xl border border-[#E6EAF4] bg-[#f7f9fc] px-3 py-2.5 sm:px-3.5 sm:py-3">
+      <div className="flex min-w-0 items-center justify-between gap-2 sm:gap-3">
+        <div className="flex min-w-0 flex-1 items-center gap-2.5">
+          <img
+            src="/pdf-icon.svg"
+            alt=""
+            width={28}
+            height={28}
+            className="h-7 w-7 shrink-0 object-contain opacity-95"
+            decoding="async"
+          />
+          <span className="min-w-0 truncate text-left text-sm font-semibold text-[#111827]" title={fileRaw}>
+            {fileShort}
+          </span>
+        </div>
+        <span
+          className={`shrink-0 tabular-nums text-sm font-medium leading-none tracking-tight ${
+            countdownLabel ? "text-[#64748B]" : "text-[#94a3b8]"
+          }`}
+          aria-live={countdownLabel ? "polite" : undefined}
+        >
+          {countdownLabel ?? "--:--"}
+        </span>
+      </div>
+      <p className="mt-2.5 text-left text-sm font-normal leading-relaxed text-[#5B6378]">
+        {countdownLabel
+          ? t("upgrade.downloadCheckoutReserveUrgencyLine")
+          : t("upgrade.downloadCheckoutReservedFileHintNoTimer")}
+      </p>
+    </div>
+  );
+}
+
+function CheckoutCtaCaption({ downloadsLast24h }: { downloadsLast24h: number }) {
+  const count = new Intl.NumberFormat(undefined).format(downloadsLast24h);
+  return (
+    <p className="mt-2.5 text-center text-[11px] leading-snug text-[#5B6570] sm:text-xs sm:leading-normal">
+      <span className="font-medium text-[#374151]">
+        {tFormat(t("upgrade.downloadCheckoutSocialProofDownloads"), { count })}
+      </span>
+    </p>
+  );
+}
+
 function StepItem({
   label,
   state,
@@ -118,11 +184,20 @@ export default function DownloadCheckout() {
   const [error, setError] = useState<string | null>(null);
   const [selectedPlan, setSelectedPlan] = useState<"trial" | "monthly">("trial");
   const [socialProofCount] = useState(() => 412 + Math.floor(Math.random() * (670 - 412 + 1)));
-  const [downloadsToday] = useState(() => 1188 + Math.floor(Math.random() * 120));
+  const [downloadsLast24h] = useState(() => 1600 + Math.floor(Math.random() * 500));
 
-  const fromState = location.state as { pendingExportToken?: string; returnTo?: string } | null;
+  const fromState = location.state as {
+    pendingExportToken?: string;
+    returnTo?: string;
+    resumeDoc?: string;
+  } | null;
   const pendingExportToken = (fromState?.pendingExportToken || params.get("pending") || "").trim();
   const returnTo = (fromState?.returnTo || params.get("return_to") || "/optimize").trim() || "/optimize";
+  const resumeDocRaw = (fromState?.resumeDoc || params.get("doc") || "").trim();
+  const resumeDocDisplay = useMemo(
+    () => shortenResumeFileLabel(resumeDocRaw || "Resume.pdf"),
+    [resumeDocRaw],
+  );
   const canceled = params.get("cancel") === "1";
   const sandboxMode = params.get("sandbox") === "1";
   const expiresAtRaw = (params.get("exp") || "").trim();
@@ -132,26 +207,26 @@ export default function DownloadCheckout() {
   }, [expiresAtRaw]);
   const [sessionFallbackEndMs] = useState(() => Date.now() + 15 * 60 * 1000);
   const effectiveEndMs = expiresAtMs ?? sessionFallbackEndMs;
-  const [savedMinutesHeadline] = useState(() =>
-    Math.max(1, Math.ceil((effectiveEndMs - Date.now()) / 60000)),
-  );
   const [nowMs, setNowMs] = useState(Date.now());
   const remainingSeconds =
     !sandboxMode && pendingExportToken
       ? Math.max(0, Math.floor((effectiveEndMs - nowMs) / 1000))
       : null;
-  const timerLabel = useMemo(() => {
-    if (remainingSeconds == null) return null;
-    const mm = Math.floor(remainingSeconds / 60);
-    const ss = remainingSeconds % 60;
+
+  const displayCountdownSeconds =
+    pendingExportToken ? Math.max(0, Math.floor((effectiveEndMs - nowMs) / 1000)) : null;
+  const reserveCountdownLabel = useMemo(() => {
+    if (displayCountdownSeconds === null) return null;
+    const mm = Math.floor(displayCountdownSeconds / 60);
+    const ss = displayCountdownSeconds % 60;
     return `${String(mm).padStart(2, "0")}:${String(ss).padStart(2, "0")}`;
-  }, [remainingSeconds]);
+  }, [displayCountdownSeconds]);
 
   useEffect(() => {
-    if (sandboxMode || !pendingExportToken) return;
+    if (!pendingExportToken) return;
     const id = window.setInterval(() => setNowMs(Date.now()), 1000);
     return () => window.clearInterval(id);
-  }, [sandboxMode, pendingExportToken]);
+  }, [pendingExportToken]);
 
   const successUrl = useMemo(() => {
     const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
@@ -162,10 +237,12 @@ export default function DownloadCheckout() {
     const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
     const q = new URLSearchParams();
     if (pendingExportToken) q.set("pending", pendingExportToken);
+    if (resumeDocRaw) q.set("doc", resumeDocRaw);
+    if (expiresAtRaw) q.set("exp", expiresAtRaw);
     q.set("return_to", returnTo);
     q.set("cancel", "1");
     return `${baseUrl}/checkout/download-resume?${q.toString()}`;
-  }, [pendingExportToken, returnTo]);
+  }, [pendingExportToken, returnTo, resumeDocRaw, expiresAtRaw]);
 
   const continueDisabled =
     loadingPlan !== null ||
@@ -233,37 +310,19 @@ export default function DownloadCheckout() {
 
       <main className="max-w-[1200px] mx-auto px-6 pb-32 pt-3 lg:px-8 lg:pb-14 lg:pt-8">
         <h1 className="text-2xl sm:text-3xl md:text-[2rem] font-semibold tracking-tight text-[#111827] text-center mb-3 lg:mb-5">
-          {t("upgrade.checkoutPageTitle")}
+          {t("upgrade.checkoutPageTitlePrefix")}
+          <span className="font-bold" style={{ color: "#222DC4" }}>
+            x2
+          </span>{" "}
+          <span className="font-bold" style={{ color: "#222DC4" }}>
+            {t("upgrade.checkoutPageTitleWordMore")}
+          </span>
+          {t("upgrade.checkoutPageTitleSuffix")}
         </h1>
 
         {showCheckoutSubtitle ? (
           <div className="mb-4 space-y-2 text-[13px] text-[#5B6378] max-w-2xl mx-auto text-center leading-relaxed">
-            {!sandboxMode && pendingExportToken ? (
-              <div className="space-y-3">
-                <p className="text-base sm:text-lg font-semibold text-[#111827] tracking-tight">
-                  {tFormat(t("upgrade.downloadCheckoutSavedForMinutes"), {
-                    minutes: String(savedMinutesHeadline),
-                  })}
-                </p>
-                <p className="text-[13px] sm:text-sm text-[#5B6378] leading-snug">
-                  {t("upgrade.downloadCheckoutDeleteWarning")}
-                </p>
-                {timerLabel ? (
-                  <div className="pt-1">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#6B7280]">
-                      {t("upgrade.downloadCheckoutTimeLeft")}
-                    </p>
-                    <p
-                      className="mt-1 text-4xl sm:text-5xl font-bold tabular-nums tracking-tight text-[#111827]"
-                      aria-live="polite"
-                      aria-atomic="true"
-                    >
-                      {timerLabel}
-                    </p>
-                  </div>
-                ) : null}
-              </div>
-            ) : !sandboxMode ? (
+            {!sandboxMode && !pendingExportToken ? (
               <p className="text-amber-900/90">No saved session. Go back to Optimize and tap Download PDF again.</p>
             ) : null}
             {!sandboxMode && pendingExportToken && remainingSeconds === 0 ? (
@@ -478,6 +537,11 @@ export default function DownloadCheckout() {
               ))}
             </ul>
             <div className="mt-6 max-lg:hidden shrink-0 flex flex-col items-stretch">
+              <CheckoutResumeReserveBlock
+                fileShort={resumeDocDisplay}
+                fileRaw={resumeDocRaw || resumeDocDisplay}
+                countdownLabel={reserveCountdownLabel}
+              />
               <button
                 type="button"
                 disabled={continueDisabled}
@@ -486,15 +550,8 @@ export default function DownloadCheckout() {
               >
                 {loadingPlan !== null ? t("upgrade.redirectingStripe") : t("upgrade.checkoutContinue")}
               </button>
-              <p className="mt-2 text-center text-[11px] leading-snug text-[#6B7280]">
-                <span className="font-semibold text-[#374151]">
-                  {tFormat(t("upgrade.downloadCheckoutDownloadsToday"), {
-                    count: new Intl.NumberFormat(undefined).format(downloadsToday),
-                  })}
-                </span>
-                <span className="mt-0.5 block text-[#9CA3AF] font-medium normal-case tracking-normal">
-                  {t("upgrade.downloadCheckoutToday")}
-                </span>
+              <p className="mt-2.5 text-center text-[11px] leading-snug text-[#5B6570] sm:text-xs sm:leading-normal">
+                <span className="font-medium text-[#374151]">{t("upgrade.checkoutMoneyBackGuarantee")}</span>
               </p>
             </div>
           </aside>
@@ -506,6 +563,11 @@ export default function DownloadCheckout() {
         role="presentation"
       >
         <div className="max-w-[1200px] mx-auto flex flex-col items-stretch">
+          <CheckoutResumeReserveBlock
+            fileShort={resumeDocDisplay}
+            fileRaw={resumeDocRaw || resumeDocDisplay}
+            countdownLabel={reserveCountdownLabel}
+          />
           <button
             type="button"
             disabled={continueDisabled}
@@ -514,16 +576,7 @@ export default function DownloadCheckout() {
           >
             {loadingPlan !== null ? t("upgrade.redirectingStripe") : t("upgrade.checkoutContinue")}
           </button>
-          <p className="mt-2 text-center text-[11px] leading-snug text-[#6B7280]">
-            <span className="font-semibold text-[#374151]">
-              {tFormat(t("upgrade.downloadCheckoutDownloadsToday"), {
-                count: new Intl.NumberFormat(undefined).format(downloadsToday),
-              })}
-            </span>
-            <span className="mt-0.5 block text-[#9CA3AF] font-medium normal-case tracking-normal">
-              {t("upgrade.downloadCheckoutToday")}
-            </span>
-          </p>
+          <CheckoutCtaCaption downloadsLast24h={downloadsLast24h} />
         </div>
       </div>
     </div>
