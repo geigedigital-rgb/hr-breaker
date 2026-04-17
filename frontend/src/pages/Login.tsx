@@ -69,7 +69,19 @@ export default function Login() {
       const pending = sessionStorage.getItem(LANDING_PENDING_KEY) || pendingToken;
       if (pending) {
         sessionStorage.removeItem(LANDING_PENDING_KEY);
-        navigate(`/optimize?pending=${encodeURIComponent(pending)}`, { replace: true });
+        void (async () => {
+          try {
+            const d = await api.getLandingPending(pending);
+            navigate(
+              d.resume_only
+                ? `/improve?pending=${encodeURIComponent(pending)}`
+                : `/optimize?pending=${encodeURIComponent(pending)}`,
+              { replace: true },
+            );
+          } catch {
+            navigate(`/optimize?pending=${encodeURIComponent(pending)}`, { replace: true });
+          }
+        })();
         return;
       }
       const refCode = sessionStorage.getItem(PARTNER_REF_CODE_KEY);
@@ -245,10 +257,10 @@ export default function Login() {
                 <CheckCircleIcon className="w-5 h-5 shrink-0 text-emerald-600 mt-0.5" aria-hidden />
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-emerald-800">
-                    {t("login.filesReady")}
+                    {pendingData?.resume_only ? t("login.resumeOnlyReady") : t("login.filesReady")}
                   </p>
                   <p className="mt-0.5 text-xs text-emerald-700">
-                    {t("login.signInToSee")}
+                    {pendingData?.resume_only ? t("login.resumeOnlySub") : t("login.signInToSee")}
                   </p>
                 </div>
               </div>
@@ -270,15 +282,17 @@ export default function Login() {
                       {pendingData.resume_filename}
                     </span>
                   </div>
-                  <div className="flex items-center gap-2.5 rounded-xl bg-white border border-[#EBEDF5] px-3 py-2.5">
-                    <DocumentTextIcon className="w-4 h-4 shrink-0 text-[var(--text-muted)]" />
-                    <div className="min-w-0 flex-1 flex flex-col items-start gap-0.5">
-                      {pendingData.job_title && (
-                        <span className="text-xs font-medium text-[#181819] truncate max-w-full">{pendingData.job_title}</span>
-                      )}
-                      <span className="text-[11px] text-[var(--text-muted)]">{t("login.jobDescription")}</span>
+                  {!pendingData.resume_only && (
+                    <div className="flex items-center gap-2.5 rounded-xl bg-white border border-[#EBEDF5] px-3 py-2.5">
+                      <DocumentTextIcon className="w-4 h-4 shrink-0 text-[var(--text-muted)]" />
+                      <div className="min-w-0 flex-1 flex flex-col items-start gap-0.5">
+                        {pendingData.job_title && (
+                          <span className="text-xs font-medium text-[#181819] truncate max-w-full">{pendingData.job_title}</span>
+                        )}
+                        <span className="text-[11px] text-[var(--text-muted)]">{t("login.jobDescription")}</span>
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               )}
             </div>

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { CloudArrowUpIcon } from "@heroicons/react/24/outline";
 import * as api from "../api";
 import { useAuth } from "../contexts/AuthContext";
@@ -43,8 +43,10 @@ async function readFileContent(
 export default function ImproveResume() {
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user, refreshUser } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const landingClaimRef = useRef<string | null>(null);
 
   const [uploading, setUploading] = useState(false);
   const [resumeContent, setResumeContent] = useState<string | null>(null);
@@ -112,7 +114,31 @@ export default function ImproveResume() {
     });
   };
 
-  // Pre-load resume when navigated from Home → "Improve" button
+  // Claim landing upload: /improve?pending=TOKEN (after login from marketing site)
+  const pendingTok = searchParams.get("pending");
+  useEffect(() => {
+    if (!pendingTok || !user || user.id === "local") return;
+    if (landingClaimRef.current === pendingTok) return;
+    landingClaimRef.current = pendingTok;
+    setUploading(true);
+    api
+      .claimLandingPending(pendingTok)
+      .then((data) => {
+        setResumeContent(data.resume_content);
+        setUploadedFileName(data.resume_filename);
+        setSourceWasPdf((data.resume_filename || "").toLowerCase().endsWith(".pdf"));
+        setUploadedDisplayName(data.resume_filename || "Resume");
+        setSelectedMode(null);
+        setJobDescription("");
+        setSearchParams({}, { replace: true });
+      })
+      .catch(() => {
+        landingClaimRef.current = null;
+      })
+      .finally(() => setUploading(false));
+  }, [pendingTok, user, setSearchParams]);
+
+  // Pre-load resume when navigated from Home → "Improve" or Optimize after landing claim (no job)
   useEffect(() => {
     const state = location.state as {
       resumeContent?: string;

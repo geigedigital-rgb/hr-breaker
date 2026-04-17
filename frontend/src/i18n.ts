@@ -151,6 +151,8 @@ const en = {
     loading: "Loading…",
     jobLink: "Job link",
     jobDescription: "Job description text",
+    resumeOnlyReady: "Your resume is ready",
+    resumeOnlySub: "After sign-in you’ll choose: general improvement or tailor to a job.",
   },
   authCallback: {
     noCode: "No code from Google",

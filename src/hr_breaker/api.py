@@ -2046,6 +2046,8 @@ class LandingSaveResponse(BaseModel):
 class LandingPendingResponse(BaseModel):
     resume_filename: str
     job_title: str | None = None
+    # True when landing saved only a resume (no job) → app opens /improve to choose Improve vs Tailor.
+    resume_only: bool = False
 
 
 class LandingClaimResponse(BaseModel):
@@ -2062,7 +2064,8 @@ async def api_landing_save(
     job_text: str | None = Form(None, description="Job description text"),
 ) -> LandingSaveResponse:
     """
-    Save resume + job for landing→login→claim flow. No auth. Returns token for /login?pending=TOKEN.
+    Save resume for landing→login→claim flow. Optional job_text (omit or empty = resume-only → /improve).
+    No auth. Returns token for /login?pending=TOKEN.
     CORS only from LANDING_ALLOWED_ORIGINS. Token TTL: LANDING_PENDING_TTL_SECONDS (default 15 min).
     """
     settings = get_settings()
@@ -2070,6 +2073,7 @@ async def api_landing_save(
 
     resume_content = ""
     resume_filename = "resume.txt"
+    body: bytes | None = None
     if resume and resume.filename:
         resume_filename = (resume.filename or "resume").split("/")[-1].strip() or "resume"
         body = await resume.read()
@@ -2096,18 +2100,15 @@ async def api_landing_save(
     if not resume_content:
         raise HTTPException(400, "Resume is empty or text could not be extracted.")
 
-    if not job_text:
-        raise HTTPException(400, "Provide job description text (job_text).")
-
-    job_text_resolved = job_text
+    job_text_resolved = (job_text or "").strip()
     job_title: str | None = None
-    try:
-        job = await parse_job_posting(job_text_resolved)
-        job_title = job.title or None
-    except Exception:
-        pass
-    if not job_text_resolved or not job_text_resolved.strip():
-        raise HTTPException(400, "Job text is empty.")
+    resume_only = not job_text_resolved
+    if not resume_only:
+        try:
+            job = await parse_job_posting(job_text_resolved)
+            job_title = job.title or None
+        except Exception:
+            pass
 
     token = secrets.token_urlsafe(32)
     ttl = settings.landing_pending_ttl_seconds
@@ -2115,10 +2116,13 @@ async def api_landing_save(
         _landing_pending_cleanup(ttl)
         _landing_pending[token] = {
             "resume_content": resume_content,
-            "job_text": job_text_resolved.strip(),
+            "job_text": job_text_resolved if job_text_resolved else None,
             "resume_filename": resume_filename,
             "job_title": job_title,
-            "resume_pdf_body": body if resume and resume.filename and resume.filename.lower().endswith(".pdf") else None,
+            "resume_only": resume_only,
+            "resume_pdf_body": body
+            if body is not None and resume and resume.filename and (resume.filename or "").lower().endswith(".pdf")
+            else None,
             "created_at": time.time(),
         }
     logger.info("Landing save OK ip=%s token=%s", ip, token[:8])
@@ -2142,6 +2146,7 @@ async def api_landing_pending(token: str = Query(..., description="Pending token
     return LandingPendingResponse(
         resume_filename=data["resume_filename"],
         job_title=data.get("job_title"),
+        resume_only=bool(data.get("resume_only")),
     )
 
 

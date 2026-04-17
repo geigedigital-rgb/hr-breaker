@@ -1359,13 +1359,24 @@ export default function Optimize() {
     api
       .claimLandingPending(pendingToken)
       .then((data) => {
+        const job = (data.job_text || "").trim();
+        if (!job) {
+          navigate("/improve", {
+            replace: true,
+            state: {
+              resumeContent: data.resume_content,
+              uploadedFileName: data.resume_filename,
+              sourceWasPdf: (data.resume_filename || "").toLowerCase().endsWith(".pdf"),
+            },
+          });
+          setClaimGate(false);
+          return;
+        }
         setResumeContent(data.resume_content);
         setUploadedFileName(data.resume_filename);
         setResumeSourceWasPdf((data.resume_filename || "").toLowerCase().endsWith(".pdf"));
-        if (data.job_text) {
-          setJobInput(data.job_text);
-          setJobMode("text");
-        }
+        setJobInput(job);
+        setJobMode("text");
         setResult(null);
         setError(null);
         setStage("scanning");
@@ -1377,7 +1388,7 @@ export default function Optimize() {
         setClaimGate(false);
         setStage("idle");
       });
-  }, [pendingToken, user, setSearchParams]);
+  }, [pendingToken, user, setSearchParams, navigate]);
 
   // Email / deep link: ?resume=JWT — full Result UI (same account); guests → login with token in sessionStorage
   const resumeTokenParam = searchParams.get(api.OPTIMIZE_RESUME_QUERY_PARAM);

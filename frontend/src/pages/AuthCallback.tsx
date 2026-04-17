@@ -39,7 +39,19 @@ export default function AuthCallback() {
         const pending = sessionStorage.getItem(LANDING_PENDING_KEY);
         if (pending) {
           sessionStorage.removeItem(LANDING_PENDING_KEY);
-          navigate(`/optimize?pending=${encodeURIComponent(pending)}`, { replace: true });
+          let improve = false;
+          try {
+            const d = await api.getLandingPending(pending);
+            improve = Boolean(d.resume_only);
+          } catch {
+            /* fallback to optimize */
+          }
+          navigate(
+            improve
+              ? `/improve?pending=${encodeURIComponent(pending)}`
+              : `/optimize?pending=${encodeURIComponent(pending)}`,
+            { replace: true },
+          );
         } else if (sessionStorage.getItem(PARTNER_REF_CODE_KEY)) {
           navigate("/optimize", { replace: true });
         } else {

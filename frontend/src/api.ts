@@ -430,6 +430,8 @@ export async function analyze(params: {
 export type LandingPendingResponse = {
   resume_filename: string;
   job_title: string | null;
+  /** Landing sent only a file; after login open /improve (Improve vs Tailor), not straight to optimize. */
+  resume_only?: boolean;
 };
 
 export type LandingClaimResponse = {
