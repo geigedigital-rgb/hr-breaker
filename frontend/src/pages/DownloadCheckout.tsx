@@ -309,15 +309,13 @@ export default function DownloadCheckout() {
       </header>
 
       <main className="max-w-[1200px] mx-auto px-6 pb-32 pt-3 lg:px-8 lg:pb-14 lg:pt-8">
-        <h1 className="text-3xl leading-[1.15] md:text-[2rem] md:leading-tight font-semibold tracking-tight text-[#111827] text-center mb-3 lg:mb-5">
-          {t("upgrade.checkoutPageTitlePrefix")}
-          <span className="font-bold" style={{ color: "#222DC4" }}>
-            x2
-          </span>{" "}
-          <span className="font-bold" style={{ color: "#222DC4" }}>
-            {t("upgrade.checkoutPageTitleWordMore")}
+        <h1 className="text-center mb-3 lg:mb-5 max-w-2xl mx-auto">
+          <span className="block text-3xl leading-tight md:text-[2rem] md:leading-tight font-semibold tracking-tight text-[#111827]">
+            {t("upgrade.checkoutPageTitleLine1")}
           </span>
-          {t("upgrade.checkoutPageTitleSuffix")}
+          <span className="mt-2 block text-lg md:text-xl font-medium leading-snug tracking-tight text-[#4B5563]">
+            {t("upgrade.checkoutPageTitleLine2")}
+          </span>
         </h1>
 
         <div className="mb-5 w-full md:hidden">
