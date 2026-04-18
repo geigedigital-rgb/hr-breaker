@@ -575,9 +575,22 @@ const en = {
       "Your improved resume will be deleted in 15 minutes. Download it before it\u2019s gone",
     downloadCheckoutReservedFileHintNoTimer:
       "Your improved resume is only saved for a short while. Finish checkout to download when you\u2019re ready.",
-    checkoutPageTitleLine1: "Your resume is ready",
+    checkoutPageTitleLine1: "Download your job-winning resume!",
     checkoutPageTitleLine2: "Don't miss your chance to land more interviews",
     allSubscriptionBenefits: "All Subscription Benefits",
+    checkoutReviewsTitle: "Real results from real users",
+    checkoutTrustExcellent: "Excellent",
+    checkoutTrustReviewsOnTrustpilot: "55,447 reviews on Trustpilot",
+    checkoutTrustScoreOutOf5: "4.2 out of 5",
+    checkoutTrustBasedOnReviews: "Based on 55,447 reviews",
+    checkoutReview1Author: "Gustavo Castillo",
+    checkoutReview1Text:
+      "It's ease of use; I can tailor different resumes easily. I like the AI writers; I ask for help, and once a statement is generated, then I can tweak or accept it.",
+    checkoutReview1Ago: "2 days ago",
+    checkoutReview2Author: "POCHULO GODINEZ",
+    checkoutReview2Text:
+      "I genuinely thought that it's only for making CV/Resume. Turns out they offered more to elevate your work into a more presentable output.",
+    checkoutReview2Ago: "3 days ago",
     trustEmployersTitle: "Our users landed jobs at:",
   },
   admin: {

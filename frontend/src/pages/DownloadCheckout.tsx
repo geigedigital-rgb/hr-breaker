@@ -12,7 +12,7 @@ import {
 } from "@heroicons/react/24/outline";
 import * as api from "../api";
 import { useAuth } from "../contexts/AuthContext";
-import { t, tFormat } from "../i18n";
+import { t } from "../i18n";
 
 /** Short label for checkout (filename-style, ends with .pdf); stem often starts with the candidate name. */
 function shortenResumeFileLabel(raw: string, maxChars = 34): string {
@@ -79,17 +79,6 @@ function CheckoutResumeReserveBlock({
           : t("upgrade.downloadCheckoutReservedFileHintNoTimer")}
       </p>
     </div>
-  );
-}
-
-function CheckoutCtaCaption({ downloadsLast24h }: { downloadsLast24h: number }) {
-  const count = new Intl.NumberFormat(undefined).format(downloadsLast24h);
-  return (
-    <p className="mt-2.5 text-center text-[11px] leading-snug text-[#5B6570] sm:text-xs sm:leading-normal">
-      <span className="font-medium text-[#374151]">
-        {tFormat(t("upgrade.downloadCheckoutSocialProofDownloads"), { count })}
-      </span>
-    </p>
   );
 }
 
@@ -166,9 +155,84 @@ const TRUST_EMPLOYER_LOGOS: { file: string; label: string }[] = [
   { file: "vw.png", label: "Volkswagen" },
 ];
 
+const TRUSTPILOT_GREEN = "#00B67A";
+
+function TrustpilotStarFull({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        fill={TRUSTPILOT_GREEN}
+        d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"
+      />
+    </svg>
+  );
+}
+
+function TrustpilotStars45({ size = "lg" }: { size?: "lg" | "sm" }) {
+  const dim = size === "lg" ? "h-8 w-8" : "h-3.5 w-3.5";
+  return (
+    <div className="flex items-center justify-center gap-0.5">
+      {[0, 1, 2, 3].map((i) => (
+        <TrustpilotStarFull key={i} className={`${dim} shrink-0`} />
+      ))}
+      <div className={`relative shrink-0 ${dim}`}>
+        <TrustpilotStarFull className={`${dim} opacity-[0.22]`} />
+        <div className="absolute inset-0 w-1/2 overflow-hidden">
+          <TrustpilotStarFull className={dim} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TrustpilotStars5Small() {
+  return (
+    <div className="flex justify-start gap-0.5">
+      {[0, 1, 2, 3, 4].map((i) => (
+        <TrustpilotStarFull key={i} className="h-3.5 w-3.5 shrink-0" />
+      ))}
+    </div>
+  );
+}
+
+function CheckoutMobileTrustReviews() {
+  return (
+    <div className="flex w-full flex-col items-center gap-4">
+      <h2 className="text-center text-lg font-semibold tracking-tight text-[#111827]">
+        {t("upgrade.checkoutReviewsTitle")}
+      </h2>
+      <div className="flex w-full flex-col items-center gap-2 rounded-xl border border-[#E8EDF3] bg-[#fafbfc] px-4 py-5">
+        <p className="text-2xl font-bold leading-none text-[#191919]">{t("upgrade.checkoutTrustExcellent")}</p>
+        <TrustpilotStars45 size="lg" />
+        <p className="text-center text-sm font-semibold text-[#191919]">{t("upgrade.checkoutTrustReviewsOnTrustpilot")}</p>
+        <p className="text-base font-bold text-[#191919]">{t("upgrade.checkoutTrustScoreOutOf5")}</p>
+        <p className="text-center text-xs leading-snug text-[#6B7280]">{t("upgrade.checkoutTrustBasedOnReviews")}</p>
+      </div>
+      <div className="flex w-full flex-col gap-3 text-left">
+        <article className="rounded-xl border border-[#E6EAF4] bg-[#f7f9fc] px-3.5 py-3">
+          <p className="text-sm font-semibold text-[#111827]">{t("upgrade.checkoutReview1Author")}</p>
+          <div className="my-1.5">
+            <TrustpilotStars5Small />
+          </div>
+          <p className="text-[13px] leading-snug text-[#374151]">{t("upgrade.checkoutReview1Text")}</p>
+          <p className="mt-2 text-[11px] text-[#94a3b8]">{t("upgrade.checkoutReview1Ago")}</p>
+        </article>
+        <article className="rounded-xl border border-[#E6EAF4] bg-[#f7f9fc] px-3.5 py-3">
+          <p className="text-sm font-semibold text-[#111827]">{t("upgrade.checkoutReview2Author")}</p>
+          <div className="my-1.5">
+            <TrustpilotStars5Small />
+          </div>
+          <p className="text-[13px] leading-snug text-[#374151]">{t("upgrade.checkoutReview2Text")}</p>
+          <p className="mt-2 text-[11px] text-[#94a3b8]">{t("upgrade.checkoutReview2Ago")}</p>
+        </article>
+      </div>
+    </div>
+  );
+}
+
 function EmployerTrustStrip() {
   return (
-    <div className="mt-3 w-full lg:mt-4">
+    <div className="w-full">
       <p className="text-center text-[11px] font-semibold uppercase tracking-[0.1em] text-[#6B7280] mb-2 sm:mb-2.5">
         {t("upgrade.trustEmployersTitle")}
       </p>
@@ -196,9 +260,6 @@ export default function DownloadCheckout() {
   const [loadingPlan, setLoadingPlan] = useState<"trial" | "monthly" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selectedPlan, setSelectedPlan] = useState<"trial" | "monthly">("trial");
-  const [socialProofCount] = useState(() => 412 + Math.floor(Math.random() * (670 - 412 + 1)));
-  const [downloadsLast24h] = useState(() => 1600 + Math.floor(Math.random() * 500));
-
   const fromState = location.state as {
     pendingExportToken?: string;
     returnTo?: string;
@@ -327,7 +388,7 @@ export default function DownloadCheckout() {
           <span className="block text-3xl leading-tight md:text-[2rem] md:leading-tight font-semibold tracking-tight text-[#111827]">
             {t("upgrade.checkoutPageTitleLine1")}
           </span>
-          <span className="mt-2 block text-lg md:text-xl font-medium leading-snug tracking-tight text-[#4B5563]">
+          <span className="mt-2 hidden md:block text-lg md:text-xl font-medium leading-snug tracking-tight text-[#4B5563]">
             {t("upgrade.checkoutPageTitleLine2")}
           </span>
         </h1>
@@ -359,25 +420,6 @@ export default function DownloadCheckout() {
             <>
                 <div className="shrink-0 flex flex-col gap-2 lg:grid lg:grid-cols-2 lg:items-start lg:gap-4">
                   <div className="relative w-full min-w-0 lg:mb-4">
-                    <div
-                      className="absolute bottom-full left-0 right-0 z-30 mb-2 max-lg:hidden lg:flex lg:justify-center"
-                      role="status"
-                      aria-live="polite"
-                    >
-                      <div className="relative w-max max-w-full rounded-lg border border-white/15 bg-[#0c1222] px-2.5 py-2 text-center shadow-[0_12px_36px_rgba(2,6,23,0.5)] ring-1 ring-black/20">
-                        <p className="text-[11px] font-semibold leading-tight text-white tabular-nums">
-                          <span className="text-[#93C5FD]">{socialProofCount}</span>
-                          <span className="font-medium text-white/90"> people chose this</span>
-                        </p>
-                        <p className="mt-0.5 text-[10px] font-medium leading-tight text-white/65">
-                          in the last 24 hours
-                        </p>
-                        <div
-                          className="pointer-events-none absolute left-1/2 top-full h-0 w-0 -translate-x-1/2 border-x-[7px] border-t-[8px] border-x-transparent border-t-[#0c1222]"
-                          aria-hidden
-                        />
-                      </div>
-                    </div>
                     <button
                       type="button"
                       onClick={() => setSelectedPlan("trial")}
@@ -530,33 +572,37 @@ export default function DownloadCheckout() {
                     </SandboxFeatureRow>
                   </ul>
                 </div>
-                <EmployerTrustStrip />
             </>
           </div>
 
           <aside className="min-w-0 h-full flex flex-col rounded-2xl bg-white border border-[#E6EAF4] p-6 md:p-8 shadow-[0_4px_24px_rgba(15,23,42,0.06)] lg:row-start-1 lg:col-start-2">
-            <h2 className="text-lg md:text-xl font-semibold tracking-tight text-[#111827] mb-6 shrink-0 text-center">
-              {t("upgrade.allSubscriptionBenefits")}
-            </h2>
-            <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-3.5 text-[13px] md:text-sm leading-snug text-[#374151] flex-1 min-h-0 content-start">
-              {SUBSCRIPTION_BENEFITS.map(({ text, icon }) => (
-                <li
-                  key={text}
-                  className="flex gap-2 items-center rounded-xl bg-[#f7f9fc] px-3.5 py-3"
-                >
-                  <img
-                    src={`/icons/${icon}`}
-                    alt=""
-                    width={34}
-                    height={34}
-                    className="w-[34px] h-[34px] shrink-0 object-contain"
-                    loading="lazy"
-                    decoding="async"
-                  />
-                  <span className="min-w-0">{text}</span>
-                </li>
-              ))}
-            </ul>
+            <div className="lg:hidden w-full shrink-0">
+              <CheckoutMobileTrustReviews />
+            </div>
+            <div className="hidden lg:flex lg:flex-col flex-1 min-h-0">
+              <h2 className="text-lg md:text-xl font-semibold tracking-tight text-[#111827] mb-6 shrink-0 text-center">
+                {t("upgrade.allSubscriptionBenefits")}
+              </h2>
+              <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-3.5 text-[13px] md:text-sm leading-snug text-[#374151] flex-1 min-h-0 content-start">
+                {SUBSCRIPTION_BENEFITS.map(({ text, icon }) => (
+                  <li
+                    key={text}
+                    className="flex gap-2 items-center rounded-xl bg-[#f7f9fc] px-3.5 py-3"
+                  >
+                    <img
+                      src={`/icons/${icon}`}
+                      alt=""
+                      width={34}
+                      height={34}
+                      className="w-[34px] h-[34px] shrink-0 object-contain"
+                      loading="lazy"
+                      decoding="async"
+                    />
+                    <span className="min-w-0">{text}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
             <div className="mt-6 max-lg:hidden shrink-0 flex flex-col items-stretch">
               <CheckoutResumeReserveBlock
                 fileShort={resumeDocDisplay}
@@ -576,6 +622,10 @@ export default function DownloadCheckout() {
               </p>
             </div>
           </aside>
+        </div>
+
+        <div className="mt-8 w-full max-w-[1200px] mx-auto px-6 border-t border-[#E6EAF4] pt-8 lg:mt-10 lg:px-8 lg:pt-10">
+          <EmployerTrustStrip />
         </div>
       </main>
 
@@ -597,7 +647,6 @@ export default function DownloadCheckout() {
           >
             {loadingPlan !== null ? t("upgrade.redirectingStripe") : t("upgrade.checkoutContinue")}
           </button>
-          <CheckoutCtaCaption downloadsLast24h={downloadsLast24h} />
         </div>
       </div>
     </div>
