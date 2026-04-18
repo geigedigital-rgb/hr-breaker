@@ -26,6 +26,19 @@ function shortenResumeFileLabel(raw: string, maxChars = 34): string {
   return `${stem.slice(0, keep)}…${ext}`;
 }
 
+/** English "Improved_" prefix for the reserved-PDF line — same in sandbox (no doc) and prod. */
+function improvedResumeBasename(raw: string): string {
+  let s = raw.trim() || "Resume.pdf";
+  if (!/\.pdf$/i.test(s)) s = `${s.replace(/\.[^/.]+$/, "")}.pdf`;
+  const stem = s.slice(0, -4);
+  if (/^improved_/i.test(stem)) return `${stem}.pdf`;
+  return `Improved_${stem}.pdf`;
+}
+
+function improvedResumeCheckoutLabel(raw: string, maxChars = 34): string {
+  return shortenResumeFileLabel(improvedResumeBasename(raw), maxChars);
+}
+
 function CheckoutResumeReserveBlock({
   fileShort,
   fileRaw,
@@ -194,8 +207,9 @@ export default function DownloadCheckout() {
   const pendingExportToken = (fromState?.pendingExportToken || params.get("pending") || "").trim();
   const returnTo = (fromState?.returnTo || params.get("return_to") || "/optimize").trim() || "/optimize";
   const resumeDocRaw = (fromState?.resumeDoc || params.get("doc") || "").trim();
+  const resumeDocFullLabel = useMemo(() => improvedResumeBasename(resumeDocRaw), [resumeDocRaw]);
   const resumeDocDisplay = useMemo(
-    () => shortenResumeFileLabel(resumeDocRaw || "Resume.pdf"),
+    () => improvedResumeCheckoutLabel(resumeDocRaw || "Resume.pdf"),
     [resumeDocRaw],
   );
   const canceled = params.get("cancel") === "1";
@@ -308,7 +322,7 @@ export default function DownloadCheckout() {
         </div>
       </header>
 
-      <main className="max-w-[1200px] mx-auto px-6 pb-32 pt-3 lg:px-8 lg:pb-14 lg:pt-8">
+      <main className="max-w-[1200px] mx-auto px-6 pt-3 pb-[calc(16rem+env(safe-area-inset-bottom,0px))] lg:px-8 lg:pb-14 lg:pt-8">
         <h1 className="text-center mb-3 lg:mb-5 max-w-2xl mx-auto">
           <span className="block text-3xl leading-tight md:text-[2rem] md:leading-tight font-semibold tracking-tight text-[#111827]">
             {t("upgrade.checkoutPageTitleLine1")}
@@ -318,11 +332,11 @@ export default function DownloadCheckout() {
           </span>
         </h1>
 
-        <div className="mb-5 w-full md:hidden">
+        <div className="w-full md:hidden py-6 mb-6">
           <img
             src="/media/best-resume-download.svg"
             alt=""
-            className="mx-auto h-auto w-full max-w-full object-contain object-center max-h-[min(58vh,480px)]"
+            className="mx-auto h-auto w-full max-w-full object-contain object-center max-h-[min(48vh,360px)]"
             decoding="async"
           />
         </div>
@@ -546,7 +560,7 @@ export default function DownloadCheckout() {
             <div className="mt-6 max-lg:hidden shrink-0 flex flex-col items-stretch">
               <CheckoutResumeReserveBlock
                 fileShort={resumeDocDisplay}
-                fileRaw={resumeDocRaw || resumeDocDisplay}
+                fileRaw={resumeDocFullLabel}
                 countdownLabel={reserveCountdownLabel}
               />
               <button
@@ -572,7 +586,7 @@ export default function DownloadCheckout() {
         <div className="max-w-[1200px] mx-auto flex flex-col items-stretch">
           <CheckoutResumeReserveBlock
             fileShort={resumeDocDisplay}
-            fileRaw={resumeDocRaw || resumeDocDisplay}
+            fileRaw={resumeDocFullLabel}
             countdownLabel={reserveCountdownLabel}
           />
           <button
