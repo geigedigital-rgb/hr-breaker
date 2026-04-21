@@ -2,12 +2,14 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   deleteAdminUser,
+  getAdminUserAccessLog,
   getAdminUserDetail,
   openAdminPdfInNewTab,
   downloadAdminResumeSource,
   patchAdminUserBlocked,
   patchAdminUserPartnerAccess,
   patchAdminUserSubscription,
+  type AdminAccessLogItem,
   type AdminUserDetail,
 } from "../../api";
 import { adminAuditActionLabel, t, tFormat } from "../../i18n";
@@ -28,6 +30,10 @@ export default function AdminUserDetail() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [journeyFileError, setJourneyFileError] = useState<string | null>(null);
+  const [accessExpanded, setAccessExpanded] = useState(false);
+  const [accessItems, setAccessItems] = useState<AdminAccessLogItem[]>([]);
+  const [accessLoading, setAccessLoading] = useState(false);
+  const [accessError, setAccessError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!userId) return;
@@ -47,6 +53,26 @@ export default function AdminUserDetail() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    if (!accessExpanded || !userId) return;
+    let cancelled = false;
+    (async () => {
+      setAccessLoading(true);
+      setAccessError(null);
+      try {
+        const res = await getAdminUserAccessLog(userId, 120);
+        if (!cancelled) setAccessItems(res.items);
+      } catch (e) {
+        if (!cancelled) setAccessError(e instanceof Error ? e.message : String(e));
+      } finally {
+        if (!cancelled) setAccessLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [accessExpanded, userId]);
 
   const run = async (key: string, fn: () => Promise<unknown>) => {
     setBusy(key);
@@ -389,6 +415,86 @@ export default function AdminUserDetail() {
             })}
           </ul>
         </div>
+      </section>
+
+      <section className="rounded-xl border border-[#EBEDF5] bg-[var(--card)] shadow-sm shrink-0">
+        <div className="px-4 pt-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+              {t("admin.userDetail.accessLogTitle")}
+            </h3>
+            <p className="text-[11px] text-[var(--text-tertiary)] leading-snug mt-1 max-w-xl">
+              {t("admin.userDetail.accessLogHint")}
+            </p>
+          </div>
+          <label className="inline-flex items-center gap-2 text-sm text-[var(--text)] cursor-pointer select-none shrink-0">
+            <input
+              type="checkbox"
+              checked={accessExpanded}
+              onChange={(e) => {
+                setAccessExpanded(e.target.checked);
+                if (!e.target.checked) {
+                  setAccessItems([]);
+                  setAccessError(null);
+                }
+              }}
+              className="h-4 w-4 rounded border-[#CBD5E1] text-[#4578FC] focus:ring-[#4578FC]"
+            />
+            <span>{t("admin.userDetail.accessLogToggle")}</span>
+          </label>
+        </div>
+        {accessExpanded ? (
+          <div className="p-4 pt-2">
+            {accessError ? (
+              <p className="text-sm text-red-700 bg-red-50 border border-red-100 rounded-lg px-3 py-2" role="alert">
+                {accessError}
+              </p>
+            ) : accessLoading ? (
+              <div className="flex justify-center py-8" aria-busy="true">
+                <span className="h-7 w-7 animate-spin rounded-full border-2 border-[#4578FC] border-t-transparent" />
+              </div>
+            ) : accessItems.length === 0 ? (
+              <p className="text-sm text-[var(--text-muted)]">{t("admin.userDetail.accessLogEmpty")}</p>
+            ) : (
+              <div className="overflow-x-auto border border-[#EBEDF5] rounded-lg">
+                <table className="min-w-full text-xs">
+                  <thead className="bg-[#F5F6FA] text-[var(--text-muted)]">
+                    <tr>
+                      <th className="text-left font-semibold px-3 py-2 whitespace-nowrap">{t("admin.userDetail.accessColTime")}</th>
+                      <th className="text-left font-semibold px-3 py-2 whitespace-nowrap">{t("admin.userDetail.accessColEvent")}</th>
+                      <th className="text-left font-semibold px-3 py-2 whitespace-nowrap">{t("admin.userDetail.accessColIp")}</th>
+                      <th className="text-left font-semibold px-3 py-2 whitespace-nowrap">{t("admin.userDetail.accessColCountry")}</th>
+                      <th className="text-left font-semibold px-3 py-2">{t("admin.userDetail.accessColDevice")}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#EBEDF5]">
+                    {accessItems.map((row, idx) => (
+                      <tr key={`${row.created_at}-${idx}`} className="align-top">
+                        <td className="px-3 py-2 tabular-nums text-[var(--text-tertiary)] whitespace-nowrap">
+                          {row.created_at ? new Date(row.created_at).toLocaleString() : "—"}
+                        </td>
+                        <td className="px-3 py-2 text-[var(--text)]">
+                          {row.event_type === "register"
+                            ? t("admin.userDetail.accessEventRegister")
+                            : row.event_type === "login"
+                              ? t("admin.userDetail.accessEventLogin")
+                              : row.event_type}
+                        </td>
+                        <td className="px-3 py-2 font-mono text-[var(--text-muted)] break-all max-w-[10rem]">{row.ip ?? "—"}</td>
+                        <td className="px-3 py-2 text-[var(--text-muted)] whitespace-nowrap">
+                          {[row.country, row.country_code].filter(Boolean).join(" · ") || "—"}
+                        </td>
+                        <td className="px-3 py-2 text-[var(--text-tertiary)] break-words max-w-[16rem]" title={row.device ?? ""}>
+                          {row.device ?? "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        ) : null}
       </section>
     </div>
   );

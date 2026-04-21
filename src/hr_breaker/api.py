@@ -88,6 +88,11 @@ from hr_breaker.services.db import (
     backfill_user_id,
     user_list_all,
     user_list_paginated,
+    user_record_auth_event,
+    user_access_log_list_for_user,
+    ip_geo_cache_fetch_for_ips,
+    AUTH_EVENT_LOGIN,
+    AUTH_EVENT_REGISTER,
     usage_audit_list_for_user,
     user_resumes_db_rows,
     user_set_admin_blocked,
@@ -403,6 +408,24 @@ def _client_ip(request: Request) -> str | None:
     if request.client:
         return request.client.host
     return None
+
+
+def _client_ip_or_unknown(request: Request) -> str:
+    return _client_ip(request) or "unknown"
+
+
+def _client_user_agent(request: Request, max_len: int = 2048) -> str | None:
+    ua = (request.headers.get("user-agent") or "").strip()
+    return ua[:max_len] if ua else None
+
+
+def _admin_truncate_ua(ua: object | None, n: int = 72) -> str | None:
+    if ua is None:
+        return None
+    s = str(ua).strip()
+    if not s:
+        return None
+    return s if len(s) <= n else s[: n - 1] + "…"
 
 
 def _parse_review_date_query(value: str | None, *, end_of_day: bool = False) -> datetime | None:
@@ -1112,6 +1135,16 @@ class AdminUserOut(BaseModel):
     stripe_subscription_id: str | None = None
     partner_program_access: bool = False
     admin_blocked: bool = False
+    # Populated when GET /admin/users?extended=1
+    signup_ip: str | None = None
+    signup_country: str | None = None
+    signup_country_code: str | None = None
+    signup_device: str | None = None
+    last_login_ip: str | None = None
+    last_login_country: str | None = None
+    last_login_country_code: str | None = None
+    last_login_device: str | None = None
+    last_login_at: str | None = None
 
 
 class AdminUsersResponse(BaseModel):
@@ -1163,6 +1196,19 @@ class AdminUserDetailResponse(BaseModel):
     current_stage_summary: str
     resume_count: int
     journey: list[AdminJourneyEntryOut]
+
+
+class AdminAccessLogItemOut(BaseModel):
+    created_at: str
+    event_type: str
+    ip: str | None = None
+    country: str | None = None
+    country_code: str | None = None
+    device: str | None = None
+
+
+class AdminUserAccessLogResponse(BaseModel):
+    items: list[AdminAccessLogItemOut]
 
 
 class AdminUserBlockedBody(BaseModel):
@@ -1568,7 +1614,7 @@ class AdminTemplateRenderPdfResponse(BaseModel):
 # --- Auth endpoints ---
 
 @router.post("/auth/register", response_model=LoginResponse)
-async def api_register(req: LoginRequest) -> LoginResponse:
+async def api_register(request: Request, req: LoginRequest) -> LoginResponse:
     """Register with email and password."""
     pool = await get_pool()
     if not pool:
@@ -1577,7 +1623,9 @@ async def api_register(req: LoginRequest) -> LoginResponse:
     if existing:
         raise HTTPException(400, "Email already registered")
     pass_hash = hash_password(req.password)
-    user = await user_create(pool, req.email, password_hash=pass_hash)
+    ip = _client_ip(request)
+    ua = _client_user_agent(request)
+    user = await user_create(pool, req.email, password_hash=pass_hash, signup_ip=ip, signup_user_agent=ua)
     if _partner_enabled() and req.referral_code:
         try:
             await try_apply_referral_after_auth(
@@ -1590,13 +1638,17 @@ async def api_register(req: LoginRequest) -> LoginResponse:
             )
         except Exception as e:
             logger.warning("Referral apply failed on register for user=%s: %s", user.get("id"), e)
+    try:
+        await user_record_auth_event(pool, str(user["id"]), AUTH_EVENT_REGISTER, ip, ua)
+    except Exception as e:
+        logger.warning("user_record_auth_event register failed: %s", e)
     subscription = await user_get_subscription(pool, str(user["id"]))
     token = create_access_token(str(user["id"]), user["email"])
     return LoginResponse(access_token=token, user=_user_out(user, subscription=subscription))
 
 
 @router.post("/auth/login", response_model=LoginResponse)
-async def api_login(req: LoginRequest) -> LoginResponse:
+async def api_login(request: Request, req: LoginRequest) -> LoginResponse:
     """Login with email and password."""
     pool = await get_pool()
     if not pool:
@@ -1620,6 +1672,10 @@ async def api_login(req: LoginRequest) -> LoginResponse:
             )
         except Exception as e:
             logger.warning("Referral apply failed on login for user=%s: %s", user.get("id"), e)
+    try:
+        await user_record_auth_event(pool, str(user["id"]), AUTH_EVENT_LOGIN, _client_ip(request), _client_user_agent(request))
+    except Exception as e:
+        logger.warning("user_record_auth_event login failed: %s", e)
     try:
         token = create_access_token(str(user["id"]), user["email"])
     except ValueError as e:
@@ -1678,11 +1734,13 @@ class GoogleCallbackRequest(BaseModel):
 
 
 @router.post("/auth/google/callback", response_model=LoginResponse)
-async def api_google_exchange(req: GoogleCallbackRequest) -> LoginResponse:
+async def api_google_exchange(request: Request, req: GoogleCallbackRequest) -> LoginResponse:
     """Exchange Google OAuth code for our JWT. Call from frontend after redirect from Google."""
     pool = await get_pool()
     if not pool:
         raise HTTPException(503, "Database not configured")
+    ip = _client_ip(request)
+    ua = _client_user_agent(request)
     import httpx
     settings = get_settings()
     redirect_uri = (req.redirect_uri or "").strip() or f"{settings.frontend_url.rstrip('/')}/auth/callback"
@@ -1719,13 +1777,15 @@ async def api_google_exchange(req: GoogleCallbackRequest) -> LoginResponse:
     google_id = info.get("id")
     name = info.get("name") or email.split("@")[0]
     user = await user_get_by_google_id(pool, google_id)
+    auth_event = AUTH_EVENT_LOGIN
     if not user:
         user = await user_get_by_email(pool, email)
         if user:
             await user_update_google_id(pool, str(user["id"]), google_id)
         else:
-            await user_create(pool, email, name=name, google_id=google_id)
+            await user_create(pool, email, name=name, google_id=google_id, signup_ip=ip, signup_user_agent=ua)
             user = await user_get_by_email(pool, email)
+            auth_event = AUTH_EVENT_REGISTER
     if _partner_enabled() and req.referral_code:
         try:
             await try_apply_referral_after_auth(
@@ -1743,6 +1803,10 @@ async def api_google_exchange(req: GoogleCallbackRequest) -> LoginResponse:
         raise HTTPException(400, "Google login failed")
     if user.get("admin_blocked"):
         raise HTTPException(403, "Account disabled")
+    try:
+        await user_record_auth_event(pool, str(user["id"]), auth_event, ip, ua)
+    except Exception as e:
+        logger.warning("user_record_auth_event google failed: %s", e)
     token = create_access_token(str(user["id"]), user["email"])
     subscription = await user_get_subscription(pool, str(user["id"]))
     return LoginResponse(access_token=token, user=_user_out(user, subscription=subscription))
@@ -1998,16 +2062,6 @@ _landing_rate: dict[str, float] = {}
 _landing_rate_lock = asyncio.Lock()
 
 
-def _client_ip(request: Request) -> str:
-    """Client IP for rate limiting (X-Forwarded-For when behind proxy)."""
-    forwarded = request.headers.get("x-forwarded-for", "").strip()
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    if request.client:
-        return request.client.host or "unknown"
-    return "unknown"
-
-
 async def _landing_rate_limit(ip: str, limit_hours: int) -> None:
     """Raise HTTP 429 if IP has already used the landing analysis within limit_hours."""
     async with _landing_rate_lock:
@@ -2197,7 +2251,7 @@ async def api_landing_analyze(
     settings = get_settings()
     if not settings.google_api_key:
         raise HTTPException(503, "GOOGLE_API_KEY not set.")
-    ip = _client_ip(request)
+    ip = _client_ip_or_unknown(request)
     await _landing_rate_limit(ip, settings.landing_rate_limit_hours)
 
     # Resume: file or text
@@ -3940,27 +3994,103 @@ async def api_admin_users(
     _admin: dict = Depends(get_admin_user),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
+    extended: int = Query(
+        0,
+        ge=0,
+        le=1,
+        description="1 = include signup/last-login IP, device (UA), country (cached geo; may call external API for new IPs)",
+    ),
 ) -> AdminUsersResponse:
     """List users (admin only), paginated."""
     pool = await get_pool()
     if not pool:
         raise HTTPException(503, "Database not configured")
-    users, total = await user_list_paginated(pool, limit=limit, offset=offset)
-    items = [
-        AdminUserOut(
-            id=str(u["id"]),
-            email=u["email"],
-            name=u.get("name"),
-            created_at=u["created_at"].isoformat() if u.get("created_at") else "",
-            subscription_status=(u.get("subscription_status") or "free").lower() if u.get("subscription_status") is not None else "free",
-            subscription_plan=(u.get("subscription_plan") or "free").lower() if u.get("subscription_plan") is not None else "free",
-            stripe_subscription_id=(str(u["stripe_subscription_id"]).strip() if u.get("stripe_subscription_id") else None),
-            partner_program_access=bool(u.get("partner_program_access")),
-            admin_blocked=bool(u.get("admin_blocked")),
-        )
-        for u in users
-    ]
+    ext = bool(extended)
+    users, total = await user_list_paginated(pool, limit=limit, offset=offset, extended=ext)
+    geo: dict[str, dict[str, str]] = {}
+    if ext and users:
+        from hr_breaker.services.ip_geo import resolve_ips_for_admin
+
+        ips: list[str] = []
+        for u in users:
+            for k in ("signup_ip", "last_login_ip"):
+                v = u.get(k)
+                if v:
+                    ips.append(str(v).strip())
+        await resolve_ips_for_admin(pool, ips)
+        geo = await ip_geo_cache_fetch_for_ips(pool, list(dict.fromkeys(ips)))
+    items: list[AdminUserOut] = []
+    for u in users:
+        created = u["created_at"]
+        base_kwargs: dict[str, Any] = {
+            "id": str(u["id"]),
+            "email": u["email"],
+            "name": u.get("name"),
+            "created_at": created.isoformat() if created and hasattr(created, "isoformat") else "",
+            "subscription_status": (u.get("subscription_status") or "free").lower()
+            if u.get("subscription_status") is not None
+            else "free",
+            "subscription_plan": (u.get("subscription_plan") or "free").lower()
+            if u.get("subscription_plan") is not None
+            else "free",
+            "stripe_subscription_id": (str(u["stripe_subscription_id"]).strip() if u.get("stripe_subscription_id") else None),
+            "partner_program_access": bool(u.get("partner_program_access")),
+            "admin_blocked": bool(u.get("admin_blocked")),
+        }
+        if ext:
+            sip, lip = u.get("signup_ip"), u.get("last_login_ip")
+            g_s = geo.get(str(sip).strip(), {}) if sip else {}
+            g_l = geo.get(str(lip).strip(), {}) if lip else {}
+            la = u.get("last_login_at")
+            base_kwargs.update(
+                signup_ip=str(sip) if sip else None,
+                signup_country=(g_s.get("country") or None) or None,
+                signup_country_code=(g_s.get("country_code") or None) or None,
+                signup_device=_admin_truncate_ua(u.get("signup_user_agent")),
+                last_login_ip=str(lip) if lip else None,
+                last_login_country=(g_l.get("country") or None) or None,
+                last_login_country_code=(g_l.get("country_code") or None) or None,
+                last_login_device=_admin_truncate_ua(u.get("last_login_user_agent")),
+                last_login_at=la.isoformat() if la and hasattr(la, "isoformat") else None,
+            )
+        items.append(AdminUserOut(**base_kwargs))
     return AdminUsersResponse(items=items, total=total)
+
+
+@router.get("/admin/users/{user_id}/access-log", response_model=AdminUserAccessLogResponse)
+async def api_admin_user_access_log(
+    user_id: str,
+    _admin: dict = Depends(get_admin_user),
+    limit: int = Query(80, ge=1, le=300),
+) -> AdminUserAccessLogResponse:
+    """Sign-in history (register/login) with IP and resolved country — admin only; geo resolved on demand."""
+    pool = await get_pool()
+    if not pool:
+        raise HTTPException(503, "Database not configured")
+    if not await user_get_by_id(pool, user_id):
+        raise HTTPException(404, "User not found")
+    from hr_breaker.services.ip_geo import resolve_ips_for_admin
+
+    rows = await user_access_log_list_for_user(pool, user_id, limit=limit)
+    ips = [str(r["ip"]).strip() for r in rows if r.get("ip")]
+    await resolve_ips_for_admin(pool, ips)
+    geo = await ip_geo_cache_fetch_for_ips(pool, list(dict.fromkeys(ips)))
+    items: list[AdminAccessLogItemOut] = []
+    for r in rows:
+        ip = r.get("ip")
+        g = geo.get(str(ip).strip(), {}) if ip else {}
+        ca = r.get("created_at")
+        items.append(
+            AdminAccessLogItemOut(
+                created_at=ca.isoformat() if ca and hasattr(ca, "isoformat") else "",
+                event_type=str(r.get("event_type") or ""),
+                ip=str(ip) if ip else None,
+                country=(g.get("country") or None) or None,
+                country_code=(g.get("country_code") or None) or None,
+                device=_admin_truncate_ua(r.get("user_agent")),
+            )
+        )
+    return AdminUserAccessLogResponse(items=items)
 
 
 @router.get("/admin/users/{user_id}/detail", response_model=AdminUserDetailResponse)

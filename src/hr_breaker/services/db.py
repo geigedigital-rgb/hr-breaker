@@ -38,6 +38,8 @@ def _to_jsonb_str(payload: Any) -> str:
 
 
 USERS_TABLE = "users"
+USER_ACCESS_LOG_TABLE = "user_access_log"
+IP_GEO_CACHE_TABLE = "ip_country_cache"
 RESUMES_TABLE = "generated_resumes"
 REFERRAL_CODES_TABLE = "referral_codes"
 REFERRAL_ATTRIBUTIONS_TABLE = "referral_attributions"
@@ -252,6 +254,36 @@ async def init_table(pool) -> None:
         )
         await conn.execute(
             f"ALTER TABLE {USERS_TABLE} ADD COLUMN IF NOT EXISTS marketing_emails_opt_in BOOLEAN NOT NULL DEFAULT TRUE"
+        )
+        await conn.execute(f"ALTER TABLE {USERS_TABLE} ADD COLUMN IF NOT EXISTS signup_ip TEXT")
+        await conn.execute(f"ALTER TABLE {USERS_TABLE} ADD COLUMN IF NOT EXISTS signup_user_agent TEXT")
+        await conn.execute(f"ALTER TABLE {USERS_TABLE} ADD COLUMN IF NOT EXISTS last_login_ip TEXT")
+        await conn.execute(f"ALTER TABLE {USERS_TABLE} ADD COLUMN IF NOT EXISTS last_login_user_agent TEXT")
+        await conn.execute(f"ALTER TABLE {USERS_TABLE} ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ")
+        await conn.execute(
+            f"""
+            CREATE TABLE IF NOT EXISTS {USER_ACCESS_LOG_TABLE} (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                user_id UUID NOT NULL REFERENCES {USERS_TABLE}(id) ON DELETE CASCADE,
+                event_type TEXT NOT NULL,
+                ip TEXT,
+                user_agent TEXT,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+            """
+        )
+        await conn.execute(
+            f"CREATE INDEX IF NOT EXISTS idx_user_access_user_created ON {USER_ACCESS_LOG_TABLE}(user_id, created_at DESC)"
+        )
+        await conn.execute(
+            f"""
+            CREATE TABLE IF NOT EXISTS {IP_GEO_CACHE_TABLE} (
+                ip TEXT PRIMARY KEY,
+                country TEXT NOT NULL DEFAULT '',
+                country_code TEXT NOT NULL DEFAULT '',
+                fetched_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+            """
         )
         await conn.execute(
             f"""
@@ -597,20 +629,32 @@ async def db_delete(pool, filename: str, user_id: str | None = None) -> bool:
 
 # --- Users ---
 
-async def user_create(pool, email: str, password_hash: str | None = None, name: str | None = None, google_id: str | None = None) -> dict:
-    """Create a user. Returns {id, email, name, created_at}."""
+async def user_create(
+    pool,
+    email: str,
+    password_hash: str | None = None,
+    name: str | None = None,
+    google_id: str | None = None,
+    signup_ip: str | None = None,
+    signup_user_agent: str | None = None,
+) -> dict:
+    """Create a user. Returns {id, email, name, created_at}. Optional signup_ip / signup_user_agent (first device)."""
     uid = uuid4()
+    sip = (signup_ip or "").strip()[:64] or None
+    sua = (signup_user_agent or "").strip()[:2048] or None
     async with pool.acquire() as conn:
         await conn.execute(
             f"""
-            INSERT INTO {USERS_TABLE} (id, email, password_hash, name, google_id)
-            VALUES ($1::uuid, $2, $3, $4, $5)
+            INSERT INTO {USERS_TABLE} (id, email, password_hash, name, google_id, signup_ip, signup_user_agent)
+            VALUES ($1::uuid, $2, $3, $4, $5, $6, $7)
             """,
             uid,
             email.lower().strip(),
             password_hash,
             name or email.split("@")[0],
             google_id,
+            sip,
+            sua,
         )
     return {"id": str(uid), "email": email, "name": name or email.split("@")[0], "created_at": datetime.now().isoformat()}
 
@@ -889,20 +933,113 @@ async def user_list_all(pool, limit: int = 500) -> list[dict]:
     return [dict(r) for r in rows]
 
 
-async def user_list_paginated(pool, *, limit: int, offset: int) -> tuple[list[dict], int]:
-    """Ordered by created_at DESC. Returns (rows, total_count)."""
+async def user_list_paginated(pool, *, limit: int, offset: int, extended: bool = False) -> tuple[list[dict], int]:
+    """Ordered by created_at DESC. Returns (rows, total_count). When extended, includes signup/last-login client fields."""
     async with pool.acquire() as conn:
         count_row = await conn.fetchrow(f"SELECT COUNT(*)::int AS c FROM {USERS_TABLE}")
         total = int(count_row["c"]) if count_row else 0
+        cols = (
+            "id, email, name, created_at, subscription_status, subscription_plan, stripe_subscription_id, partner_program_access, admin_blocked, "
+            "signup_ip, signup_user_agent, last_login_ip, last_login_user_agent, last_login_at"
+            if extended
+            else "id, email, name, created_at, subscription_status, subscription_plan, stripe_subscription_id, partner_program_access, admin_blocked"
+        )
         rows = await conn.fetch(
-            f"""
-            SELECT id, email, name, created_at, subscription_status, subscription_plan, stripe_subscription_id, partner_program_access, admin_blocked
-            FROM {USERS_TABLE} ORDER BY created_at DESC LIMIT $1 OFFSET $2
-            """,
+            f"SELECT {cols} FROM {USERS_TABLE} ORDER BY created_at DESC LIMIT $1 OFFSET $2",
             limit,
             offset,
         )
     return [dict(r) for r in rows], total
+
+
+AUTH_EVENT_REGISTER = "register"
+AUTH_EVENT_LOGIN = "login"
+
+
+async def user_record_auth_event(
+    pool,
+    user_id: str,
+    event_type: str,
+    ip: str | None,
+    user_agent: str | None,
+) -> None:
+    """Append access log row and refresh last_login_* on users. event_type: register | login."""
+    if event_type not in (AUTH_EVENT_REGISTER, AUTH_EVENT_LOGIN):
+        raise ValueError("event_type must be register or login")
+    ip_s = (ip or "").strip()[:64] or None
+    ua_s = (user_agent or "").strip()[:2048] or None
+    async with pool.acquire() as conn:
+        await conn.execute(
+            f"""
+            UPDATE {USERS_TABLE}
+            SET last_login_ip = $2, last_login_user_agent = $3, last_login_at = NOW()
+            WHERE id = $1::uuid
+            """,
+            user_id,
+            ip_s,
+            ua_s,
+        )
+        await conn.execute(
+            f"""
+            INSERT INTO {USER_ACCESS_LOG_TABLE} (user_id, event_type, ip, user_agent)
+            VALUES ($1::uuid, $2, $3, $4)
+            """,
+            user_id,
+            event_type,
+            ip_s,
+            ua_s,
+        )
+
+
+async def user_access_log_list_for_user(pool, user_id: str, limit: int = 120) -> list[dict]:
+    """Newest first. For admin access history."""
+    lim = max(1, min(int(limit), 500))
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            f"""
+            SELECT id, event_type, ip, user_agent, created_at
+            FROM {USER_ACCESS_LOG_TABLE}
+            WHERE user_id = $1::uuid
+            ORDER BY created_at DESC
+            LIMIT $2
+            """,
+            user_id,
+            lim,
+        )
+    return [dict(r) for r in rows]
+
+
+async def ip_geo_cache_fetch_for_ips(pool, ips: list[str]) -> dict[str, dict[str, str]]:
+    """Return {ip: {country, country_code}} for rows present in cache."""
+    ips = [i.strip() for i in ips if i and str(i).strip()]
+    if not ips:
+        return {}
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            f"SELECT ip, country, country_code FROM {IP_GEO_CACHE_TABLE} WHERE ip = ANY($1::text[])",
+            ips,
+        )
+    return {
+        str(r["ip"]): {"country": str(r["country"] or ""), "country_code": str(r["country_code"] or "")}
+        for r in rows
+    }
+
+
+async def ip_geo_cache_upsert(pool, ip: str, country: str, country_code: str) -> None:
+    async with pool.acquire() as conn:
+        await conn.execute(
+            f"""
+            INSERT INTO {IP_GEO_CACHE_TABLE} (ip, country, country_code, fetched_at)
+            VALUES ($1, $2, $3, NOW())
+            ON CONFLICT (ip) DO UPDATE SET
+                country = EXCLUDED.country,
+                country_code = EXCLUDED.country_code,
+                fetched_at = NOW()
+            """,
+            ip.strip()[:64],
+            (country or "")[:128],
+            (country_code or "")[:8],
+        )
 
 
 async def usage_audit_list_for_user(pool, user_id: str, limit: int = 400) -> list[dict]:

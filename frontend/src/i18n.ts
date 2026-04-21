@@ -852,6 +852,11 @@ const en = {
     users: {
       title: "Users",
       subtitle: "All registered users",
+      extendedToggle: "Extended columns (IP, country, device)",
+      extendedHint:
+        "Loads signup and last sign-in fields. Country is resolved on demand via a cached geo lookup (external API only for IPs not yet in cache — not on every user login).",
+      colSignup: "Signup (IP / country / device)",
+      colLastLogin: "Last sign-in",
       email: "Email",
       name: "Name",
       createdAt: "Created",
@@ -897,6 +902,18 @@ const en = {
       journeyLog: "Timeline (merged log)",
       journeyLogHint:
         "Saved PDFs, analysis/optimize events, and short flags from each run. Newest first — last ~200 audit rows and ~150 PDFs per load, one request.",
+      accessLogTitle: "Sign-in history",
+      accessLogHint:
+        "Separate request when enabled: register vs login rows with IP, User-Agent (short), and country from the same server-side cache as the users table. No geo lookup on ordinary sign-in.",
+      accessLogToggle: "Show sign-in history",
+      accessLogEmpty: "No sign-in rows yet (data is recorded from new logins/registrations after deploy).",
+      accessColTime: "Time",
+      accessColEvent: "Event",
+      accessColIp: "IP",
+      accessColCountry: "Country",
+      accessColDevice: "Device (UA)",
+      accessEventRegister: "Sign up",
+      accessEventLogin: "Sign in",
       failed: "failed",
       /** Admin timeline & usage table: labels for usage_audit `action` codes (fallback: raw code). */
       journeyAction: {

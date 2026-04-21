@@ -14,6 +14,7 @@ export default function AdminUsers() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [extendedView, setExtendedView] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -21,7 +22,7 @@ export default function AdminUsers() {
       setLoading(true);
       setError(null);
       try {
-        const data = await getAdminUsers(pageSize, page * pageSize);
+        const data = await getAdminUsers(pageSize, page * pageSize, { extended: extendedView });
         if (!cancelled) {
           setUsers(data.items);
           setTotal(data.total);
@@ -35,7 +36,7 @@ export default function AdminUsers() {
     return () => {
       cancelled = true;
     };
-  }, [page, pageSize]);
+  }, [page, pageSize, extendedView]);
 
   useEffect(() => {
     const totalPages = Math.max(1, Math.ceil(total / pageSize) || 1);
@@ -71,6 +72,19 @@ export default function AdminUsers() {
       <header className="shrink-0 space-y-1 mb-3">
         <h2 className="text-xl font-bold text-[var(--text)] tracking-tight">{t("admin.users.title")}</h2>
         <p className="text-sm text-[var(--text-muted)]">{t("admin.users.subtitle")}</p>
+        <label className="inline-flex items-center gap-2 text-sm text-[var(--text)] cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={extendedView}
+            onChange={(e) => {
+              setExtendedView(e.target.checked);
+              setPage(0);
+            }}
+            className="h-4 w-4 rounded border-[#CBD5E1] text-[#4578FC] focus:ring-[#4578FC]"
+          />
+          <span>{t("admin.users.extendedToggle")}</span>
+        </label>
+        <p className="text-xs text-[var(--text-tertiary)] max-w-2xl leading-snug">{t("admin.users.extendedHint")}</p>
         {error && (
           <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2" role="alert">
             {error}
@@ -107,6 +121,16 @@ export default function AdminUsers() {
                   <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] whitespace-nowrap">
                     {t("admin.users.createdAt")}
                   </th>
+                  {extendedView ? (
+                    <>
+                      <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] whitespace-nowrap">
+                        {t("admin.users.colSignup")}
+                      </th>
+                      <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] whitespace-nowrap">
+                        {t("admin.users.colLastLogin")}
+                      </th>
+                    </>
+                  ) : null}
                   <th
                     scope="col"
                     className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] whitespace-nowrap"
@@ -168,6 +192,31 @@ export default function AdminUsers() {
                     <td className="px-4 py-3 text-[var(--text-tertiary)] tabular-nums whitespace-nowrap align-top">
                       {u.created_at ? new Date(u.created_at).toLocaleString() : "—"}
                     </td>
+                    {extendedView ? (
+                      <>
+                        <td className="px-4 py-3 align-top text-xs text-[var(--text-muted)] max-w-[14rem]">
+                          <div className="font-mono break-all">{u.signup_ip ?? "—"}</div>
+                          <div className="mt-0.5">
+                            {[u.signup_country, u.signup_country_code].filter(Boolean).join(" · ") || "—"}
+                          </div>
+                          <div className="mt-0.5 text-[var(--text-tertiary)] break-words" title={u.signup_device ?? ""}>
+                            {u.signup_device ?? "—"}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 align-top text-xs text-[var(--text-muted)] max-w-[14rem]">
+                          <div className="tabular-nums text-[var(--text-tertiary)]">
+                            {u.last_login_at ? new Date(u.last_login_at).toLocaleString() : "—"}
+                          </div>
+                          <div className="font-mono break-all mt-0.5">{u.last_login_ip ?? "—"}</div>
+                          <div className="mt-0.5">
+                            {[u.last_login_country, u.last_login_country_code].filter(Boolean).join(" · ") || "—"}
+                          </div>
+                          <div className="mt-0.5 text-[var(--text-tertiary)] break-words" title={u.last_login_device ?? ""}>
+                            {u.last_login_device ?? "—"}
+                          </div>
+                        </td>
+                      </>
+                    ) : null}
                     <td className="px-4 py-3 align-top">
                       <input
                         type="checkbox"

@@ -884,7 +884,28 @@ export type AdminUserOut = {
   stripe_subscription_id?: string | null;
   partner_program_access?: boolean;
   admin_blocked?: boolean;
+  /** When GET /admin/users?extended=1 */
+  signup_ip?: string | null;
+  signup_country?: string | null;
+  signup_country_code?: string | null;
+  signup_device?: string | null;
+  last_login_ip?: string | null;
+  last_login_country?: string | null;
+  last_login_country_code?: string | null;
+  last_login_device?: string | null;
+  last_login_at?: string | null;
 };
+
+export type AdminAccessLogItem = {
+  created_at: string;
+  event_type: string;
+  ip?: string | null;
+  country?: string | null;
+  country_code?: string | null;
+  device?: string | null;
+};
+
+export type AdminUserAccessLogResponse = { items: AdminAccessLogItem[] };
 
 export type AdminJourneyEntry = {
   kind: string;
@@ -1234,10 +1255,31 @@ export async function adminRenderTemplatePdf(params: {
   return data;
 }
 
-export async function getAdminUsers(limit: number, offset: number): Promise<AdminUsersResponse> {
+export async function getAdminUsers(
+  limit: number,
+  offset: number,
+  opts?: { extended?: boolean }
+): Promise<AdminUsersResponse> {
   const sp = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+  if (opts?.extended) sp.set("extended", "1");
   const r = await fetch(`${API}/admin/users?${sp}`, { headers: authHeaders() });
   const data = await parseJsonOrThrow<AdminUsersResponse & { detail?: string }>(r);
+  if (!r.ok) throw new Error(data.detail || r.statusText);
+  return data;
+}
+
+export async function getAdminUserAccessLog(
+  userId: string,
+  limit?: number
+): Promise<AdminUserAccessLogResponse> {
+  const sp = new URLSearchParams();
+  if (limit != null) sp.set("limit", String(limit));
+  const qs = sp.toString();
+  const r = await fetch(
+    `${API}/admin/users/${encodeURIComponent(userId)}/access-log${qs ? `?${qs}` : ""}`,
+    { headers: authHeaders() }
+  );
+  const data = await parseJsonOrThrow<AdminUserAccessLogResponse & { detail?: string }>(r);
   if (!r.ok) throw new Error(data.detail || r.statusText);
   return data;
 }
