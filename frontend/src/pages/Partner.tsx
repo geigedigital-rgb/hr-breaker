@@ -397,7 +397,7 @@ export default function Partner() {
         {/* HERO */}
         <section className="relative overflow-hidden rounded-[18px] shadow-[0_12px_40px_-12px_rgba(79,70,229,0.25)] ring-1 ring-black/[0.05]">
           <img
-            src="/Frame-1686561102.svg"
+            src="/media/partner-hero-bg.svg"
             alt=""
             className="absolute inset-0 h-full w-full object-cover object-center"
             aria-hidden
