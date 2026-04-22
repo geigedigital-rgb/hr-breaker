@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { getAdminUsers, patchAdminUserPartnerAccess, type AdminUserOut } from "../../api";
+import { getAdminUsers, type AdminUserOut } from "../../api";
 import AdminPaginationBar from "../../components/admin/AdminPaginationBar";
 import { t } from "../../i18n";
 
@@ -13,7 +13,6 @@ export default function AdminUsers() {
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [savingId, setSavingId] = useState<string | null>(null);
   const [extendedView, setExtendedView] = useState(false);
 
   useEffect(() => {
@@ -43,18 +42,6 @@ export default function AdminUsers() {
     const maxPage = totalPages - 1;
     if (total > 0 && page > maxPage) setPage(maxPage);
   }, [total, pageSize, page]);
-
-  const togglePartner = useCallback(async (u: AdminUserOut, enabled: boolean) => {
-    setSavingId(u.id);
-    try {
-      await patchAdminUserPartnerAccess(u.id, enabled);
-      setUsers((prev) => prev.map((x) => (x.id === u.id ? { ...x, partner_program_access: enabled } : x)));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setSavingId(null);
-    }
-  }, []);
 
   if (error && !loading && users.length === 0 && total === 0) {
     return (
@@ -131,13 +118,6 @@ export default function AdminUsers() {
                       </th>
                     </>
                   ) : null}
-                  <th
-                    scope="col"
-                    className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] whitespace-nowrap"
-                    title={t("admin.users.partnerAccessHint")}
-                  >
-                    {t("admin.users.partnerAccess")}
-                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#EBEDF5]">
@@ -217,16 +197,6 @@ export default function AdminUsers() {
                         </td>
                       </>
                     ) : null}
-                    <td className="px-4 py-3 align-top">
-                      <input
-                        type="checkbox"
-                        checked={!!u.partner_program_access}
-                        disabled={savingId === u.id}
-                        onChange={(ev) => togglePartner(u, ev.target.checked)}
-                        className="h-4 w-4 rounded border-[#CBD5E1] text-[#4578FC] focus:ring-[#4578FC]"
-                        aria-label={`${t("admin.users.partnerAccess")} ${u.email}`}
-                      />
-                    </td>
                   </tr>
                 ))}
               </tbody>

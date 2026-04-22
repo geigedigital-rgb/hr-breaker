@@ -34,6 +34,7 @@ export default function AdminUserDetail() {
   const [accessItems, setAccessItems] = useState<AdminAccessLogItem[]>([]);
   const [accessLoading, setAccessLoading] = useState(false);
   const [accessError, setAccessError] = useState<string | null>(null);
+  const [partnerDraft, setPartnerDraft] = useState(false);
 
   const load = useCallback(async () => {
     if (!userId) return;
@@ -53,6 +54,11 @@ export default function AdminUserDetail() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    if (!detail) return;
+    setPartnerDraft(!!detail.partner_program_access);
+  }, [detail?.id, detail?.partner_program_access]);
 
   useEffect(() => {
     if (!accessExpanded || !userId) return;
@@ -114,6 +120,8 @@ export default function AdminUserDetail() {
   }
 
   if (!detail) return null;
+
+  const partnerDirty = partnerDraft !== !!detail.partner_program_access;
 
   return (
     <div className="flex flex-col min-h-0 w-full max-w-4xl mx-auto gap-4 pb-8">
@@ -288,45 +296,63 @@ export default function AdminUserDetail() {
         <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-3">
           {t("admin.userDetail.actions")}
         </h3>
-        <div className="flex flex-col sm:flex-row sm:flex-wrap gap-4 text-sm">
-          <label className="inline-flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={detail.admin_blocked}
+        <div className="flex flex-col gap-4 text-sm">
+          <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-4">
+            <label className="inline-flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={detail.admin_blocked}
+                disabled={!!busy}
+                onChange={(ev) =>
+                  run("block", () => patchAdminUserBlocked(userId, ev.target.checked))
+                }
+                className="h-4 w-4 rounded border-[#CBD5E1] text-[#4578FC]"
+              />
+              <span>{t("admin.userDetail.blockAccount")}</span>
+            </label>
+            <button
+              type="button"
               disabled={!!busy}
-              onChange={(ev) =>
-                run("block", () => patchAdminUserBlocked(userId, ev.target.checked))
-              }
-              className="h-4 w-4 rounded border-[#CBD5E1] text-[#4578FC]"
-            />
-            <span>{t("admin.userDetail.blockAccount")}</span>
-          </label>
-          <label className="inline-flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={detail.partner_program_access}
-              disabled={!!busy}
-              onChange={(ev) =>
-                run("partner", () => patchAdminUserPartnerAccess(userId, ev.target.checked))
-              }
-              className="h-4 w-4 rounded border-[#CBD5E1] text-[#4578FC]"
-            />
-            <span>{t("admin.users.partnerAccess")}</span>
-          </label>
-          <button
-            type="button"
-            disabled={!!busy}
-            onClick={() => {
-              if (!window.confirm(tFormat(t("admin.userDetail.deleteConfirm"), { email: detail.email }))) return;
-              run("del", async () => {
-                await deleteAdminUser(userId);
-                navigate("/admin/users");
-              });
-            }}
-            className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-800 hover:bg-red-100 disabled:opacity-50 sm:ml-auto"
-          >
-            {t("admin.userDetail.deleteAccount")}
-          </button>
+              onClick={() => {
+                if (!window.confirm(tFormat(t("admin.userDetail.deleteConfirm"), { email: detail.email }))) return;
+                run("del", async () => {
+                  await deleteAdminUser(userId);
+                  navigate("/admin/users");
+                });
+              }}
+              className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-800 hover:bg-red-100 disabled:opacity-50 sm:ml-auto"
+            >
+              {t("admin.userDetail.deleteAccount")}
+            </button>
+          </div>
+          <div className="rounded-lg border border-[#EBEDF5] bg-[#F8FAFC] p-3 space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+              {t("admin.users.partnerAccess")}
+            </p>
+            <p className="text-[11px] text-[var(--text-tertiary)] leading-snug">{t("admin.userDetail.partnerAccessHelp")}</p>
+            <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-3">
+              <label className="inline-flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={partnerDraft}
+                  disabled={!!busy}
+                  onChange={(ev) => setPartnerDraft(ev.target.checked)}
+                  className="h-4 w-4 rounded border-[#CBD5E1] text-[#4578FC]"
+                />
+                <span>{t("admin.userDetail.partnerAccessEnable")}</span>
+              </label>
+              <button
+                type="button"
+                disabled={!!busy || !partnerDirty}
+                onClick={() =>
+                  run("partner-save", () => patchAdminUserPartnerAccess(userId, partnerDraft))
+                }
+                className="rounded-lg border border-[#4578FC] bg-[#4578FC] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#3d6ae8] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-[#4578FC]"
+              >
+                {t("admin.userDetail.savePartnerAccess")}
+              </button>
+            </div>
+          </div>
         </div>
       </section>
 

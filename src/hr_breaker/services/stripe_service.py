@@ -193,6 +193,27 @@ def construct_event(payload: bytes, sig_header: str) -> object:
     return stripe.Webhook.construct_event(payload, sig_header, secret)
 
 
+def stripe_subscription_allows_referral_commission(subscription_id: str) -> bool:
+    """
+    Partner payout: only after the referred user is on a paid monthly cycle.
+
+    True when Stripe reports ``active`` and the subscription is not inside the
+    free trial window (``trial_end`` unset or already passed). ``trialing`` or
+    ``active`` with a future ``trial_end`` (paid signup during 7-day trial) → False.
+    """
+    stripe = _stripe()
+    sub = stripe.Subscription.retrieve(subscription_id)
+    status = (getattr(sub, "status", None) or "").strip()
+    if status != "active":
+        return False
+    trial_end_ts = getattr(sub, "trial_end", None)
+    if trial_end_ts:
+        trial_end_dt = datetime.fromtimestamp(int(trial_end_ts), tz=timezone.utc)
+        if trial_end_dt > datetime.now(timezone.utc):
+            return False
+    return True
+
+
 async def handle_checkout_session_completed(
     session: object,
     pool,

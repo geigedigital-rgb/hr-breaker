@@ -27,7 +27,19 @@ export default function AuthCallback() {
         const res = await api.exchangeGoogleCode(code, redirectUri, {
           code: sessionStorage.getItem(PARTNER_REF_CODE_KEY),
           source_url: sessionStorage.getItem(PARTNER_REF_SRC_KEY),
+          partner_invite_token: (() => {
+            try {
+              return sessionStorage.getItem(api.PARTNER_INVITE_SIGNUP_STORAGE_KEY);
+            } catch {
+              return null;
+            }
+          })(),
         });
+        try {
+          sessionStorage.removeItem(api.PARTNER_INVITE_SIGNUP_STORAGE_KEY);
+        } catch {
+          /* ignore */
+        }
         if (cancelled) return;
         setUserFromToken(res.access_token);
         const resumeTok = sessionStorage.getItem(api.OPTIMIZE_RESUME_SESSION_KEY);

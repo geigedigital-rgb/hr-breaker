@@ -7,9 +7,11 @@ PDF and source .txt files stay on disk; only metadata is in the DB.
 Requires: pip install 'hr-breaker[db]'
 """
 
+import hashlib
 import json
 import logging
 import math
+import secrets
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -47,6 +49,7 @@ REFERRAL_COMMISSIONS_TABLE = "referral_commissions"
 REFERRAL_EVENTS_TABLE = "referral_events"
 REFERRAL_ABUSE_FLAGS_TABLE = "referral_abuse_flags"
 REFERRAL_PROCESSED_EVENTS_TABLE = "referral_processed_events"
+PARTNER_INVITE_TOKENS_TABLE = "partner_invite_tokens"
 USAGE_AUDIT_TABLE = "usage_audit_log"
 TABLE = RESUMES_TABLE
 
@@ -204,6 +207,20 @@ async def init_table(pool) -> None:
         await conn.execute(_RESUMES_SCHEMA)
         await conn.execute(_REFERRAL_SCHEMA)
         await conn.execute(
+            f"""
+            CREATE TABLE IF NOT EXISTS {PARTNER_INVITE_TOKENS_TABLE} (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                label TEXT NOT NULL DEFAULT '',
+                token_hash TEXT NOT NULL UNIQUE,
+                active BOOLEAN NOT NULL DEFAULT TRUE,
+                expires_at TIMESTAMPTZ,
+                created_by UUID REFERENCES {USERS_TABLE}(id) ON DELETE SET NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+            """
+        )
+        await conn.execute(
             f"ALTER TABLE {TABLE} ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES {USERS_TABLE}(id) ON DELETE CASCADE"
         )
         await conn.execute(
@@ -248,6 +265,17 @@ async def init_table(pool) -> None:
         await conn.execute(f"CREATE INDEX IF NOT EXISTS idx_users_stripe_customer ON {USERS_TABLE}(stripe_customer_id)")
         await conn.execute(
             f"ALTER TABLE {USERS_TABLE} ADD COLUMN IF NOT EXISTS partner_program_access BOOLEAN NOT NULL DEFAULT FALSE"
+        )
+        await conn.execute(
+            f"ALTER TABLE {USERS_TABLE} ADD COLUMN IF NOT EXISTS partner_welcome_bonus_cents INTEGER NOT NULL DEFAULT 0"
+        )
+        await conn.execute(
+            f"""
+            UPDATE {USERS_TABLE}
+            SET partner_welcome_bonus_cents = 2000
+            WHERE partner_program_access = TRUE
+              AND partner_welcome_bonus_cents = 0
+            """
         )
         await conn.execute(
             f"ALTER TABLE {USERS_TABLE} ADD COLUMN IF NOT EXISTS admin_blocked BOOLEAN NOT NULL DEFAULT FALSE"
@@ -662,6 +690,7 @@ async def user_create(
 USER_SUBSCRIPTION_COLS = (
     "stripe_customer_id, stripe_subscription_id, subscription_status, subscription_plan, "
     "current_period_end, free_analyses_count, free_optimize_count, free_quota_month_start, partner_program_access, "
+    "partner_welcome_bonus_cents, "
     "market_readiness_score, last_visit_date, streak_days, admin_blocked, marketing_emails_opt_in"
 )
 
@@ -1101,10 +1130,19 @@ async def user_delete_by_id(pool, user_id: str) -> bool:
 
 
 async def user_set_partner_program_access(pool, user_id: str, enabled: bool) -> bool:
-    """Set partner_program_access. Returns True if a row was updated."""
+    """Set partner_program_access. When enabling, grant welcome bonus ($20) if not already set."""
     async with pool.acquire() as conn:
         n = await conn.execute(
-            f"UPDATE {USERS_TABLE} SET partner_program_access = $2 WHERE id = $1::uuid",
+            f"""
+            UPDATE {USERS_TABLE}
+            SET
+                partner_program_access = $2,
+                partner_welcome_bonus_cents = CASE
+                    WHEN $2 = TRUE THEN GREATEST(partner_welcome_bonus_cents, 2000)
+                    ELSE partner_welcome_bonus_cents
+                END
+            WHERE id = $1::uuid
+            """,
             user_id,
             bool(enabled),
         )
@@ -1454,6 +1492,115 @@ async def referral_partner_summary(pool, referrer_user_id: str) -> dict[str, Any
     }
 
 
+async def referral_count_link_clicks(pool, referrer_user_id: str) -> int:
+    """Count logged hits on /r/{code} for this referrer (valid codes only)."""
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            f"""
+            SELECT COUNT(*)::bigint AS c
+            FROM {REFERRAL_EVENTS_TABLE}
+            WHERE event_type = 'referral_link_click'
+              AND referrer_user_id = $1::uuid
+            """,
+            referrer_user_id,
+        )
+    return int(row["c"]) if row else 0
+
+
+async def referral_count_signups(pool, referrer_user_id: str) -> int:
+    """Referral attributions linked to this referrer (one row per referred signup)."""
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            f"""
+            SELECT COUNT(*)::bigint AS c
+            FROM {REFERRAL_ATTRIBUTIONS_TABLE}
+            WHERE referrer_user_id = $1::uuid
+            """,
+            referrer_user_id,
+        )
+    return int(row["c"]) if row else 0
+
+
+async def referral_count_paid_referrals(pool, referrer_user_id: str) -> int:
+    """Distinct referred users with at least one paid commission for this referrer."""
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            f"""
+            SELECT COUNT(DISTINCT invited_user_id)::bigint AS c
+            FROM {REFERRAL_COMMISSIONS_TABLE}
+            WHERE referrer_user_id = $1::uuid
+              AND status = 'paid'
+            """,
+            referrer_user_id,
+        )
+    return int(row["c"]) if row else 0
+
+
+async def referral_leaderboard_partner_count(pool) -> int:
+    """Users with partner program access (leaderboard participants)."""
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            f"""
+            SELECT COUNT(*)::bigint AS c
+            FROM {USERS_TABLE}
+            WHERE partner_program_access = TRUE
+            """,
+        )
+    return int(row["c"]) if row else 0
+
+
+async def referral_leaderboard_list(pool, *, offset: int, limit: int) -> list[dict[str, Any]]:
+    """
+    Partner leaderboard: one row per user with partner_program_access.
+    All commission sums are for rows with created_at in the trailing calendar month (UTC),
+    so totals match the UI period hint (last month). Welcome bonus is excluded here.
+    """
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            f"""
+            WITH period_comm AS (
+                SELECT *
+                FROM {REFERRAL_COMMISSIONS_TABLE}
+                WHERE created_at >= NOW() - INTERVAL '1 month'
+            ),
+            agg AS (
+                SELECT
+                    referrer_user_id,
+                    COUNT(*)::bigint AS commission_count,
+                    COALESCE(SUM(amount_cents) FILTER (WHERE status = 'paid'), 0)::bigint AS total_paid_out_cents,
+                    COALESCE(SUM(amount_cents) FILTER (WHERE status = 'approved'), 0)::bigint AS approved_cents,
+                    COALESCE(SUM(amount_cents) FILTER (WHERE status = 'hold'), 0)::bigint AS hold_cents,
+                    COALESCE(
+                        SUM(amount_cents) FILTER (WHERE status IN ('paid', 'approved', 'hold')),
+                        0
+                    )::bigint AS accrued_total_cents
+                FROM period_comm
+                GROUP BY referrer_user_id
+            )
+            SELECT
+                u.id::text AS user_id,
+                u.email,
+                NULLIF(TRIM(COALESCE(u.name, '')), '') AS name,
+                COALESCE(a.total_paid_out_cents, 0)::bigint AS total_paid_out_cents,
+                COALESCE(a.accrued_total_cents, 0)::bigint AS accrued_total_cents,
+                COALESCE(a.approved_cents, 0)::bigint AS approved_pending_payout_cents,
+                COALESCE(a.hold_cents, 0)::bigint AS on_hold_cents,
+                COALESCE(a.commission_count, 0)::bigint AS commission_rows
+            FROM {USERS_TABLE} u
+            LEFT JOIN agg a ON a.referrer_user_id = u.id
+            WHERE u.partner_program_access = TRUE
+            ORDER BY
+                COALESCE(a.total_paid_out_cents, 0) DESC,
+                COALESCE(a.accrued_total_cents, 0) DESC,
+                u.email ASC
+            LIMIT $1 OFFSET $2
+            """,
+            int(limit),
+            int(offset),
+        )
+    return [dict(r) for r in rows]
+
+
 async def referral_partner_commissions(pool, referrer_user_id: str, limit: int = 200) -> list[dict[str, Any]]:
     async with pool.acquire() as conn:
         rows = await conn.fetch(
@@ -1547,6 +1694,100 @@ async def referral_admin_update_commission_status(
             commission_id,
         )
     return "UPDATE 1" in str(result)
+
+
+def partner_invite_token_digest(plain: str) -> str:
+    return hashlib.sha256((plain or "").encode("utf-8")).hexdigest()
+
+
+async def partner_invite_active_match(pool, plain_token: str) -> bool:
+    digest = partner_invite_token_digest(plain_token.strip())
+    if not digest:
+        return False
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            f"""
+            SELECT 1
+            FROM {PARTNER_INVITE_TOKENS_TABLE}
+            WHERE token_hash = $1
+              AND active = TRUE
+              AND (expires_at IS NULL OR expires_at > NOW())
+            LIMIT 1
+            """,
+            digest,
+        )
+    return row is not None
+
+
+async def partner_invite_list_admin(pool) -> list[dict[str, Any]]:
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            f"""
+            SELECT id, label, active, expires_at, created_at, updated_at
+            FROM {PARTNER_INVITE_TOKENS_TABLE}
+            ORDER BY created_at DESC
+            """
+        )
+    return [dict(r) for r in rows]
+
+
+async def partner_invite_create(
+    pool,
+    *,
+    label: str,
+    expires_at: datetime | None,
+    created_by: str | None,
+) -> dict[str, Any]:
+    plain = secrets.token_urlsafe(32)
+    digest = partner_invite_token_digest(plain)
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            f"""
+            INSERT INTO {PARTNER_INVITE_TOKENS_TABLE}
+                (label, token_hash, active, expires_at, created_by)
+            VALUES ($1, $2, TRUE, $3, $4::uuid)
+            RETURNING id, label, active, expires_at, created_at, updated_at
+            """,
+            (label or "").strip(),
+            digest,
+            expires_at,
+            created_by,
+        )
+    out = dict(row)
+    out["plain_token"] = plain
+    return out
+
+
+async def partner_invite_set_fields(
+    pool,
+    invite_id: str,
+    *,
+    label: str,
+    active: bool,
+    expires_at: datetime | None,
+) -> bool:
+    async with pool.acquire() as conn:
+        result = await conn.execute(
+            f"""
+            UPDATE {PARTNER_INVITE_TOKENS_TABLE}
+            SET label = $1, active = $2, expires_at = $3, updated_at = NOW()
+            WHERE id = $4::uuid
+            """,
+            (label or "").strip(),
+            active,
+            expires_at,
+            invite_id,
+        )
+    return "UPDATE 1" in str(result)
+
+
+async def partner_invite_delete(pool, invite_id: str) -> bool:
+    async with pool.acquire() as conn:
+        result = await conn.execute(
+            f"DELETE FROM {PARTNER_INVITE_TOKENS_TABLE} WHERE id = $1::uuid",
+            invite_id,
+        )
+    return "DELETE 1" in str(result)
 
 
 # --- Market Readiness (status indicator, not gamification) ---

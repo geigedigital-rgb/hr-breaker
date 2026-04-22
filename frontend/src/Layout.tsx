@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import {
   DocumentTextIcon,
@@ -25,6 +25,9 @@ import { NotificationMenu } from "./components/NotificationMenu";
 import RouteFallback from "./components/RouteFallback";
 import AdminPipelineConsole from "./components/AdminPipelineConsole";
 
+/** One-time “welcome partner” banner after admin enables `partner_program_access`; cleared when access revoked. */
+const PARTNER_WELCOME_ACK_KEY = "pitchcv_partner_welcome_ack_user_id";
+
 const nav = [
   { to: "/", label: t("nav.home"), icon: HomeIcon },
   { to: "/improve", label: t("nav.improve"), icon: SparklesIcon },
@@ -35,6 +38,47 @@ export default function Layout() {
   const location = useLocation();
   const { user, logout } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [partnerWelcomeOpen, setPartnerWelcomeOpen] = useState(false);
+
+  useEffect(() => {
+    if (!user || user.id === "local") {
+      setPartnerWelcomeOpen(false);
+      return;
+    }
+    if (!user.partner_program_access) {
+      try {
+        if (localStorage.getItem(PARTNER_WELCOME_ACK_KEY) === user.id) {
+          localStorage.removeItem(PARTNER_WELCOME_ACK_KEY);
+        }
+      } catch {
+        /* private mode */
+      }
+      setPartnerWelcomeOpen(false);
+      return;
+    }
+    const onPartnerPage = location.pathname === "/partner" || location.pathname.startsWith("/partner/");
+    try {
+      if (onPartnerPage) {
+        localStorage.setItem(PARTNER_WELCOME_ACK_KEY, user.id);
+        setPartnerWelcomeOpen(false);
+        return;
+      }
+      const ack = localStorage.getItem(PARTNER_WELCOME_ACK_KEY);
+      setPartnerWelcomeOpen(ack !== user.id);
+    } catch {
+      setPartnerWelcomeOpen(true);
+    }
+  }, [user, location.pathname]);
+
+  const dismissPartnerWelcome = useCallback(() => {
+    if (!user || user.id === "local") return;
+    try {
+      localStorage.setItem(PARTNER_WELCOME_ACK_KEY, user.id);
+    } catch {
+      /* private mode */
+    }
+    setPartnerWelcomeOpen(false);
+  }, [user]);
 
   useEffect(() => {
     if (!mobileMenuOpen) return;
@@ -323,6 +367,37 @@ export default function Layout() {
             )}
           </div>
         </header>
+
+        {partnerWelcomeOpen && user && user.id !== "local" && (
+          <div
+            className="shrink-0 border-b border-emerald-200/90 bg-emerald-50 px-4 py-3 md:px-6"
+            role="status"
+            aria-live="polite"
+          >
+            <div className="mx-auto flex max-w-4xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-emerald-950">{t("partner.welcomeBannerTitle")}</p>
+                <p className="mt-1 text-[13px] leading-snug text-emerald-900/90">{t("partner.welcomeBannerBody")}</p>
+              </div>
+              <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
+                <Link
+                  to="/partner"
+                  onClick={dismissPartnerWelcome}
+                  className="inline-flex items-center justify-center rounded-xl bg-[#4578FC] px-4 py-2 text-[13px] font-semibold text-white shadow-sm transition hover:bg-[#3d6ae8]"
+                >
+                  {t("partner.welcomeBannerCta")}
+                </Link>
+                <button
+                  type="button"
+                  onClick={dismissPartnerWelcome}
+                  className="inline-flex items-center justify-center rounded-xl border border-emerald-300/80 bg-white/90 px-4 py-2 text-[13px] font-semibold text-emerald-900 transition hover:bg-white"
+                >
+                  {t("partner.welcomeBannerDismiss")}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <main className="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden overscroll-y-contain pt-2 px-3 md:px-6 pb-[max(1.25rem,env(safe-area-inset-bottom,0px)+0.75rem)] md:pb-6">
           <Suspense fallback={<RouteFallback />}>

@@ -707,10 +707,14 @@ export type AuthUser = {
 };
 export type LoginResponse = { access_token: string; user: AuthUser };
 
+/** sessionStorage key: set from /login?pvc_pi=<token> for auto partner access on first signup. */
+export const PARTNER_INVITE_SIGNUP_STORAGE_KEY = "pitchcv_partner_invite_signup_token";
+
 export async function login(
   email: string,
   password: string,
-  referral?: { code?: string | null; source_url?: string | null }
+  referral?: { code?: string | null; source_url?: string | null },
+  partnerInviteToken?: string | null,
 ): Promise<LoginResponse> {
   const r = await fetch(`${API}/auth/login`, {
     method: "POST",
@@ -720,6 +724,7 @@ export async function login(
       password,
       referral_code: referral?.code ?? undefined,
       referral_source_url: referral?.source_url ?? undefined,
+      partner_invite_token: partnerInviteToken?.trim() || undefined,
     }),
   });
   const data = await parseJsonOrThrow<LoginResponse & { detail?: string }>(r);
@@ -730,7 +735,8 @@ export async function login(
 export async function register(
   email: string,
   password: string,
-  referral?: { code?: string | null; source_url?: string | null }
+  referral?: { code?: string | null; source_url?: string | null },
+  partnerInviteToken?: string | null,
 ): Promise<LoginResponse> {
   const r = await fetch(`${API}/auth/register`, {
     method: "POST",
@@ -740,6 +746,7 @@ export async function register(
       password,
       referral_code: referral?.code ?? undefined,
       referral_source_url: referral?.source_url ?? undefined,
+      partner_invite_token: partnerInviteToken?.trim() || undefined,
     }),
   });
   const data = await parseJsonOrThrow<LoginResponse & { detail?: string }>(r);
@@ -764,7 +771,7 @@ export function getGoogleLoginUrl(redirectUri?: string): string {
 export async function exchangeGoogleCode(
   code: string,
   redirectUri?: string,
-  referral?: { code?: string | null; source_url?: string | null }
+  referral?: { code?: string | null; source_url?: string | null; partner_invite_token?: string | null },
 ): Promise<LoginResponse> {
   const r = await fetch(`${API}/auth/google/callback`, {
     method: "POST",
@@ -774,6 +781,7 @@ export async function exchangeGoogleCode(
       redirect_uri: redirectUri,
       referral_code: referral?.code ?? undefined,
       referral_source_url: referral?.source_url ?? undefined,
+      partner_invite_token: referral?.partner_invite_token?.trim() || undefined,
     }),
   });
   const data = await parseJsonOrThrow<LoginResponse & { detail?: string }>(r);
@@ -1890,6 +1898,14 @@ export type PartnerMeResponse = {
   pending_count: number;
   paid_count: number;
   rejected_count: number;
+  /** Hits on /r/{code} (or legacy /api/r/{code}) with a valid referral code (since logging was enabled). */
+  referral_clicks?: number;
+  /** Attributed referred users (DB). */
+  referral_signups?: number;
+  /** Referred users with at least one paid commission. */
+  referral_paid_users?: number;
+  /** 0–100, paid/signups when signups > 0. */
+  referral_conversion_percent?: number;
   items: PartnerCommissionItem[];
 };
 
@@ -1914,6 +1930,41 @@ export async function getPartnerTerms(): Promise<PartnerTermsResponse> {
   const r = await fetch(`${API}/partner/terms`, { headers: authHeaders() });
   const data = await parseJsonOrThrow<PartnerTermsResponse & { detail?: string }>(r);
   if (!r.ok) throw new Error(data.detail || r.statusText);
+  return data;
+}
+
+export type PartnerLeaderboardEntry = {
+  rank: number;
+  user_id: string;
+  display_name: string;
+  email: string;
+  total_paid_out_cents: number;
+  accrued_total_cents: number;
+  approved_pending_payout_cents: number;
+  on_hold_cents: number;
+  commission_rows: number;
+  is_you: boolean;
+};
+
+export type PartnerLeaderboardPage = {
+  items: PartnerLeaderboardEntry[];
+  total: number;
+  page: number;
+  per_page: number;
+};
+
+export async function getPartnerLeaderboardTop(limit = 5): Promise<PartnerLeaderboardPage> {
+  const r = await fetch(`${API}/partner/leaderboard/top?limit=${limit}`, { headers: authHeaders() });
+  const data = await parseJsonOrThrow<PartnerLeaderboardPage & { detail?: string }>(r);
+  if (!r.ok) throw new Error((data as { detail?: string }).detail || r.statusText);
+  return data;
+}
+
+export async function getPartnerLeaderboard(page: number, perPage = 10): Promise<PartnerLeaderboardPage> {
+  const q = new URLSearchParams({ page: String(page), per_page: String(perPage) });
+  const r = await fetch(`${API}/partner/leaderboard?${q}`, { headers: authHeaders() });
+  const data = await parseJsonOrThrow<PartnerLeaderboardPage & { detail?: string }>(r);
+  if (!r.ok) throw new Error((data as { detail?: string }).detail || r.statusText);
   return data;
 }
 
@@ -1991,4 +2042,66 @@ export function adminReferralHold(commission_id: string, reason?: string): Promi
 }
 export function adminReferralBlock(commission_id: string, reason?: string): Promise<void> {
   return adminReferralAction("block", commission_id, reason);
+}
+
+export type AdminPartnerInviteItem = {
+  id: string;
+  label: string;
+  active: boolean;
+  expires_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type AdminPartnerInviteListResponse = { items: AdminPartnerInviteItem[] };
+
+export type AdminPartnerInviteCreatedResponse = {
+  item: AdminPartnerInviteItem;
+  token: string;
+};
+
+export async function getAdminPartnerInvites(): Promise<AdminPartnerInviteListResponse> {
+  const r = await fetch(`${API}/admin/referrals/partner-invites`, { headers: authHeaders() });
+  const data = await parseJsonOrThrow<AdminPartnerInviteListResponse & { detail?: string }>(r);
+  if (!r.ok) throw new Error(data.detail || r.statusText);
+  return data;
+}
+
+export async function createAdminPartnerInvite(body: {
+  label?: string;
+  expires_at?: string | null;
+}): Promise<AdminPartnerInviteCreatedResponse> {
+  const r = await fetch(`${API}/admin/referrals/partner-invites`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ label: body.label ?? "", expires_at: body.expires_at ?? null }),
+  });
+  const data = await parseJsonOrThrow<AdminPartnerInviteCreatedResponse & { detail?: string }>(r);
+  if (!r.ok) throw new Error(data.detail || r.statusText);
+  return data;
+}
+
+export async function patchAdminPartnerInvite(
+  inviteId: string,
+  body: { label: string; active: boolean; expires_at: string | null }
+): Promise<AdminPartnerInviteItem> {
+  const r = await fetch(`${API}/admin/referrals/partner-invites/${encodeURIComponent(inviteId)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(body),
+  });
+  const data = await parseJsonOrThrow<AdminPartnerInviteItem & { detail?: string }>(r);
+  if (!r.ok) throw new Error(data.detail || r.statusText);
+  return data;
+}
+
+export async function deleteAdminPartnerInvite(inviteId: string): Promise<void> {
+  const r = await fetch(`${API}/admin/referrals/partner-invites/${encodeURIComponent(inviteId)}`, {
+    method: "DELETE",
+    headers: authHeaders(),
+  });
+  if (!r.ok) {
+    const data = await parseJsonOrThrow<{ detail?: string }>(r);
+    throw new Error(data.detail || r.statusText);
+  }
 }

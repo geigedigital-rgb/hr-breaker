@@ -11,6 +11,16 @@ const PARTNER_REF_SRC_KEY = "partner_ref_source";
 const SIGNUP_SUCCESS_KEY = "signup_success_pending";
 const SIGNUP_NEXT_KEY = "signup_success_next";
 
+function readPartnerInviteTokenFromStorage(): string | undefined {
+  try {
+    const v = sessionStorage.getItem(api.PARTNER_INVITE_SIGNUP_STORAGE_KEY);
+    const t = v?.trim();
+    return t || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export default function Login() {
   const { user, loading, login, register, loginWithGoogle, setUserFromToken } = useAuth();
   const [searchParams] = useSearchParams();
@@ -45,6 +55,17 @@ export default function Login() {
     sessionStorage.setItem(PARTNER_REF_CODE_KEY, refFromUrl.trim().toLowerCase());
     sessionStorage.setItem(PARTNER_REF_SRC_KEY, window.location.href);
   }, [refFromUrl]);
+
+  /** Opaque query `pvc_pi` = partner invite secret (env token or admin-managed invite in DB). */
+  const partnerInviteFromUrl = searchParams.get("pvc_pi");
+  useEffect(() => {
+    if (!partnerInviteFromUrl?.trim()) return;
+    try {
+      sessionStorage.setItem(api.PARTNER_INVITE_SIGNUP_STORAGE_KEY, partnerInviteFromUrl.trim());
+    } catch {
+      /* private mode */
+    }
+  }, [partnerInviteFromUrl]);
 
   const tokenFromUrl = searchParams.get("token");
   useEffect(() => {
@@ -108,8 +129,14 @@ export default function Login() {
         code: sessionStorage.getItem(PARTNER_REF_CODE_KEY),
         source_url: sessionStorage.getItem(PARTNER_REF_SRC_KEY),
       };
+      const partnerInvite = readPartnerInviteTokenFromStorage();
       if (isRegister) {
-        await register(email, password, referral);
+        await register(email, password, referral, partnerInvite);
+        try {
+          sessionStorage.removeItem(api.PARTNER_INVITE_SIGNUP_STORAGE_KEY);
+        } catch {
+          /* ignore */
+        }
         const nextPath = pendingToken
           ? `/optimize?pending=${encodeURIComponent(pendingToken)}`
           : "/optimize";
@@ -118,7 +145,12 @@ export default function Login() {
         navigate("/signup-success", { replace: true });
         return;
       } else {
-        await login(email, password, referral);
+        await login(email, password, referral, partnerInvite);
+        try {
+          sessionStorage.removeItem(api.PARTNER_INVITE_SIGNUP_STORAGE_KEY);
+        } catch {
+          /* ignore */
+        }
       }
       const resumeStored = sessionStorage.getItem(api.OPTIMIZE_RESUME_SESSION_KEY);
       if (resumeStored) {

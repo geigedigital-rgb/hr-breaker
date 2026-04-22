@@ -119,6 +119,8 @@ class Settings(BaseModel):
     admin_email: str = "marichakgroup@gmail.com"
     admin_emails: str = ""
     partner_program_enabled: bool = True
+    # Optional legacy: same as DB-managed invites (Admin → Referrals → Partner signup links). If set, matches /login?pvc_pi=…
+    partner_invite_signup_token: str = ""
 
     # Landing reviews (POST /api/reviews) rate limits when DATABASE_URL is set
     reviews_rate_limit_ip_per_hour: int = 10
@@ -209,6 +211,7 @@ def get_settings() -> Settings:
         admin_email=os.getenv("ADMIN_EMAIL", "marichakgroup@gmail.com").strip().lower() or "marichakgroup@gmail.com",
         admin_emails=os.getenv("ADMIN_EMAILS", ""),
         partner_program_enabled=os.getenv("PARTNER_PROGRAM_ENABLED", "true").lower() in ("true", "1", "yes"),
+        partner_invite_signup_token=os.getenv("PARTNER_INVITE_SIGNUP_TOKEN", "").strip(),
         reviews_rate_limit_ip_per_hour=int(os.getenv("REVIEWS_RATE_LIMIT_IP_PER_HOUR", "10")),
         reviews_rate_limit_email_per_day=int(os.getenv("REVIEWS_RATE_LIMIT_EMAIL_PER_DAY", "3")),
         resend_api_key=os.getenv("RESEND_API_KEY", ""),

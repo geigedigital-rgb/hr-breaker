@@ -16,12 +16,14 @@ from hr_breaker.services.db import (
     referral_log_event,
     user_get_id_by_stripe_customer_id,
 )
+from hr_breaker.services.stripe_service import stripe_subscription_allows_referral_commission
 
 logger = logging.getLogger(__name__)
 
 COOKIE_DAYS = 30
 COMMISSION_RATE_PERCENT = 30
 MIN_PAYOUT_CENTS = 35_000
+PARTNER_WELCOME_BONUS_CENTS = 2000
 
 _COUPON_HOST_DENYLIST = {
     "coupon",
@@ -46,6 +48,27 @@ def _invoice_get(invoice: object, key: str, default: Any = None) -> Any:
     if isinstance(invoice, dict):
         return invoice.get(key, default)
     return getattr(invoice, key, default)
+
+
+def invoice_subscription_id(invoice: object) -> str | None:
+    """Stripe subscription id from an invoice, if this is a subscription invoice."""
+    sub = _invoice_get(invoice, "subscription", None)
+    if sub is None:
+        return None
+    if isinstance(sub, str):
+        s = sub.strip()
+        return s or None
+    if isinstance(sub, dict):
+        sid = sub.get("id")
+        if sid is None:
+            return None
+        s = str(sid).strip()
+        return s or None
+    sid = getattr(sub, "id", None)
+    if sid is None:
+        return None
+    s = str(sid).strip()
+    return s or None
 
 
 def normalize_referral_code(code: str | None) -> str:
@@ -248,6 +271,32 @@ async def process_first_paid_invoice_commission(
         )
         return {"created": False, "reason": "attribution_expired"}
 
+    sub_id = invoice_subscription_id(invoice)
+    if not sub_id:
+        await referral_log_event(
+            pool,
+            "referral_commission_skipped_no_subscription",
+            invited_user_id=invited_user_id,
+            referrer_user_id=str(attr.get("referrer_user_id")),
+            stripe_event_id=stripe_event_id,
+            metadata={"invoice_id": _invoice_get(invoice, "id", None)},
+        )
+        return {"created": False, "reason": "no_subscription"}
+
+    if not stripe_subscription_allows_referral_commission(sub_id):
+        await referral_log_event(
+            pool,
+            "referral_commission_skipped_subscription_not_monthly_active",
+            invited_user_id=invited_user_id,
+            referrer_user_id=str(attr.get("referrer_user_id")),
+            stripe_event_id=stripe_event_id,
+            metadata={
+                "invoice_id": _invoice_get(invoice, "id", None),
+                "subscription_id": sub_id,
+            },
+        )
+        return {"created": False, "reason": "subscription_not_monthly_active"}
+
     if invoice_is_trial_like(invoice):
         await referral_log_event(
             pool,
@@ -318,9 +367,10 @@ async def process_first_paid_invoice_commission(
 
 def partner_terms() -> list[str]:
     return [
-        "30% commission from the first successful paid invoice only.",
+        "30% from the first paid monthly subscription charge only (after any 7-day trial; trialing / trial signup fees do not count).",
+        f"A one-time ${PARTNER_WELCOME_BONUS_CENTS / 100:.0f} welcome credit from PitchCV is added when you join the partner program (counts toward your payout balance).",
         "Attribution window is 30 days from a valid referral click.",
-        "No commission for registration, trial, or email signup.",
+        "No commission for registration, trial period, or email signup alone.",
         "One commission per invited user; duplicates are rejected.",
         "Self-referrals and coupon/deal-site traffic are prohibited.",
         "Minimum payout threshold is $350 and payouts are manual.",

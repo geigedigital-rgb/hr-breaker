@@ -21,7 +21,7 @@ from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Request, Query, Form
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, RedirectResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi import FastAPI
 from pydantic import BaseModel, ConfigDict, Field
@@ -108,8 +108,20 @@ from hr_breaker.services.db import (
     referral_admin_chains,
     referral_admin_events,
     referral_admin_update_commission_status,
+    partner_invite_active_match,
+    partner_invite_list_admin,
+    partner_invite_create,
+    partner_invite_set_fields,
+    partner_invite_delete,
     referral_get_or_create_code,
+    referral_get_referrer_by_code,
+    referral_log_event,
     referral_mark_processed_event,
+    referral_count_link_clicks,
+    referral_count_paid_referrals,
+    referral_count_signups,
+    referral_leaderboard_list,
+    referral_leaderboard_partner_count,
     referral_partner_commissions,
     referral_partner_summary,
     admin_email_settings_get,
@@ -729,6 +741,7 @@ class LoginRequest(BaseModel):
     password: str
     referral_code: str | None = None
     referral_source_url: str | None = None
+    partner_invite_token: str | None = None
 
 
 class ReadinessOut(BaseModel):
@@ -849,6 +862,45 @@ def _partner_enabled() -> bool:
 def _partner_user_allowed(user: dict) -> bool:
     """User-facing partner cabinet (referral link, commissions) — only if admin enabled flag."""
     return bool(user.get("partner_program_access"))
+
+
+def _admin_partner_invite_parse_expires(raw: str | None) -> datetime | None:
+    if raw is None:
+        return None
+    s = raw.strip()
+    if not s:
+        return None
+    dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
+async def _partner_invite_signup_token_valid(pool, token: str | None) -> bool:
+    """True if env PARTNER_INVITE_SIGNUP_TOKEN matches, or an active row in partner_invite_tokens."""
+    got = (token or "").strip()
+    if not got:
+        return False
+    expected = (get_settings().partner_invite_signup_token or "").strip()
+    if expected and len(got) == len(expected) and secrets.compare_digest(got, expected):
+        return True
+    if pool is not None:
+        try:
+            return await partner_invite_active_match(pool, got)
+        except Exception as e:
+            logger.warning("partner_invite DB check failed: %s", e)
+            return False
+    return False
+
+
+async def _maybe_grant_partner_from_invite_token(pool, user_id: str, token: str | None) -> None:
+    """New signups only: grant partner_program_access (+ welcome bonus path) when invite token matches."""
+    if not _partner_enabled() or not await _partner_invite_signup_token_valid(pool, token):
+        return
+    try:
+        await user_set_partner_program_access(pool, user_id, True)
+    except Exception as e:
+        logger.warning("partner_invite_signup grant failed user=%s: %s", user_id, e)
 
 
 def _synthetic_admin_user_from_jwt(payload: dict[str, Any]) -> dict:
@@ -1495,6 +1547,16 @@ class PartnerMeResponse(BaseModel):
     pending_count: int
     paid_count: int
     rejected_count: int
+    referral_clicks: int = 0
+    referral_signups: int = Field(0, description="Attributed referred users (referral_attributions).")
+    referral_paid_users: int = Field(
+        0,
+        description="Referred users with at least one paid commission for this referrer.",
+    )
+    referral_conversion_percent: float = Field(
+        0.0,
+        description="100 * paid_signups / signups when signups > 0, else 0.",
+    )
     items: list[PartnerCommissionItem]
 
 
@@ -1505,6 +1567,67 @@ class PartnerLinkResponse(BaseModel):
 
 class PartnerTermsResponse(BaseModel):
     items: list[str]
+
+
+def _partner_display_name(email: str | None, name: str | None) -> str:
+    n = (name or "").strip()
+    if n:
+        return n
+    e = (email or "").strip()
+    return e if e else "—"
+
+
+class PartnerLeaderboardEntryOut(BaseModel):
+    rank: int
+    user_id: str
+    display_name: str
+    email: str
+    total_paid_out_cents: int = Field(..., description="Sum of commissions already marked paid (transferred).")
+    accrued_total_cents: int = Field(
+        ...,
+        description="Booked commissions: paid + approved + on hold (excludes rejected/blocked).",
+    )
+    approved_pending_payout_cents: int = Field(..., description="Approved, awaiting manual payout.")
+    on_hold_cents: int = Field(..., description="Under review (hold).")
+    commission_rows: int
+    is_you: bool = False
+
+
+class PartnerLeaderboardPageOut(BaseModel):
+    items: list[PartnerLeaderboardEntryOut]
+    total: int
+    page: int
+    per_page: int
+
+
+async def _partner_leaderboard_page_out(
+    pool,
+    viewer_user_id: str,
+    *,
+    page: int,
+    per_page: int,
+) -> PartnerLeaderboardPageOut:
+    total = await referral_leaderboard_partner_count(pool)
+    offset = (page - 1) * per_page
+    rows = await referral_leaderboard_list(pool, offset=offset, limit=per_page)
+    items: list[PartnerLeaderboardEntryOut] = []
+    for i, r in enumerate(rows):
+        uid = str(r.get("user_id") or "")
+        items.append(
+            PartnerLeaderboardEntryOut(
+                rank=offset + i + 1,
+                user_id=uid,
+                display_name=_partner_display_name(r.get("email"), r.get("name")),
+                email=str(r.get("email") or ""),
+                total_paid_out_cents=int(r.get("total_paid_out_cents") or 0),
+                accrued_total_cents=int(r.get("accrued_total_cents") or 0),
+                approved_pending_payout_cents=int(r.get("approved_pending_payout_cents") or 0),
+                on_hold_cents=int(r.get("on_hold_cents") or 0),
+                commission_rows=int(r.get("commission_rows") or 0),
+                is_you=uid == str(viewer_user_id),
+            )
+        )
+    return PartnerLeaderboardPageOut(items=items, total=total, page=page, per_page=per_page)
 
 
 class AdminReferralChainItem(BaseModel):
@@ -1545,6 +1668,47 @@ class AdminReferralEventsResponse(BaseModel):
 class AdminReferralActionRequest(BaseModel):
     commission_id: str
     reason: str | None = None
+
+
+class AdminPartnerInviteItem(BaseModel):
+    id: str
+    label: str
+    active: bool
+    expires_at: str | None = None
+    created_at: str
+    updated_at: str
+
+
+class AdminPartnerInviteListResponse(BaseModel):
+    items: list[AdminPartnerInviteItem]
+
+
+class AdminPartnerInviteCreateBody(BaseModel):
+    label: str = ""
+    expires_at: str | None = None
+
+
+class AdminPartnerInviteCreatedResponse(BaseModel):
+    item: AdminPartnerInviteItem
+    token: str
+
+
+class AdminPartnerInvitePatchBody(BaseModel):
+    label: str = ""
+    active: bool = True
+    expires_at: str | None = None
+
+
+def _admin_partner_invite_item_from_row(r: dict[str, Any]) -> AdminPartnerInviteItem:
+    exp = r.get("expires_at")
+    return AdminPartnerInviteItem(
+        id=str(r["id"]),
+        label=str(r.get("label") or ""),
+        active=bool(r.get("active", True)),
+        expires_at=exp.isoformat() if exp else None,
+        created_at=r["created_at"].isoformat() if r.get("created_at") else "",
+        updated_at=r["updated_at"].isoformat() if r.get("updated_at") else "",
+    )
 
 
 class VacancyCard(BaseModel):
@@ -1611,10 +1775,58 @@ class AdminTemplateRenderPdfResponse(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
+# --- Partner referral cookies (GET /r/{code}); merged on auth; cleared on successful JWT ---
+_REF_COOKIE_CODE = "hr_ref_code"
+_REF_COOKIE_SRC = "hr_ref_src"
+_REF_SRC_MAX_LEN = 2048
+
+
+def _truncate_referral_source(url: str | None) -> str | None:
+    if not url:
+        return None
+    u = url.strip()
+    if not u:
+        return None
+    if len(u) > _REF_SRC_MAX_LEN:
+        return u[:_REF_SRC_MAX_LEN]
+    return u
+
+
+def _referral_merge_body_and_cookie(
+    request: Request,
+    body_code: str | None,
+    body_src: str | None,
+) -> tuple[str | None, str | None]:
+    """
+    Prefer JSON body (sessionStorage from /login?ref=); fall back to httpOnly cookies from /r/{code}.
+    When both codes exist, body wins so a fresh ?ref= is not overridden by an older cookie.
+    """
+    b_code = (body_code or "").strip().lower()
+    c_code = (request.cookies.get(_REF_COOKIE_CODE) or "").strip().lower()
+    code = b_code or c_code or None
+
+    b_src_raw = (body_src or "").strip()
+    c_src_raw = (request.cookies.get(_REF_COOKIE_SRC) or "").strip()
+    if b_code:
+        src = _truncate_referral_source(b_src_raw or c_src_raw)
+    else:
+        src = _truncate_referral_source(c_src_raw or b_src_raw)
+    return code, src
+
+
+def _login_json_with_cleared_ref_cookies(request: Request, payload: LoginResponse) -> JSONResponse:
+    """Same JSON as LoginResponse; clears referral cookies so they are not reused on a later signup."""
+    resp = JSONResponse(content=payload.model_dump(mode="json"))
+    if request.cookies.get(_REF_COOKIE_CODE) or request.cookies.get(_REF_COOKIE_SRC):
+        resp.delete_cookie(_REF_COOKIE_CODE, path="/", httponly=True, samesite="lax")
+        resp.delete_cookie(_REF_COOKIE_SRC, path="/", httponly=True, samesite="lax")
+    return resp
+
+
 # --- Auth endpoints ---
 
 @router.post("/auth/register", response_model=LoginResponse)
-async def api_register(request: Request, req: LoginRequest) -> LoginResponse:
+async def api_register(request: Request, req: LoginRequest) -> JSONResponse:
     """Register with email and password."""
     pool = await get_pool()
     if not pool:
@@ -1626,14 +1838,17 @@ async def api_register(request: Request, req: LoginRequest) -> LoginResponse:
     ip = _client_ip(request)
     ua = _client_user_agent(request)
     user = await user_create(pool, req.email, password_hash=pass_hash, signup_ip=ip, signup_user_agent=ua)
-    if _partner_enabled() and req.referral_code:
+    await _maybe_grant_partner_from_invite_token(pool, str(user["id"]), req.partner_invite_token)
+    user = await user_get_by_id(pool, str(user["id"])) or user
+    ref_code, ref_src = _referral_merge_body_and_cookie(request, req.referral_code, req.referral_source_url)
+    if _partner_enabled() and ref_code:
         try:
             await try_apply_referral_after_auth(
                 pool,
                 invited_user_id=str(user["id"]),
                 invited_email=user["email"],
-                referral_code=req.referral_code,
-                source_url=req.referral_source_url,
+                referral_code=ref_code,
+                source_url=ref_src,
                 ttl_days=COOKIE_DAYS,
             )
         except Exception as e:
@@ -1644,11 +1859,14 @@ async def api_register(request: Request, req: LoginRequest) -> LoginResponse:
         logger.warning("user_record_auth_event register failed: %s", e)
     subscription = await user_get_subscription(pool, str(user["id"]))
     token = create_access_token(str(user["id"]), user["email"])
-    return LoginResponse(access_token=token, user=_user_out(user, subscription=subscription))
+    return _login_json_with_cleared_ref_cookies(
+        request,
+        LoginResponse(access_token=token, user=_user_out(user, subscription=subscription)),
+    )
 
 
 @router.post("/auth/login", response_model=LoginResponse)
-async def api_login(request: Request, req: LoginRequest) -> LoginResponse:
+async def api_login(request: Request, req: LoginRequest) -> JSONResponse:
     """Login with email and password."""
     pool = await get_pool()
     if not pool:
@@ -1660,14 +1878,15 @@ async def api_login(request: Request, req: LoginRequest) -> LoginResponse:
         raise HTTPException(401, "Invalid email or password")
     if user.get("admin_blocked"):
         raise HTTPException(403, "Account disabled")
-    if _partner_enabled() and req.referral_code:
+    ref_code, ref_src = _referral_merge_body_and_cookie(request, req.referral_code, req.referral_source_url)
+    if _partner_enabled() and ref_code:
         try:
             await try_apply_referral_after_auth(
                 pool,
                 invited_user_id=str(user["id"]),
                 invited_email=user["email"],
-                referral_code=req.referral_code,
-                source_url=req.referral_source_url,
+                referral_code=ref_code,
+                source_url=ref_src,
                 ttl_days=COOKIE_DAYS,
             )
         except Exception as e:
@@ -1683,7 +1902,10 @@ async def api_login(request: Request, req: LoginRequest) -> LoginResponse:
             raise HTTPException(503, "Server misconfiguration: JWT_SECRET not set in .env") from e
         raise
     subscription = await user_get_subscription(pool, str(user["id"]))
-    return LoginResponse(access_token=token, user=_user_out(user, subscription=subscription))
+    return _login_json_with_cleared_ref_cookies(
+        request,
+        LoginResponse(access_token=token, user=_user_out(user, subscription=subscription)),
+    )
 
 
 @router.get("/auth/me", response_model=AuthUserOut)
@@ -1731,10 +1953,11 @@ class GoogleCallbackRequest(BaseModel):
     redirect_uri: str | None = None
     referral_code: str | None = None
     referral_source_url: str | None = None
+    partner_invite_token: str | None = None
 
 
 @router.post("/auth/google/callback", response_model=LoginResponse)
-async def api_google_exchange(request: Request, req: GoogleCallbackRequest) -> LoginResponse:
+async def api_google_exchange(request: Request, req: GoogleCallbackRequest) -> JSONResponse:
     """Exchange Google OAuth code for our JWT. Call from frontend after redirect from Google."""
     pool = await get_pool()
     if not pool:
@@ -1786,14 +2009,17 @@ async def api_google_exchange(request: Request, req: GoogleCallbackRequest) -> L
             await user_create(pool, email, name=name, google_id=google_id, signup_ip=ip, signup_user_agent=ua)
             user = await user_get_by_email(pool, email)
             auth_event = AUTH_EVENT_REGISTER
-    if _partner_enabled() and req.referral_code:
+    if auth_event == AUTH_EVENT_REGISTER:
+        await _maybe_grant_partner_from_invite_token(pool, str(user["id"]), req.partner_invite_token)
+    ref_code, ref_src = _referral_merge_body_and_cookie(request, req.referral_code, req.referral_source_url)
+    if _partner_enabled() and ref_code:
         try:
             await try_apply_referral_after_auth(
                 pool,
                 invited_user_id=str(user["id"]),
                 invited_email=user["email"],
-                referral_code=req.referral_code,
-                source_url=req.referral_source_url,
+                referral_code=ref_code,
+                source_url=ref_src,
                 ttl_days=COOKIE_DAYS,
             )
         except Exception as e:
@@ -1809,11 +2035,13 @@ async def api_google_exchange(request: Request, req: GoogleCallbackRequest) -> L
         logger.warning("user_record_auth_event google failed: %s", e)
     token = create_access_token(str(user["id"]), user["email"])
     subscription = await user_get_subscription(pool, str(user["id"]))
-    return LoginResponse(access_token=token, user=_user_out(user, subscription=subscription))
+    return _login_json_with_cleared_ref_cookies(
+        request,
+        LoginResponse(access_token=token, user=_user_out(user, subscription=subscription)),
+    )
 
 
-@router.get("/r/{code}")
-async def api_referral_redirect(code: str, request: Request):
+async def referral_redirect_response(code: str, request: Request) -> RedirectResponse:
     if not _partner_enabled():
         raise HTTPException(404, "Partner program disabled")
     """
@@ -1823,6 +2051,25 @@ async def api_referral_redirect(code: str, request: Request):
     settings = get_settings()
     frontend = (settings.frontend_url or "").rstrip("/") or "http://localhost:5173"
     clean_code = (code or "").strip().lower()
+    pool = await get_pool()
+    if pool and clean_code:
+        try:
+            ref = await referral_get_referrer_by_code(pool, clean_code)
+            if ref:
+                rid = str(ref.get("owner_user_id") or "")
+                if rid:
+                    await referral_log_event(
+                        pool,
+                        "referral_link_click",
+                        referrer_user_id=rid,
+                        metadata={
+                            "code": clean_code,
+                            "ip": _client_ip_or_unknown(request),
+                            "user_agent": (_client_user_agent(request) or "")[:512],
+                        },
+                    )
+        except Exception as e:
+            logger.warning("referral_link_click log failed: %s", e)
     dest = f"{frontend}/login?ref={clean_code}"
     response = RedirectResponse(url=dest)
     response.set_cookie(
@@ -1842,6 +2089,12 @@ async def api_referral_redirect(code: str, request: Request):
     return response
 
 
+@router.get("/r/{code}")
+async def api_referral_redirect(code: str, request: Request):
+    """Legacy path ``/api/r/{code}`` (still supported for old shared links)."""
+    return await referral_redirect_response(code, request)
+
+
 @router.post("/partner/link", response_model=PartnerLinkResponse)
 async def api_partner_link(user: dict | None = Depends(get_current_user)) -> PartnerLinkResponse:
     if not _partner_enabled():
@@ -1857,7 +2110,7 @@ async def api_partner_link(user: dict | None = Depends(get_current_user)) -> Par
     frontend = (get_settings().frontend_url or "").rstrip("/") or "http://localhost:5173"
     return PartnerLinkResponse(
         code=code,
-        referral_link=f"{frontend}/api/r/{code}",
+        referral_link=f"{frontend}/r/{code}",
     )
 
 
@@ -1879,6 +2132,15 @@ async def api_partner_me(
     frontend = (get_settings().frontend_url or "").rstrip("/") or "http://localhost:5173"
     summary = await referral_partner_summary(pool, str(user["id"]))
     rows = await referral_partner_commissions(pool, str(user["id"]), limit=limit)
+    click_count = await referral_count_link_clicks(pool, str(user["id"]))
+    signup_count = await referral_count_signups(pool, str(user["id"]))
+    paid_ref_count = await referral_count_paid_referrals(pool, str(user["id"]))
+    conv_pct = (
+        0.0
+        if signup_count <= 0
+        else min(100.0, round(100.0 * float(paid_ref_count) / float(signup_count), 1))
+    )
+    welcome_cents = int(user.get("partner_welcome_bonus_cents") or 0)
     items = [
         PartnerCommissionItem(
             invited_email=r.get("invited_email"),
@@ -1890,15 +2152,33 @@ async def api_partner_me(
         )
         for r in rows
     ]
+    if welcome_cents > 0:
+        now_iso = datetime.now(timezone.utc).isoformat()
+        items = [
+            PartnerCommissionItem(
+                invited_email="PitchCV team",
+                amount_cents=welcome_cents,
+                currency="usd",
+                status="approved",
+                created_at=now_iso,
+                reason="welcome_bonus",
+            ),
+            *items,
+        ]
+    eligible_cents_adj = int(summary["eligible_cents"]) + max(0, welcome_cents)
     return PartnerMeResponse(
-        referral_link=f"{frontend}/api/r/{code}",
+        referral_link=f"{frontend}/r/{code}",
         payout_threshold_cents=MIN_PAYOUT_CENTS,
-        eligible_cents=summary["eligible_cents"],
+        eligible_cents=eligible_cents_adj,
         paid_cents=summary["paid_cents"],
         eligible_count=summary["eligible_count"],
         pending_count=summary["pending_count"],
         paid_count=summary["paid_count"],
         rejected_count=summary["rejected_count"],
+        referral_clicks=click_count,
+        referral_signups=signup_count,
+        referral_paid_users=paid_ref_count,
+        referral_conversion_percent=conv_pct,
         items=items,
     )
 
@@ -1908,6 +2188,46 @@ async def api_partner_terms() -> PartnerTermsResponse:
     if not _partner_enabled():
         raise HTTPException(404, "Partner program disabled")
     return PartnerTermsResponse(items=partner_terms())
+
+
+@router.get("/partner/leaderboard/top", response_model=PartnerLeaderboardPageOut)
+async def api_partner_leaderboard_top(
+    user: dict | None = Depends(get_current_user),
+    limit: int = Query(5, ge=1, le=20),
+) -> PartnerLeaderboardPageOut:
+    if not _partner_enabled():
+        raise HTTPException(404, "Partner program disabled")
+    if not user:
+        raise HTTPException(401, "Not authenticated")
+    if not _partner_user_allowed(user):
+        raise HTTPException(403, "Partner access not enabled for this account")
+    pool = await get_pool()
+    if not pool:
+        raise HTTPException(503, "Database not configured")
+    return await _partner_leaderboard_page_out(
+        pool,
+        str(user["id"]),
+        page=1,
+        per_page=limit,
+    )
+
+
+@router.get("/partner/leaderboard", response_model=PartnerLeaderboardPageOut)
+async def api_partner_leaderboard(
+    user: dict | None = Depends(get_current_user),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(10, ge=1, le=50),
+) -> PartnerLeaderboardPageOut:
+    if not _partner_enabled():
+        raise HTTPException(404, "Partner program disabled")
+    if not user:
+        raise HTTPException(401, "Not authenticated")
+    if not _partner_user_allowed(user):
+        raise HTTPException(403, "Partner access not enabled for this account")
+    pool = await get_pool()
+    if not pool:
+        raise HTTPException(503, "Database not configured")
+    return await _partner_leaderboard_page_out(pool, str(user["id"]), page=page, per_page=per_page)
 
 
 # --- Payments (Stripe) ---
@@ -5408,6 +5728,75 @@ async def api_admin_referral_block(
     return await _admin_update_commission_status(admin_user, req, status="blocked")
 
 
+@router.get("/admin/referrals/partner-invites", response_model=AdminPartnerInviteListResponse)
+async def api_admin_partner_invites_list(_admin: dict = Depends(get_admin_user)) -> AdminPartnerInviteListResponse:
+    pool = await get_pool()
+    if not pool:
+        raise HTTPException(503, "Database not configured")
+    rows = await partner_invite_list_admin(pool)
+    return AdminPartnerInviteListResponse(items=[_admin_partner_invite_item_from_row(r) for r in rows])
+
+
+@router.post("/admin/referrals/partner-invites", response_model=AdminPartnerInviteCreatedResponse)
+async def api_admin_partner_invites_create(
+    body: AdminPartnerInviteCreateBody,
+    admin_user: dict = Depends(get_admin_user),
+) -> AdminPartnerInviteCreatedResponse:
+    pool = await get_pool()
+    if not pool:
+        raise HTTPException(503, "Database not configured")
+    exp = _admin_partner_invite_parse_expires(body.expires_at)
+    row = await partner_invite_create(
+        pool,
+        label=body.label,
+        expires_at=exp,
+        created_by=str(admin_user["id"]),
+    )
+    plain = row.pop("plain_token", "")
+    item = _admin_partner_invite_item_from_row(row)
+    return AdminPartnerInviteCreatedResponse(item=item, token=str(plain))
+
+
+@router.patch("/admin/referrals/partner-invites/{invite_id}", response_model=AdminPartnerInviteItem)
+async def api_admin_partner_invites_patch(
+    invite_id: str,
+    body: AdminPartnerInvitePatchBody,
+    _admin: dict = Depends(get_admin_user),
+) -> AdminPartnerInviteItem:
+    pool = await get_pool()
+    if not pool:
+        raise HTTPException(503, "Database not configured")
+    exp = _admin_partner_invite_parse_expires(body.expires_at)
+    ok = await partner_invite_set_fields(
+        pool,
+        invite_id,
+        label=body.label,
+        active=body.active,
+        expires_at=exp,
+    )
+    if not ok:
+        raise HTTPException(404, "Invite not found")
+    rows = await partner_invite_list_admin(pool)
+    for r in rows:
+        if str(r["id"]) == invite_id:
+            return _admin_partner_invite_item_from_row(r)
+    raise HTTPException(404, "Invite not found")
+
+
+@router.delete("/admin/referrals/partner-invites/{invite_id}")
+async def api_admin_partner_invites_delete(
+    invite_id: str,
+    _admin: dict = Depends(get_admin_user),
+) -> dict[str, bool]:
+    pool = await get_pool()
+    if not pool:
+        raise HTTPException(503, "Database not configured")
+    ok = await partner_invite_delete(pool, invite_id)
+    if not ok:
+        raise HTTPException(404, "Invite not found")
+    return {"ok": True}
+
+
 # --- Landing reviews (pitchcv.app → my.pitchcv.app/api/reviews*) ---
 @router.post("/reviews", response_model=None, status_code=201)
 async def api_reviews_create(request: Request, body: ReviewCreateIn) -> Response | dict[str, str]:
@@ -5866,6 +6255,13 @@ async def startup_deferred_seed() -> None:
 
 
 app.include_router(router)
+
+
+@app.get("/r/{code}", include_in_schema=False)
+async def referral_redirect_short(code: str, request: Request) -> RedirectResponse:
+    """Short public URL ``/r/{code}`` (no ``/api`` segment); same behavior as ``GET /api/r/{code}``."""
+    return await referral_redirect_response(code, request)
+
 
 # Serve React SPA when frontend_dist is present (e.g. in Docker: /app/frontend_dist)
 _frontend_dist = Path.cwd() / "frontend_dist"

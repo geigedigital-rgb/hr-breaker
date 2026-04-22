@@ -15,6 +15,11 @@ export default defineConfig({
         timeout: 180_000,
         proxyTimeout: 180_000,
       },
+      // Partner referral short links: https://host/r/{code} → backend redirect (no /api in URL)
+      '/r': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+      },
     },
   },
   optimizeDeps: {

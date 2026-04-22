@@ -6,6 +6,14 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from hr_breaker.services import referral_service as rs
+from hr_breaker.services import stripe_service as ss
+
+
+def test_invoice_subscription_id_from_dict() -> None:
+    assert rs.invoice_subscription_id({"subscription": "sub_abc"}) == "sub_abc"
+    assert rs.invoice_subscription_id({"subscription": {"id": "sub_xyz"}}) == "sub_xyz"
+    assert rs.invoice_subscription_id({"subscription": None}) is None
+    assert rs.invoice_subscription_id({}) is None
 
 
 def test_invoice_is_trial_like_with_zero_amount() -> None:
@@ -60,11 +68,18 @@ def test_process_invoice_creates_commission(monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setattr(rs, "referral_get_attribution_by_invited", _attr_by_invited)
     monkeypatch.setattr(rs, "referral_create_commission", _create_commission)
     monkeypatch.setattr(rs, "referral_log_event", _noop)
+    monkeypatch.setattr(rs, "stripe_subscription_allows_referral_commission", lambda _sid: True)
 
     result = asyncio.run(
         rs.process_first_paid_invoice_commission(
             object(),
-            invoice={"id": "in_1", "customer": "cus_1", "amount_paid": 1000, "currency": "usd"},
+            invoice={
+                "id": "in_1",
+                "customer": "cus_1",
+                "subscription": "sub_1",
+                "amount_paid": 1000,
+                "currency": "usd",
+            },
             stripe_event_id="evt_1",
         )
     )
@@ -85,9 +100,118 @@ def test_process_invoice_skips_existing_commission(monkeypatch: pytest.MonkeyPat
     result = asyncio.run(
         rs.process_first_paid_invoice_commission(
             object(),
-            invoice={"id": "in_1", "customer": "cus_1", "amount_paid": 1000, "currency": "usd"},
+            invoice={
+                "id": "in_1",
+                "customer": "cus_1",
+                "subscription": "sub_1",
+                "amount_paid": 1000,
+                "currency": "usd",
+            },
             stripe_event_id="evt_1",
         )
     )
     assert result["created"] is False
     assert result["reason"] == "already_commissioned"
+
+
+def test_process_invoice_skips_without_subscription(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def _user_by_customer(_pool, _customer_id: str):
+        return "invited-uid"
+
+    async def _commission_by_invited(_pool, _invited_user_id: str):
+        return None
+
+    async def _attr_by_invited(_pool, _invited_user_id: str):
+        return {
+            "referrer_user_id": "ref-uid",
+            "expires_at": datetime.now(timezone.utc) + timedelta(days=10),
+        }
+
+    async def _noop(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(rs, "user_get_id_by_stripe_customer_id", _user_by_customer)
+    monkeypatch.setattr(rs, "referral_get_commission_by_invited", _commission_by_invited)
+    monkeypatch.setattr(rs, "referral_get_attribution_by_invited", _attr_by_invited)
+    monkeypatch.setattr(rs, "referral_log_event", _noop)
+
+    result = asyncio.run(
+        rs.process_first_paid_invoice_commission(
+            object(),
+            invoice={"id": "in_1", "customer": "cus_1", "amount_paid": 1000, "currency": "usd"},
+            stripe_event_id="evt_1",
+        )
+    )
+    assert result["created"] is False
+    assert result["reason"] == "no_subscription"
+
+
+def test_process_invoice_skips_trialing_subscription(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def _user_by_customer(_pool, _customer_id: str):
+        return "invited-uid"
+
+    async def _commission_by_invited(_pool, _invited_user_id: str):
+        return None
+
+    async def _attr_by_invited(_pool, _invited_user_id: str):
+        return {
+            "referrer_user_id": "ref-uid",
+            "expires_at": datetime.now(timezone.utc) + timedelta(days=10),
+        }
+
+    async def _noop(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(rs, "user_get_id_by_stripe_customer_id", _user_by_customer)
+    monkeypatch.setattr(rs, "referral_get_commission_by_invited", _commission_by_invited)
+    monkeypatch.setattr(rs, "referral_get_attribution_by_invited", _attr_by_invited)
+    monkeypatch.setattr(rs, "referral_log_event", _noop)
+    monkeypatch.setattr(rs, "stripe_subscription_allows_referral_commission", lambda _sid: False)
+
+    result = asyncio.run(
+        rs.process_first_paid_invoice_commission(
+            object(),
+            invoice={
+                "id": "in_1",
+                "customer": "cus_1",
+                "subscription": "sub_1",
+                "amount_paid": 1000,
+                "currency": "usd",
+            },
+            stripe_event_id="evt_1",
+        )
+    )
+    assert result["created"] is False
+    assert result["reason"] == "subscription_not_monthly_active"
+
+
+def test_stripe_subscription_allows_referral_commission_logic(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Unit-test Stripe gate via mocked Subscription.retrieve."""
+
+    def _stripe_stub(status: str, trial_end: int | None):
+        class FakeStripe:
+            class Subscription:
+                @staticmethod
+                def retrieve(_sid: str):
+                    class Sub:
+                        pass
+
+                    s = Sub()
+                    s.status = status
+                    s.trial_end = trial_end
+                    return s
+
+        return FakeStripe
+
+    monkeypatch.setattr(ss, "_stripe", lambda: _stripe_stub("trialing", 9999999999))
+    assert ss.stripe_subscription_allows_referral_commission("sub_x") is False
+
+    monkeypatch.setattr(ss, "_stripe", lambda: _stripe_stub("active", 9999999999))
+    assert ss.stripe_subscription_allows_referral_commission("sub_x") is False
+
+    past = int((datetime.now(timezone.utc) - timedelta(days=1)).timestamp())
+    monkeypatch.setattr(ss, "_stripe", lambda: _stripe_stub("active", past))
+    assert ss.stripe_subscription_allows_referral_commission("sub_x") is True
+
+    monkeypatch.setattr(ss, "_stripe", lambda: _stripe_stub("active", None))
+    assert ss.stripe_subscription_allows_referral_commission("sub_x") is True

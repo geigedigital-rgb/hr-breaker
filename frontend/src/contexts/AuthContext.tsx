@@ -9,12 +9,14 @@ type AuthContextValue = {
   login: (
     email: string,
     password: string,
-    referral?: { code?: string | null; source_url?: string | null }
+    referral?: { code?: string | null; source_url?: string | null },
+    partnerInviteToken?: string | null,
   ) => Promise<void>;
   register: (
     email: string,
     password: string,
-    referral?: { code?: string | null; source_url?: string | null }
+    referral?: { code?: string | null; source_url?: string | null },
+    partnerInviteToken?: string | null,
   ) => Promise<void>;
   loginWithGoogle: () => void;
   logout: () => void;
@@ -61,8 +63,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const register = useCallback(
-    async (email: string, password: string, referral?: { code?: string | null; source_url?: string | null }) => {
-      const res = await api.register(email, password, referral);
+    async (
+      email: string,
+      password: string,
+      referral?: { code?: string | null; source_url?: string | null },
+      partnerInviteToken?: string | null,
+    ) => {
+      const res = await api.register(email, password, referral, partnerInviteToken);
       setStoredToken(res.access_token);
       setUser(res.user);
       void loadUser();
