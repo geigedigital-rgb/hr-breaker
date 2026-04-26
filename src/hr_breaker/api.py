@@ -117,6 +117,7 @@ from hr_breaker.services.db import (
     referral_get_referrer_by_code,
     referral_log_event,
     referral_mark_processed_event,
+    referral_processed_event_exists,
     referral_count_link_clicks,
     referral_count_paid_referrals,
     referral_count_signups,
@@ -2342,37 +2343,43 @@ async def api_stripe_webhook(request: Request) -> Response:
     if not pool:
         raise HTTPException(503, "Database not configured")
     ev_id = str(getattr(event, "id", "") or "")
-    if ev_id:
-        is_new = await referral_mark_processed_event(pool, ev_id)
-        if not is_new:
-            return Response(status_code=200)
+    # Dedupe only *after* a successful run. If we marked first and the handler returned 5xx,
+    # Stripe's retry would hit "duplicate" and skip the handler — user never gets subscription (bad).
+    if ev_id and await referral_processed_event_exists(pool, ev_id):
+        return Response(status_code=200)
     ev_type = getattr(event, "type", None)
     data = getattr(event, "data", None) or {}
     obj = data.get("object") if isinstance(data, dict) else getattr(data, "object", None)
-    if ev_type == "checkout.session.completed" and obj:
-        await stripe_service.handle_checkout_session_completed(
-            obj, pool,
-            user_update_subscription=user_update_subscription,
-        )
-    elif ev_type in ("customer.subscription.updated", "customer.subscription.created") and obj:
-        await stripe_service.handle_subscription_updated(
-            obj, pool,
-            get_user_id_by_stripe_customer=user_get_id_by_stripe_customer_id,
-            user_update_subscription=user_update_subscription,
-        )
-    elif ev_type == "customer.subscription.deleted" and obj:
-        await stripe_service.handle_subscription_deleted(
-            obj, pool,
-            get_user_id_by_stripe_customer=user_get_id_by_stripe_customer_id,
-            user_update_subscription=user_update_subscription,
-        )
-    elif ev_type == "invoice.payment_succeeded" and obj:
-        if _partner_enabled():
-            await process_first_paid_invoice_commission(
-                pool,
-                invoice=obj,
-                stripe_event_id=ev_id or None,
+    try:
+        if ev_type == "checkout.session.completed" and obj:
+            await stripe_service.handle_checkout_session_completed(
+                obj, pool,
+                user_update_subscription=user_update_subscription,
             )
+        elif ev_type in ("customer.subscription.updated", "customer.subscription.created") and obj:
+            await stripe_service.handle_subscription_updated(
+                obj, pool,
+                get_user_id_by_stripe_customer=user_get_id_by_stripe_customer_id,
+                user_update_subscription=user_update_subscription,
+            )
+        elif ev_type == "customer.subscription.deleted" and obj:
+            await stripe_service.handle_subscription_deleted(
+                obj, pool,
+                get_user_id_by_stripe_customer=user_get_id_by_stripe_customer_id,
+                user_update_subscription=user_update_subscription,
+            )
+        elif ev_type == "invoice.payment_succeeded" and obj:
+            if _partner_enabled():
+                await process_first_paid_invoice_commission(
+                    pool,
+                    invoice=obj,
+                    stripe_event_id=ev_id or None,
+                )
+    except Exception as e:
+        logger.exception("Stripe webhook handler failed event_id=%s type=%s", ev_id, ev_type)
+        raise HTTPException(status_code=500, detail="Stripe webhook handler failed") from e
+    if ev_id:
+        await referral_mark_processed_event(pool, ev_id)
     return Response(status_code=200)
 
 

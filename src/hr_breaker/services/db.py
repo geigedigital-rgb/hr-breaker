@@ -1376,6 +1376,18 @@ async def referral_mark_processed_event(pool, event_id: str) -> bool:
     return "INSERT 0 1" in str(result)
 
 
+async def referral_processed_event_exists(pool, event_id: str) -> bool:
+    """True if this Stripe event id was already fully processed (dedupe after successful handler)."""
+    if not event_id.strip():
+        return False
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            f"SELECT 1 FROM {REFERRAL_PROCESSED_EVENTS_TABLE} WHERE event_id = $1",
+            event_id,
+        )
+    return row is not None
+
+
 async def referral_log_event(
     pool,
     event_type: str,
