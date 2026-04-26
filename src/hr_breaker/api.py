@@ -2354,7 +2354,7 @@ async def api_stripe_webhook(request: Request) -> Response:
             obj, pool,
             user_update_subscription=user_update_subscription,
         )
-    elif ev_type == "customer.subscription.updated" and obj:
+    elif ev_type in ("customer.subscription.updated", "customer.subscription.created") and obj:
         await stripe_service.handle_subscription_updated(
             obj, pool,
             get_user_id_by_stripe_customer=user_get_id_by_stripe_customer_id,

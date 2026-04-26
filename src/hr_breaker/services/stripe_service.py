@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone, timedelta
+from typing import Any
 
 from hr_breaker.config import get_settings
 from hr_breaker.services.usage_audit import log_usage_event
@@ -18,6 +19,39 @@ from hr_breaker.services.usage_audit import log_usage_event
 from hr_breaker.services.db import email_winback_delete_pending_for_user
 
 logger = logging.getLogger(__name__)
+
+
+def _stripe_get(obj: object | None, key: str, default: Any = None) -> Any:
+    """StripeObject and plain dict (some webhook paths) both supported."""
+    if obj is None:
+        return default
+    if isinstance(obj, dict):
+        return obj.get(key, default)
+    return getattr(obj, key, default)
+
+
+def _stripe_meta_dict(obj: object | None) -> dict[str, Any]:
+    raw = _stripe_get(obj, "metadata", None) or {}
+    if isinstance(raw, dict):
+        return {str(k): ("" if v is None else str(v)) for k, v in raw.items()}
+    try:
+        return {str(k): ("" if v is None else str(v)) for k, v in dict(raw).items()}
+    except Exception:
+        return {}
+
+
+def _stripe_expand_id(val: Any) -> str | None:
+    """Subscription / Customer may be id string or nested {'id': ...}."""
+    if val is None:
+        return None
+    if isinstance(val, str) and val.strip():
+        return val.strip()
+    if isinstance(val, dict):
+        i = val.get("id")
+        return str(i).strip() if i else None
+    i = getattr(val, "id", None)
+    return str(i).strip() if i else None
+
 
 # Price key used by frontend/API
 PRICE_KEY_TRIAL = "trial"
@@ -223,32 +257,35 @@ async def handle_checkout_session_completed(
     On successful checkout: for subscription (trial or monthly) sync DB.
     For trial: also charge $2.99 now via invoice; if that fails, cancel the subscription.
     """
-    metadata = getattr(session, "metadata", None) or {}
-    user_id = (metadata or {}).get("hr_breaker_user_id")
-    price_key = (metadata or {}).get("price_key")
+    metadata = _stripe_meta_dict(session)
+    user_id = (metadata.get("hr_breaker_user_id") or "").strip() or None
+    price_key = (metadata.get("price_key") or "").strip() or None
     if not user_id:
         logger.warning("checkout.session.completed: no hr_breaker_user_id in metadata")
         return
 
-    if getattr(session, "mode", None) != "subscription":
+    if (_stripe_get(session, "mode", None) or "") != "subscription":
         return
-    sub_id = getattr(session, "subscription", None)
+    sub_id = _stripe_expand_id(_stripe_get(session, "subscription", None))
     if not sub_id:
+        logger.warning("checkout.session.completed: no subscription on session")
         return
 
     stripe = _stripe()
     sub = stripe.Subscription.retrieve(sub_id)
-    trial_end_ts = getattr(sub, "trial_end", None)
-    current_period_end_ts = getattr(sub, "current_period_end", None)
-    current_period_end = datetime.fromtimestamp(current_period_end_ts, tz=timezone.utc) if current_period_end_ts else None
-    status = getattr(sub, "status", None)
-    trial_end_dt = (
-        datetime.fromtimestamp(trial_end_ts, tz=timezone.utc) if trial_end_ts else None
+    trial_end_ts = _stripe_get(sub, "trial_end", None)
+    current_period_end_ts = _stripe_get(sub, "current_period_end", None)
+    current_period_end = (
+        datetime.fromtimestamp(int(current_period_end_ts), tz=timezone.utc) if current_period_end_ts else None
     )
-    in_trial_window = bool(trial_end_dt and trial_end_dt > datetime.now(timezone.utc))
+    status = (_stripe_get(sub, "status", None) or "").strip()
+    trial_end_dt = datetime.fromtimestamp(int(trial_end_ts), tz=timezone.utc) if trial_end_ts else None
+    now = datetime.now(timezone.utc)
+    in_trial_window = bool(trial_end_dt and trial_end_dt > now)
+    # Same rule as subscription.updated: any Stripe trialing or still inside trial_end → DB trial.
+    db_as_trial = status == "trialing" or in_trial_window
 
-    # DB: trialing or active
-    if status == "trialing" or (status == "active" and in_trial_window and price_key == PRICE_KEY_TRIAL):
+    if db_as_trial:
         period_end = trial_end_dt if trial_end_ts else current_period_end
         await user_update_subscription(
             pool,
@@ -266,7 +303,7 @@ async def handle_checkout_session_completed(
         trial_checkout_err: str | None = None
         if price_key == PRICE_KEY_TRIAL and not (get_settings().stripe_price_trial_id or "").strip():
             try:
-                customer_id = getattr(session, "customer", None)
+                customer_id = _stripe_expand_id(_stripe_get(session, "customer", None))
                 if customer_id:
                     stripe.InvoiceItem.create(
                         customer=customer_id,
@@ -311,7 +348,7 @@ async def handle_checkout_session_completed(
                 logger.debug("email_winback_delete_pending_for_user: %s", e)
         return
 
-    # Active (no trial) — e.g. monthly signup
+    # Active (no trial window) — e.g. monthly signup
     if status == "active" and current_period_end:
         await user_update_subscription(
             pool,
@@ -339,6 +376,15 @@ async def handle_checkout_session_completed(
             await email_winback_delete_pending_for_user(pool, str(user_id))
         except Exception as e:
             logger.debug("email_winback_delete_pending_for_user: %s", e)
+    else:
+        logger.warning(
+            "checkout.session.completed: unhandled subscription state user=%s sub=%s status=%s trial_end=%s period_end=%s",
+            user_id,
+            sub_id,
+            status,
+            trial_end_ts,
+            current_period_end_ts,
+        )
 
 
 async def handle_subscription_updated(
@@ -348,23 +394,36 @@ async def handle_subscription_updated(
     user_update_subscription,
 ) -> None:
     """Sync subscription status and current_period_end from Stripe. trialing → trial, active → monthly."""
-    sub_id = getattr(subscription, "id", None)
-    customer_id = getattr(subscription, "customer", None)
+    sub_id = _stripe_expand_id(_stripe_get(subscription, "id", None))
+    customer_id = _stripe_expand_id(_stripe_get(subscription, "customer", None))
     if not customer_id or not sub_id:
         return
-    status = getattr(subscription, "status", None)
-    current_period_end_ts = getattr(subscription, "current_period_end", None)
-    if not current_period_end_ts:
+    status = (_stripe_get(subscription, "status", None) or "").strip()
+    current_period_end_ts = _stripe_get(subscription, "current_period_end", None)
+    trial_end_ts = _stripe_get(subscription, "trial_end", None)
+    # During trialing, current_period_end is sometimes unset in early events — fall back to trial_end.
+    period_ts = current_period_end_ts or (trial_end_ts if status == "trialing" else None)
+    if not period_ts and trial_end_ts and status == "active":
+        try:
+            te = datetime.fromtimestamp(int(trial_end_ts), tz=timezone.utc)
+            if te > datetime.now(timezone.utc):
+                period_ts = trial_end_ts
+        except (TypeError, ValueError, OSError):
+            period_ts = None
+    if not period_ts:
+        logger.warning(
+            "subscription.updated: missing period end (skip sync) sub=%s status=%s customer=%s",
+            sub_id,
+            status,
+            customer_id,
+        )
         return
-    current_period_end = datetime.fromtimestamp(current_period_end_ts, tz=timezone.utc)
+    current_period_end = datetime.fromtimestamp(int(period_ts), tz=timezone.utc)
     user_id = await get_user_id_by_stripe_customer(pool, customer_id)
     if not user_id:
         logger.warning("subscription.updated: no user for customer %s", customer_id)
         return
-    trial_end_ts = getattr(subscription, "trial_end", None)
-    trial_end_dt = (
-        datetime.fromtimestamp(trial_end_ts, tz=timezone.utc) if trial_end_ts else None
-    )
+    trial_end_dt = datetime.fromtimestamp(int(trial_end_ts), tz=timezone.utc) if trial_end_ts else None
     in_trial_window = bool(trial_end_dt and trial_end_dt > datetime.now(timezone.utc))
 
     if status == "trialing" or (status == "active" and in_trial_window):
@@ -397,7 +456,7 @@ async def handle_subscription_deleted(
     user_update_subscription,
 ) -> None:
     """Clear subscription and set status to free."""
-    customer_id = getattr(subscription, "customer", None)
+    customer_id = _stripe_expand_id(_stripe_get(subscription, "customer", None))
     if not customer_id:
         return
     user_id = await get_user_id_by_stripe_customer(pool, customer_id)
