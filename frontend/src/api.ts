@@ -705,7 +705,7 @@ export type AuthUser = {
   subscription?: Subscription | null;
   partner_program_access?: boolean;
 };
-export type LoginResponse = { access_token: string; user: AuthUser };
+export type LoginResponse = { access_token: string; user: AuthUser; registration?: boolean };
 
 /** sessionStorage key: set from /login?pvc_pi=<token> for auto partner access on first signup. */
 export const PARTNER_INVITE_SIGNUP_STORAGE_KEY = "pitchcv_partner_invite_signup_token";

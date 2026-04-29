@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import * as api from "../api";
+import { trackAuthConversion } from "../analyticsAuth";
 import { useAuth } from "../contexts/AuthContext";
 import { t } from "../i18n";
 
@@ -42,6 +43,10 @@ export default function AuthCallback() {
         }
         if (cancelled) return;
         setUserFromToken(res.access_token);
+        trackAuthConversion({
+          registration: Boolean(res.registration),
+          method: "google",
+        });
         const resumeTok = sessionStorage.getItem(api.OPTIMIZE_RESUME_SESSION_KEY);
         if (resumeTok) {
           sessionStorage.removeItem(api.OPTIMIZE_RESUME_SESSION_KEY);

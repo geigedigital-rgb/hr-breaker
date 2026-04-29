@@ -773,6 +773,7 @@ class AuthUserOut(BaseModel):
 class LoginResponse(BaseModel):
     access_token: str
     user: AuthUserOut
+    registration: bool = Field(False, description="True when this response created a new account (signup)")
 
 
 async def get_current_user(
@@ -1862,11 +1863,8 @@ async def api_register(request: Request, req: LoginRequest) -> JSONResponse:
     token = create_access_token(str(user["id"]), user["email"])
     return _login_json_with_cleared_ref_cookies(
         request,
-        LoginResponse(access_token=token, user=_user_out(user, subscription=subscription)),
+        LoginResponse(access_token=token, user=_user_out(user, subscription=subscription), registration=True),
     )
-
-
-@router.post("/auth/login", response_model=LoginResponse)
 async def api_login(request: Request, req: LoginRequest) -> JSONResponse:
     """Login with email and password."""
     pool = await get_pool()
@@ -1905,7 +1903,7 @@ async def api_login(request: Request, req: LoginRequest) -> JSONResponse:
     subscription = await user_get_subscription(pool, str(user["id"]))
     return _login_json_with_cleared_ref_cookies(
         request,
-        LoginResponse(access_token=token, user=_user_out(user, subscription=subscription)),
+        LoginResponse(access_token=token, user=_user_out(user, subscription=subscription), registration=False),
     )
 
 
@@ -2036,9 +2034,14 @@ async def api_google_exchange(request: Request, req: GoogleCallbackRequest) -> J
         logger.warning("user_record_auth_event google failed: %s", e)
     token = create_access_token(str(user["id"]), user["email"])
     subscription = await user_get_subscription(pool, str(user["id"]))
+    google_registration = auth_event == AUTH_EVENT_REGISTER
     return _login_json_with_cleared_ref_cookies(
         request,
-        LoginResponse(access_token=token, user=_user_out(user, subscription=subscription)),
+        LoginResponse(
+            access_token=token,
+            user=_user_out(user, subscription=subscription),
+            registration=google_registration,
+        ),
     )
 
 

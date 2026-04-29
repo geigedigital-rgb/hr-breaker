@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import * as api from "../api";
 import { setStoredToken } from "../api";
+import { trackAuthConversion } from "../analyticsAuth";
 import { clearAdminPipelineLogOnLogout, setAdminPipelineCapture } from "../adminPipelineLogStore";
 
 type AuthContextValue = {
@@ -57,6 +58,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const res = await api.login(email, password, referral);
       setStoredToken(res.access_token);
       setUser(res.user);
+      trackAuthConversion({
+        registration: Boolean(res.registration),
+        method: "email",
+      });
       void loadUser();
     },
     [loadUser]
@@ -72,6 +77,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const res = await api.register(email, password, referral, partnerInviteToken);
       setStoredToken(res.access_token);
       setUser(res.user);
+      trackAuthConversion({
+        registration: true,
+        method: "email",
+      });
       void loadUser();
     },
     [loadUser]
