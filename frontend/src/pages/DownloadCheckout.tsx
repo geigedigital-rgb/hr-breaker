@@ -1,7 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ComponentType, type ReactNode } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
+  AcademicCapIcon,
+  BanknotesIcon,
+  BriefcaseIcon,
   CheckIcon,
+  ClockIcon,
+  DocumentDuplicateIcon,
+  DocumentTextIcon,
   LockClosedIcon,
   RocketLaunchIcon,
   ShieldCheckIcon,
@@ -38,6 +44,26 @@ function StepItem({
         {label}
       </span>
     </div>
+  );
+}
+
+function SandboxFeatureRow({
+  Icon,
+  children,
+}: {
+  Icon: ComponentType<{ className?: string; strokeWidth?: number }>;
+  children: ReactNode;
+}) {
+  return (
+    <li className="flex gap-4 sm:gap-5 items-start text-[13px] text-[#374151] leading-snug">
+      <span
+        className="inline-flex h-[1lh] w-[22px] shrink-0 items-center justify-center self-start text-[#111827]"
+        aria-hidden
+      >
+        <Icon className="w-[22px] h-[22px] shrink-0" strokeWidth={1.25} />
+      </span>
+      <span className="min-w-0 flex-1">{children}</span>
+    </li>
   );
 }
 
@@ -398,6 +424,30 @@ export default function DownloadCheckout() {
                       </p>
                     </div>
                   </button>
+                </div>
+
+                <div className="mt-2 hidden lg:block rounded-xl border border-[#E6EAF4] bg-white px-6 py-7 shadow-[0_1px_3px_rgba(15,23,42,0.04)] lg:mt-4 lg:px-6 lg:py-6">
+                  <ul className="shrink-0 space-y-6">
+                    <SandboxFeatureRow Icon={DocumentDuplicateIcon}>
+                      <strong className="font-semibold text-[#111827]">Unlimited</strong> ATS scans & AI resume
+                      optimization
+                    </SandboxFeatureRow>
+                    <SandboxFeatureRow Icon={BriefcaseIcon}>
+                      Job-specific tailoring & ATS keyword matching
+                    </SandboxFeatureRow>
+                    <SandboxFeatureRow Icon={DocumentTextIcon}>
+                      Save multiple tailored resumes · PDF export
+                    </SandboxFeatureRow>
+                    <SandboxFeatureRow Icon={AcademicCapIcon}>
+                      Full access 7 days, then {t("upgrade.monthlyTitle").toLowerCase()} · AI optimize & PDF
+                    </SandboxFeatureRow>
+                    <SandboxFeatureRow Icon={ClockIcon}>
+                      Auto-renews at <span className="font-normal">{t("upgrade.monthlyPrice")}</span>/mo after 7 days
+                    </SandboxFeatureRow>
+                    <SandboxFeatureRow Icon={BanknotesIcon}>
+                      <strong className="font-semibold text-[#111827]">Money Back Guarantee</strong>
+                    </SandboxFeatureRow>
+                  </ul>
                 </div>
 
                 <div className="mt-5 lg:hidden">
