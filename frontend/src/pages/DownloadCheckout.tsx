@@ -450,6 +450,10 @@ export default function DownloadCheckout() {
                   </ul>
                 </div>
 
+                <div className="mt-6 hidden lg:block pt-6 border-t border-[#E6EAF4]">
+                  <EmployerTrustStrip />
+                </div>
+
                 <div className="mt-5 lg:hidden">
                   <ul className="rounded-xl border border-[#E6EAF4] bg-white px-4 py-4 space-y-3 shadow-[0_1px_3px_rgba(15,23,42,0.04)]">
                     {[
@@ -517,7 +521,7 @@ export default function DownloadCheckout() {
           </aside>
         </div>
 
-        <div className="mt-8 w-full max-w-[1200px] mx-auto px-6 border-t border-[#E6EAF4] pt-8 lg:mt-10 lg:px-8 lg:pt-10">
+        <div className="mt-8 w-full max-w-[1200px] mx-auto px-6 border-t border-[#E6EAF4] pt-8 lg:hidden">
           <EmployerTrustStrip />
         </div>
       </main>
