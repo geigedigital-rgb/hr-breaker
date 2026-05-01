@@ -105,7 +105,7 @@ class Settings(BaseModel):
     stripe_secret_key: str = ""
     stripe_webhook_secret: str = ""  # Webhook signing secret (whsec_...)
     stripe_publishable_key: str = ""  # For frontend if needed (e.g. Customer Portal)
-    stripe_price_trial_id: str = ""   # One-time $2.99 trial 7-day access
+    stripe_price_trial_id: str = ""   # One-time trial signup fee (e.g. $2.69), 7-day access line item
     stripe_price_monthly_id: str = ""  # Recurring $29/month
 
     # Landing (pitchcv.app): public trial analysis, no auth
