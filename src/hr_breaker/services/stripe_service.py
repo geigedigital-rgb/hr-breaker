@@ -58,7 +58,7 @@ PRICE_KEY_TRIAL = "trial"
 PRICE_KEY_MONTHLY = "monthly"
 TRIAL_DAYS = 7
 # Amount charged at trial signup (cents)
-TRIAL_SIGNUP_CENTS = 269  # $2.69 (legacy webhook path only; prefer STRIPE_PRICE_TRIAL_ID)
+TRIAL_SIGNUP_CENTS = 169  # $1.69 (legacy webhook path only; prefer STRIPE_PRICE_TRIAL_ID)
 TRIAL_SIGNUP_CURRENCY = "usd"
 
 

@@ -619,7 +619,7 @@ const en = {
     currentPlanLabel: "Current plan",
     recommended: "Recommended",
     trialTitle: "Trial 7 days",
-    trialPrice: "$2.69",
+    trialPrice: "$1.69",
     trialDesc: "Full access for 7 days",
     trialAutoRenew: "After 7 days, the subscription will automatically renew at $29.00/month. Cancel at any time.",
     trialFeature1: "Unlimited ATS scans",
