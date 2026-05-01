@@ -681,7 +681,7 @@ const en = {
     sandboxChoosePlanTitle: "Choose your plan",
     sandboxChoosePlanSub: "One-time payment. Cancel anytime.",
     sandboxTrialAccessLabel: "7-day access",
-    sandboxMonthlyAccessLabel: "1-month access",
+    sandboxMonthlyAccessLabel: "Annual Access",
     sandboxPlanFeatureLine: "Full access to all features",
     sandboxShortFeature1: "Download your optimized resume (PDF)",
     sandboxShortFeature2: "Access all templates & customization",
