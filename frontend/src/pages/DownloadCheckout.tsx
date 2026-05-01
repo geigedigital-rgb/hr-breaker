@@ -206,10 +206,9 @@ export default function DownloadCheckout() {
 
       <main className="max-w-[1200px] mx-auto px-6 pt-3 pb-[calc(8rem+env(safe-area-inset-bottom,0px))] lg:px-8 lg:pb-14 lg:pt-8">
         <div className="md:hidden mb-6 space-y-5">
-          <h2 className="text-[22px] font-bold leading-tight tracking-tight text-[#111827]">
+          <h2 className="mx-auto max-w-full text-center text-[clamp(13px,4.35vw,26px)] font-bold leading-tight tracking-tight text-[#111827] whitespace-nowrap">
             {t("upgrade.sandboxResumeOptimizedTitle")}
           </h2>
-          <p className="text-[14px] leading-relaxed text-[#6B7280]">{t("upgrade.sandboxResumeOptimizedSub")}</p>
           <div className="rounded-xl bg-white border border-[#E8ECF4] px-3 py-4 grid grid-cols-3 gap-2 text-center shadow-[0_1px_3px_rgba(15,23,42,0.04)]">
             <div className="min-w-0 space-y-1">
               <ShieldCheckIcon className="mx-auto h-6 w-6 text-emerald-500" aria-hidden />

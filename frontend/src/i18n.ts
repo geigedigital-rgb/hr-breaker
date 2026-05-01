@@ -670,7 +670,6 @@ const en = {
     trustEmployersTitle: "Our users landed jobs at:",
     sandboxGreatJobBadge: "Great job!",
     sandboxResumeOptimizedTitle: "You're about to get hired faster!",
-    sandboxResumeOptimizedSub: "Unlock your full resume and start applying with confidence.",
     sandboxPreviewFullResume: "Preview full resume",
     sandboxBenefitAtsTitle: "ATS-friendly",
     sandboxBenefitAtsSub: "Pass scans",
