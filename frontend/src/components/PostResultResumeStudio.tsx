@@ -97,7 +97,8 @@ export function PostResultResumeStudio({
   initialPhotoDataUrl?: string | null;
   onTemplateChange: (id: string) => void;
   onPhotoChange: (url: string | null) => void;
-  onDownload: () => void;
+  /** PNG/data URL of the main preview (selected template), or null while loading / error */
+  onDownload: (previewDataUrl: string | null) => void;
   onTailorAnother: () => void;
   onImproveEvenStronger: () => void;
   showImproveEvenStronger: boolean;
@@ -490,7 +491,7 @@ export function PostResultResumeStudio({
             <div className="mt-6 flex w-full max-w-[280px] sm:max-w-[320px] flex-col gap-3">
               <button
                 type="button"
-                onClick={onDownload}
+                onClick={() => onDownload(effectivePreviewUrl ?? null)}
                 className="inline-flex min-h-[3rem] w-full items-center justify-center gap-2 rounded-xl text-[15px] font-semibold text-white shadow-[0_0_24px_rgba(69,120,252,0.45)] transition-all hover:-translate-y-0.5 hover:shadow-[0_0_32px_rgba(69,120,252,0.6)]"
                 style={{ background: "linear-gradient(160deg, #5e8afc 0%, #4578FC 45%, #3d6ae6 100%)" }}
               >

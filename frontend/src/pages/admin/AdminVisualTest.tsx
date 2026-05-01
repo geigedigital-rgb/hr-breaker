@@ -2,18 +2,17 @@ import { useMemo, useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { Disclosure, DisclosureButton, DisclosurePanel } from "@headlessui/react";
-import {
-  SparklesIcon,
-  ChevronDownIcon,
-  CheckIcon,
-} from "@heroicons/react/24/outline";
-import { t } from "../../i18n";
+import { SparklesIcon, ChevronDownIcon, CheckIcon, EyeIcon } from "@heroicons/react/24/outline";
+import { t, tFormat } from "../../i18n";
 import * as api from "../../api";
 import { PostResultResumeStudio } from "../../components/PostResultResumeStudio";
+import { storeCheckoutResumePreview } from "../../checkoutResumePreview";
 
 const MOCK = {
   atsPct: 72,
   kwPct: 68,
+  /** Sandbox-only ATS readability score (0–100), shown next to match rings. */
+  atsFriendlyScore: 56,
   displayName: "Anna Muller",
   displaySpecialty: "Senior Product Manager",
   displaySkills: "Agile, Scrum, Jira, SQL, Stakeholder Management, Roadmapping, A/B Testing, OKRs",
@@ -133,6 +132,45 @@ function priorityScore(label: string): number {
   return score;
 }
 
+function boostPctFromIssue(label: string): number {
+  return Math.min(15, 4 + (priorityScore(label) % 10));
+}
+
+function matchTierShort(pct: number): { label: string; barClass: string; textClass: string } {
+  const p = Math.max(0, Math.min(100, Math.round(pct)));
+  if (p >= 85) {
+    return {
+      label: t("optimize.resumeQualityLevelExcellent"),
+      barClass: "bg-gradient-to-r from-emerald-500 to-emerald-400",
+      textClass: "text-emerald-700",
+    };
+  }
+  if (p >= 65) {
+    return {
+      label: t("optimize.resumeQualityLevelStrong"),
+      barClass: "bg-gradient-to-r from-amber-500 to-amber-400",
+      textClass: "text-amber-700",
+    };
+  }
+  if (p >= 45) {
+    return {
+      label: t("optimize.resumeQualityLevelGood"),
+      barClass: "bg-gradient-to-r from-amber-500 to-orange-400",
+      textClass: "text-orange-700",
+    };
+  }
+  return {
+    label: t("optimize.resumeQualityLevelFair"),
+    barClass: "bg-gradient-to-r from-orange-500 to-rose-400",
+    textClass: "text-orange-800",
+  };
+}
+
+function categoryAvgBoost(problems: string[]): number {
+  if (!problems.length) return 0;
+  return Math.round(problems.reduce((s, l) => s + boostPctFromIssue(l), 0) / problems.length);
+}
+
 function mixHex(a: string, b: string, t: number): string {
   const ah = a.replace("#", "");
   const bh = b.replace("#", "");
@@ -244,7 +282,7 @@ export default function AdminVisualTest() {
 
   const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
   const [mockThumbUrl, setMockThumbUrl] = useState<string | null>(null);
-  
+
   useEffect(() => {
     setPortalTarget(document.getElementById("admin-header-portal"));
     
@@ -268,16 +306,6 @@ export default function AdminVisualTest() {
   /** Same band as prod post–auto-improve (82–93), stable for this sandbox session. */
   const studioMatchPct = useMemo(() => 82 + Math.floor(Math.random() * 12), []);
 
-  const problemLabels = useMemo(
-    () =>
-      MOCK.recommendations
-        .flatMap((group) => group.labels)
-        .filter((label) => isProblemLabel(label))
-        .sort((a, b) => priorityScore(b) - priorityScore(a)),
-    [],
-  );
-
-  const topIssues = problemLabels.slice(0, 2);
   const scanSummaryText =
     "The current resume looks acceptable at first glance, but key proof points are missing. This is why responses stay low.";
 
@@ -286,165 +314,209 @@ export default function AdminVisualTest() {
     return { category: group.category, problems };
   });
 
-  const assessmentBlock = (
-    <div className="flex flex-col gap-4 w-full min-w-0 max-w-3xl mx-auto overflow-x-hidden">
-      {/* Scan Results + Overall Match Score Combined (aligned with Optimize.tsx assessment) */}
-      <section className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-4 sm:p-5">
-        <p className="text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider mb-3">{t("optimize.overallMatchScore")}</p>
-        <div className="rounded-xl bg-white border border-[#ECEFF5] p-3.5 sm:p-4.5">
-          <div className="flex flex-col gap-4 sm:gap-5">
-            <div className="flex flex-col lg:flex-row items-center lg:items-center gap-5 lg:gap-6 min-w-0 max-w-full">
-              <div className="flex items-center gap-3 shrink-0 max-w-full min-w-0 justify-center flex-wrap sm:flex-nowrap">
-                <div className="w-[72px] sm:w-[84px] shrink-0 rounded bg-white shadow-[0_2px_8px_-4px_rgba(20,25,40,0.12)] border border-[#E8ECF4] flex flex-col relative aspect-[210/297] overflow-hidden group">
-                  {mockThumbUrl ? (
-                    <img src={mockThumbUrl} alt="Resume preview" className="absolute inset-0 w-full h-full object-cover object-top opacity-90" />
-                  ) : (
-                    <div className="absolute inset-0 bg-[#F8FAFD] flex flex-col p-2 gap-1.5 opacity-70">
-                      <div className="w-1/2 h-1.5 bg-[#DCE3F0] rounded-full mx-auto mb-1" />
-                      <div className="w-full h-1 bg-[#DCE3F0] rounded-full" />
-                      <div className="w-5/6 h-1 bg-[#DCE3F0] rounded-full" />
-                      <div className="w-full h-1 bg-[#DCE3F0] rounded-full mt-1" />
-                      <div className="w-4/5 h-1 bg-[#DCE3F0] rounded-full" />
-                      <div className="w-full h-1 bg-[#DCE3F0] rounded-full" />
-                    </div>
-                  )}
-                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/5 backdrop-blur-[1px] pointer-events-none">
-                    <span className="text-[9px] font-semibold text-[#181819] uppercase tracking-wider bg-white/95 px-1.5 py-0.5 rounded shadow-sm">{t("home.resume")}</span>
-                  </div>
-                </div>
-                <span className="text-[#8A94A6] text-xl font-light">+</span>
-                <div className="w-[72px] sm:w-[84px] shrink-0 rounded bg-white shadow-[0_2px_8px_-4px_rgba(20,25,40,0.12)] border border-[#E8ECF4] flex flex-col relative aspect-[210/297] p-2 text-center justify-center">
-                  <p className="text-[10px] sm:text-[11px] font-semibold text-[#181819] leading-tight line-clamp-4">Senior Product Manager</p>
-                  <p className="text-[8px] sm:text-[9px] text-[#6B7280] mt-1.5 line-clamp-2">TechCorp</p>
-                </div>
+  const currentMatchPct = assessmentQualityPct;
+  const potentialMatchPct = studioMatchPct;
+  const currentTier = matchTierShort(currentMatchPct);
+  const potentialTier = matchTierShort(potentialMatchPct);
+  const assessmentLeftColumn = (
+    <div className="flex flex-col gap-5 w-full min-w-0 overflow-x-hidden">
+      <div className="space-y-1">
+        <h2 className="text-[20px] sm:text-[22px] font-semibold leading-snug tracking-tight text-[#181819]">
+          {t("admin.visualSandbox.assessmentTitleLead")}{" "}
+          <span className="text-[#6366F1]">{t("admin.visualSandbox.assessmentTitleHighlight")}</span>
+        </h2>
+        <p className="text-[13px] leading-relaxed text-[#6B7280]">{t("admin.visualSandbox.assessmentSubtitle")}</p>
+      </div>
+
+      <section className="rounded-2xl border border-[#EBEDF5] bg-white p-4 shadow-[0_2px_16px_-12px_rgba(15,23,42,0.1)] sm:p-6">
+        <p className="mb-5 text-[11px] font-semibold uppercase tracking-wider text-[#6B7280]">{t("optimize.overallMatchScore")}</p>
+        <div className="flex flex-col items-stretch gap-10 lg:flex-row lg:items-center lg:justify-between lg:gap-12">
+          <div className="flex flex-1 flex-wrap justify-center gap-12 sm:justify-center sm:gap-16 lg:gap-20">
+            <div className="flex flex-col items-center text-center">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-[#6B7280]">{t("admin.visualSandbox.currentMatch")}</p>
+              <div className="relative mt-4 h-[128px] w-[128px]">
+                <ScoreRing percent={currentMatchPct} size={128} thickness={15} mode="score" />
+                <span className="absolute inset-0 flex items-center justify-center text-[30px] font-bold tabular-nums text-[#181819]">{currentMatchPct}%</span>
               </div>
-              <div className="hidden lg:block w-px h-[100px] bg-[#E8ECF4] shrink-0" />
-              <div className="lg:hidden w-full h-px bg-[#E8ECF4]" />
-              <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-4 flex-1 w-full min-w-0 justify-center sm:justify-start">
-                <div className="sm:hidden shrink-0 relative w-[104px] h-[104px]">
-                  <ScoreRing percent={assessmentQualityPct} size={104} thickness={12} mode="score" />
-                  <span className="absolute inset-0 flex items-center justify-center text-[19px] font-bold text-[#181819] tabular-nums">{assessmentQualityPct}%</span>
-                </div>
-                <div className="hidden sm:block lg:hidden shrink-0 relative w-[110px] h-[110px]">
-                  <ScoreRing percent={assessmentQualityPct} size={110} thickness={13} mode="score" />
-                  <span className="absolute inset-0 flex items-center justify-center text-[21px] font-bold text-[#181819] tabular-nums">{assessmentQualityPct}%</span>
-                </div>
-                <div className="hidden lg:block shrink-0 relative w-[118px] h-[118px]">
-                  <ScoreRing percent={assessmentQualityPct} size={118} thickness={14} mode="score" />
-                  <span className="absolute inset-0 flex items-center justify-center text-[22px] font-bold text-[#181819] tabular-nums">{assessmentQualityPct}%</span>
-                </div>
-                <div className="text-center sm:text-left flex-1 min-w-0">
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-[#6B7280]">
-                    {t("optimize.resumeQuality")} ({getQualityLevelLabelSandbox(assessmentQualityPct)})
-                  </p>
-                  <p className="mt-1.5 sm:mt-1 text-[11px] sm:text-[12px] text-[#6B7280] leading-relaxed max-w-[280px] mx-auto sm:mx-0">
-                    {t("optimize.resumeQualityHintLow")}
-                  </p>
-                </div>
+              <p className={`mt-4 text-[16px] font-semibold leading-none ${currentTier.textClass}`}>{currentTier.label}</p>
+            </div>
+            <div className="flex flex-col items-center text-center">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-[#6B7280]">{t("admin.visualSandbox.potentialMatch")}</p>
+              <div className="relative mt-4 h-[128px] w-[128px]">
+                <ScoreRing percent={potentialMatchPct} size={128} thickness={15} mode="score" />
+                <span className={`absolute inset-0 flex items-center justify-center text-[30px] font-bold tabular-nums ${potentialTier.textClass}`}>{potentialMatchPct}%</span>
               </div>
+              <p className={`mt-4 text-[16px] font-semibold leading-none ${potentialTier.textClass}`}>{potentialTier.label}</p>
             </div>
           </div>
-        </div>
-
-        <div className="mt-6 w-full min-w-0 max-w-full overflow-x-clip">
-          <div
-            className="w-full min-w-0 max-w-full rounded-[22px] border border-transparent critical-border-shimmer p-[1px] overflow-hidden [contain:paint]"
-            style={{
-              background:
-                "linear-gradient(#FAFAFC, #FAFAFC) padding-box, linear-gradient(120deg, #F36B7F 0%, #E94A63 45%, #C92A4B 100%) border-box, linear-gradient(120deg, rgba(255,255,255,0) 40%, rgba(255,255,255,0.85) 50%, rgba(255,255,255,0) 60%) border-box",
-              backgroundSize: "100% 100%, 100% 100%, 165% 165%",
-              backgroundPosition: "0 0, 0 0, 125% 0",
-              animation: "criticalBorderShimmer 3.2s linear infinite",
-            }}
-          >
-            <div className="rounded-[21px] bg-white p-4 sm:p-5 min-w-0 overflow-x-hidden">
-              <div className="flex items-start gap-2 mb-1.5 w-full min-w-0">
-                <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-[1.5px] border-[#C92A4B] text-[#C92A4B] text-[13px] font-bold">
-                  !
-                </span>
-                <p className="text-[15px] sm:text-base font-semibold text-[#181819] leading-snug min-w-0 flex-1 break-words">
-                  {t("optimize.whyNoCallbacksTitle")}
-                </p>
-              </div>
-              <p className="mt-1.5 text-[13px] text-[#4B5563] leading-relaxed break-words">{scanSummaryText}</p>
-
-              <div className="mt-4 space-y-2.5">
-                {topIssues.map((issue) => (
-                  <Disclosure key={issue}>
-                    {({ open }) => (
-                      <div className="rounded-xl bg-white ring-1 ring-[#EDF1F7]">
-                        <DisclosureButton className="w-full flex items-center gap-3 px-3.5 py-3 text-left hover:bg-[#F8FAFD] transition-colors rounded-xl">
-                          <div className="min-w-0 flex-1">
-                            <p className="text-[13px] font-semibold text-[#181819] leading-snug">{cleanReason(issue)}</p>
-                            <div className="mt-0.5 inline-flex items-center gap-1.5">
-                              <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#FDECEF] px-1.5 text-[11px] font-bold text-[#C92A4B]">
-                                !
-                              </span>
-                              <p className="text-[11px] text-[#C92A4B] font-medium">{t("optimize.criticalReason")}</p>
-                            </div>
-                          </div>
-                          <ChevronDownIcon className={`w-4 h-4 text-[#6B7280] transition-transform shrink-0 ${open ? "rotate-180" : ""}`} />
-                        </DisclosureButton>
-                        <DisclosurePanel className="px-3.5 pb-3.5 pt-0">
-                          <div className="pt-2 border-t border-[#EDF1F7] mt-1">
-                            <p className="text-[12px] text-[#374151] leading-relaxed">
-                              <span className="font-semibold text-[#181819]">{t("optimize.ifIgnored")}</span> {impactFromIssue(issue)}
-                            </p>
-                            <p className="text-[12px] text-[#374151] leading-relaxed mt-1.5">
-                              <span className="font-semibold text-[#181819]">{t("optimize.whatToChange")}</span> {fixFromIssue(issue)}
-                            </p>
-                          </div>
-                        </DisclosurePanel>
-                      </div>
-                    )}
-                  </Disclosure>
-                ))}
-              </div>
-            </div>
+          <div className="flex shrink-0 flex-col items-center justify-center rounded-2xl border border-[#E8ECF4] bg-[#F8FAFC] px-10 py-10 text-center lg:min-w-[220px]">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-[#6B7280]">{t("admin.visualSandbox.atsFriendlyLabel")}</p>
+            <p className="mt-3 flex items-baseline justify-center gap-0.5 tabular-nums">
+              <span className="text-[44px] font-bold leading-none tracking-tight text-[#181819]">{MOCK.atsFriendlyScore}</span>
+              <span className="text-[24px] font-semibold text-[#9CA3AF]">/100</span>
+            </p>
           </div>
         </div>
       </section>
 
-      {/* Improvement Recommendations - Separate Block */}
-      <section className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-4 sm:p-5">
-        <p className="text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider">{t("optimize.recommendationsTitle")}</p>
-        <div className="mt-3 space-y-2.5">
-          {treatmentGroups.map((group) => (
-            <Disclosure key={group.category}>
-              {({ open }) => (
-                <div className="rounded-xl bg-white ring-1 ring-[#EDF1F7]">
-                  <DisclosureButton className="w-full flex items-center gap-3 px-3.5 py-3 text-left">
+      <div className="w-full min-w-0 max-w-full overflow-x-clip">
+        <div
+          className="w-full min-w-0 max-w-full rounded-[22px] border border-transparent critical-border-shimmer p-[1px] overflow-hidden [contain:paint]"
+          style={{
+            background:
+              "linear-gradient(#FAFAFC, #FAFAFC) padding-box, linear-gradient(120deg, #F36B7F 0%, #E94A63 45%, #C92A4B 100%) border-box, linear-gradient(120deg, rgba(255,255,255,0) 40%, rgba(255,255,255,0.85) 50%, rgba(255,255,255,0) 60%) border-box",
+            backgroundSize: "100% 100%, 100% 100%, 165% 165%",
+            backgroundPosition: "0 0, 0 0, 125% 0",
+            animation: "criticalBorderShimmer 3.2s linear infinite",
+          }}
+        >
+          <div className="rounded-[21px] bg-white p-4 sm:p-6 min-w-0 overflow-x-hidden">
+            <div className="flex items-start gap-2 mb-1.5 w-full min-w-0">
+              <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-[1.5px] border-[#C92A4B] text-[#C92A4B] text-[13px] font-bold">
+                !
+              </span>
+              <p className="text-[15px] sm:text-base font-semibold text-[#181819] leading-snug min-w-0 flex-1 break-words">
+                {t("optimize.whyNoCallbacksTitle")}
+              </p>
+            </div>
+            <p className="mt-1.5 text-[13px] text-[#4B5563] leading-relaxed break-words">{scanSummaryText}</p>
+
+            <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3 sm:gap-4">
+              {treatmentGroups.map((group) => {
+                const avgBoost = categoryAvgBoost(group.problems);
+                return (
+                  <div
+                    key={group.category}
+                    className="flex items-start justify-between gap-4 rounded-xl border border-[#EDF1F7] bg-[#FAFBFF] px-4 py-4 sm:min-h-[108px]"
+                  >
                     <div className="min-w-0 flex-1">
-                      <p className="text-[13px] font-semibold text-[#181819] leading-snug">{group.category}</p>
-                      <div className="mt-0.5 inline-flex items-center gap-1.5">
-                        <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#FFF4E5] px-1.5 text-[11px] font-semibold text-[#B45309]">
-                          {group.problems.length}
-                        </span>
-                        <p className="text-[11px] text-[#6B7280]">{t("optimize.issuesToFix")}</p>
-                      </div>
+                      <p className="text-[13px] font-semibold leading-snug text-[#181819]">{group.category}</p>
+                      <p className="mt-1 text-[11px] leading-snug text-[#6B7280]">{t("optimize.issuesToFix")}</p>
                     </div>
-                    <ChevronDownIcon className={`w-4 h-4 text-[#6B7280] transition-transform ${open ? "rotate-180" : ""}`} />
+                    <div className="shrink-0 text-right">
+                      <p className="text-[34px] font-bold leading-none tabular-nums text-[#181819]">{group.problems.length}</p>
+                      {group.problems.length > 0 ? (
+                        <p className="mt-1 text-[17px] font-semibold tabular-nums text-emerald-600">+{avgBoost}%</p>
+                      ) : (
+                        <p className="mt-1 text-[13px] font-medium text-[#9CA3AF]">—</p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <Disclosure>
+              {({ open }) => (
+                <div className="mt-6 border-t border-[#EDF1F7] pt-5">
+                  <DisclosureButton className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] px-4 py-3.5 text-[14px] font-semibold text-[#181819] transition-colors hover:bg-[#F3F4F6]">
+                    <span>{t("admin.visualSandbox.expandIssueDetails")}</span>
+                    <ChevronDownIcon className={`h-5 w-5 shrink-0 text-[#6B7280] transition-transform ${open ? "rotate-180" : ""}`} />
                   </DisclosureButton>
-                  <DisclosurePanel className="px-3.5 pb-3.5 pt-0">
-                    {group.problems.length > 0 ? (
-                      <ul className="space-y-1.5 pl-0">
-                        {group.problems.map((label) => (
-                          <li key={`${group.category}-${label}`} className="px-0.5 py-1">
-                            <p className="text-[12px] font-medium text-[#181819] leading-snug">{cleanReason(label)}</p>
-                            <p className="mt-0.5 text-[11px] text-[#6B7280] leading-relaxed">{fixFromIssue(label)}</p>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="text-[12px] text-[#6B7280]">{t("optimize.noBlockingInCategory")}</p>
-                    )}
+                  <DisclosurePanel className="mt-5 space-y-6">
+                    {treatmentGroups.map((group) => (
+                      <div key={`detail-${group.category}`}>
+                        <p className="text-[13px] font-semibold text-[#181819]">{group.category}</p>
+                        {group.problems.length > 0 ? (
+                          <ul className="mt-3 space-y-3">
+                            {group.problems.map((label) => (
+                              <li key={`${group.category}-${label}`} className="rounded-xl bg-[#F8FAFD] px-3.5 py-3 ring-1 ring-[#EDF1F7]">
+                                <p className="text-[12px] font-semibold text-[#181819]">{cleanReason(label)}</p>
+                                <p className="mt-1.5 text-[12px] leading-relaxed text-[#4B5563]">
+                                  <span className="font-semibold text-[#181819]">{t("optimize.ifIgnored")}</span> {impactFromIssue(label)}
+                                </p>
+                                <p className="mt-1.5 text-[12px] leading-relaxed text-[#4B5563]">
+                                  <span className="font-semibold text-[#181819]">{t("optimize.whatToChange")}</span> {fixFromIssue(label)}
+                                </p>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="mt-2 text-[12px] text-[#6B7280]">{t("optimize.noBlockingInCategory")}</p>
+                        )}
+                      </div>
+                    ))}
                   </DisclosurePanel>
                 </div>
               )}
             </Disclosure>
-          ))}
+          </div>
+        </div>
+      </div>
+
+      <section className="rounded-2xl border border-[#E8E4FF] bg-gradient-to-br from-[#F5F3FF] via-white to-[#EDE9FE] p-5 shadow-sm sm:p-6">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-center">
+          <div className="flex min-w-0 flex-1 gap-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#818CF8] to-[#6366F1] shadow-md">
+              <SparklesIcon className="h-7 w-7 text-white" aria-hidden />
+            </div>
+            <div className="min-w-0 flex-1 space-y-3">
+              <p className="text-[14px] font-semibold leading-snug text-[#181819] sm:text-[15px]">
+                {tFormat(t("admin.visualSandbox.autoImproveBannerTitle"), { pct: potentialMatchPct })}
+              </p>
+              <ul className="space-y-1.5">
+                {[t("admin.visualSandbox.autoImproveBullet1"), t("admin.visualSandbox.autoImproveBullet2"), t("admin.visualSandbox.autoImproveBullet3")].map((line) => (
+                  <li key={line} className="flex items-center gap-2 text-[12px] text-[#374151]">
+                    <CheckIcon className="h-4 w-4 shrink-0 text-emerald-600" strokeWidth={2.5} aria-hidden />
+                    {line}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full px-6 py-3 text-[14px] font-semibold text-white shadow-[0_4px_14px_-4px_rgba(99,102,241,0.55)] transition-all hover:opacity-[0.97] active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-[#6366F1]/35 focus:ring-offset-2"
+            style={{ background: "linear-gradient(165deg, #818cf8 0%, #6366f1 45%, #4f46e5 100%)" }}
+          >
+            {t("admin.visualSandbox.autoImproveBannerCta")}
+          </button>
         </div>
       </section>
+    </div>
+  );
+
+  const assessmentRightColumn = (
+    <aside className="w-full min-w-0 lg:sticky lg:top-20 lg:self-start">
+      <div className="mb-4">
+        <h3 className="text-[15px] font-semibold text-[#181819]">{t("admin.visualSandbox.previewTitle")}</h3>
+        <p className="mt-1 text-[12px] leading-relaxed text-[#6B7280]">{t("admin.visualSandbox.previewSubtitle")}</p>
+      </div>
+
+      <div className="overflow-hidden rounded-2xl border border-[#E8ECF4] bg-white shadow-[0_8px_32px_-12px_rgba(15,23,42,0.12)]">
+        <div className="relative aspect-[210/270] bg-[#F4F6FA]">
+          {mockThumbUrl ? (
+            <img src={mockThumbUrl} alt="" className="absolute inset-0 h-full w-full object-cover object-top" />
+          ) : (
+            <div className="absolute inset-0 flex gap-3 p-4">
+              <div className="w-[28%] shrink-0 rounded-lg bg-[#1e3a5f]" />
+              <div className="min-w-0 flex-1 space-y-2 pt-2">
+                <div className="mx-auto h-2 w-1/2 rounded-full bg-[#DCE3F0]" />
+                <div className="h-1.5 w-full rounded bg-[#E8ECF4]" />
+                <div className="h-1.5 w-5/6 rounded bg-[#E8ECF4]" />
+                <div className="mt-4 h-1.5 w-full rounded bg-[#E8ECF4]" />
+                <div className="h-1.5 w-4/5 rounded bg-[#E8ECF4]" />
+              </div>
+            </div>
+          )}
+          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-white via-white/95 to-transparent px-4 pb-4 pt-16">
+            <button
+              type="button"
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#C7D2FE] bg-white/95 py-2.5 text-[13px] font-semibold text-[#4338CA] shadow-sm backdrop-blur-sm"
+            >
+              <EyeIcon className="h-4 w-4 shrink-0" aria-hidden />
+              {t("admin.visualSandbox.viewFullResume")}
+            </button>
+          </div>
+        </div>
+      </div>
+    </aside>
+  );
+
+  const assessmentBlock = (
+    <div className="flex w-full min-w-0 flex-col gap-8 lg:flex-row lg:items-start lg:gap-10">
+      <div className="w-full min-w-0 lg:w-[65%]">{assessmentLeftColumn}</div>
+      <div className="w-full min-w-0 lg:w-[35%]">{assessmentRightColumn}</div>
     </div>
   );
 
@@ -545,9 +617,12 @@ export default function AdminVisualTest() {
           initialPhotoDataUrl={sandboxPhoto}
           onTemplateChange={setSandboxTemplateId}
           onPhotoChange={setSandboxPhoto}
-          onDownload={() =>
-            navigate("/checkout/download-resume?pending=admin_ui_preview&return_to=%2Fadmin%2Fcheckout-preview")
-          }
+          onDownload={(previewUrl) => {
+            storeCheckoutResumePreview(previewUrl);
+            navigate(
+              "/checkout/download-resume?pending=admin_ui_preview&sandbox=1&return_to=%2Fadmin%2Fcheckout-preview",
+            );
+          }}
           onTailorAnother={() => {}}
           onImproveEvenStronger={() => {}}
           showImproveEvenStronger={studioMatchPct <= 82}
@@ -603,35 +678,6 @@ export default function AdminVisualTest() {
             <h2 className="text-sm font-semibold text-[#6B7280] uppercase tracking-wider mb-3">Stage: Assessment (Diagnosis)</h2>
           )}
           {assessmentBlock}
-          {/* Same placement as Optimize.tsx after diagnosis (stage === "assessment") */}
-          <div className="mt-8 sm:mt-10 mb-6 flex flex-col items-center text-center px-2">
-            <div className="inline-flex items-center justify-center gap-2 sm:gap-3 mb-4 w-full max-w-[320px] sm:max-w-none">
-              <svg className="w-5 h-5 sm:w-7 sm:h-7 shrink-0" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
-                <path d="M12 1L14.8 8.2L22 11L14.8 13.8L12 21L9.2 13.8L2 11L9.2 8.2L12 1Z" fill="url(#sparkle-grad-visual-sandbox)" />
-                <defs>
-                  <linearGradient id="sparkle-grad-visual-sandbox" x1="2" y1="2" x2="22" y2="22" gradientUnits="userSpaceOnUse">
-                    <stop stopColor="#4578FC" />
-                    <stop offset="0.5" stopColor="#5e8afc" />
-                    <stop offset="1" stopColor="#2E9FFF" />
-                  </linearGradient>
-                </defs>
-              </svg>
-              <span className="text-[17px] sm:text-[22px] font-medium text-[#181819] leading-tight text-left sm:text-center">
-                {t("optimize.nextStepImproveTitle")}
-              </span>
-            </div>
-            <button
-              type="button"
-              className="inline-flex items-center justify-center gap-2 rounded-full px-8 py-3.5 text-[15px] font-semibold text-white shadow-[0_4px_14px_-4px_rgba(69,120,252,0.55)] hover:shadow-[0_6px_20px_-4px_rgba(69,120,252,0.45)] hover:opacity-[0.97] active:scale-[0.99] transition-all focus:outline-none focus:ring-2 focus:ring-[#4578FC]/35 focus:ring-offset-2"
-              style={{
-                background: "linear-gradient(165deg, #5e8afc 0%, #4578FC 42%, #3d6ae6 100%)",
-              }}
-            >
-              <SparklesIcon className="w-5 h-5 shrink-0" aria-hidden />
-              {t("optimize.applyAutoImprove")}
-            </button>
-            <p className="mt-3 text-[11px] text-[#6B7280] max-w-md leading-relaxed">{t("optimize.strictNote")}</p>
-          </div>
         </section>
       )}
 

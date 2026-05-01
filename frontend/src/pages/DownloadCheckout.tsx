@@ -1,86 +1,16 @@
-import { useEffect, useMemo, useState, type ComponentType, type ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
-  AcademicCapIcon,
-  BanknotesIcon,
-  BriefcaseIcon,
   CheckIcon,
-  ClockIcon,
-  DocumentDuplicateIcon,
-  DocumentTextIcon,
+  LockClosedIcon,
+  RocketLaunchIcon,
+  ShieldCheckIcon,
+  SparklesIcon,
   XMarkIcon,
 } from "@heroicons/react/24/outline";
 import * as api from "../api";
 import { useAuth } from "../contexts/AuthContext";
 import { t } from "../i18n";
-
-/** Short label for checkout (filename-style, ends with .pdf); stem often starts with the candidate name. */
-function shortenResumeFileLabel(raw: string, maxChars = 34): string {
-  let s = raw.trim() || "Resume.pdf";
-  if (!/\.pdf$/i.test(s)) s = `${s.replace(/\.[^/.]+$/, "")}.pdf`;
-  if (s.length <= maxChars) return s;
-  const ext = ".pdf";
-  const stem = s.slice(0, -ext.length) || "Resume";
-  const budget = maxChars - ext.length - 1;
-  const keep = Math.max(6, budget);
-  return `${stem.slice(0, keep)}…${ext}`;
-}
-
-/** English "Improved_" prefix for the reserved-PDF line — same in sandbox (no doc) and prod. */
-function improvedResumeBasename(raw: string): string {
-  let s = raw.trim() || "Resume.pdf";
-  if (!/\.pdf$/i.test(s)) s = `${s.replace(/\.[^/.]+$/, "")}.pdf`;
-  const stem = s.slice(0, -4);
-  if (/^improved_/i.test(stem)) return `${stem}.pdf`;
-  return `Improved_${stem}.pdf`;
-}
-
-function improvedResumeCheckoutLabel(raw: string, maxChars = 34): string {
-  return shortenResumeFileLabel(improvedResumeBasename(raw), maxChars);
-}
-
-function CheckoutResumeReserveBlock({
-  fileShort,
-  fileRaw,
-  countdownLabel,
-}: {
-  fileShort: string;
-  fileRaw: string;
-  countdownLabel: string | null;
-}) {
-  return (
-    <div className="mb-3 rounded-xl border border-[#E6EAF4] bg-[#f7f9fc] px-3 py-2.5 sm:px-3.5 sm:py-3">
-      <div className="flex min-w-0 items-center justify-between gap-2 sm:gap-3">
-        <div className="flex min-w-0 flex-1 items-center gap-2.5">
-          <img
-            src="/media/pdf-icon.svg"
-            alt=""
-            width={28}
-            height={28}
-            className="h-7 w-7 shrink-0 object-contain opacity-95"
-            decoding="async"
-          />
-          <span className="min-w-0 truncate text-left text-sm font-semibold text-[#111827]" title={fileRaw}>
-            {fileShort}
-          </span>
-        </div>
-        <span
-          className={`shrink-0 tabular-nums text-sm font-medium leading-none tracking-tight ${
-            countdownLabel ? "text-[#64748B]" : "text-[#94a3b8]"
-          }`}
-          aria-live={countdownLabel ? "polite" : undefined}
-        >
-          {countdownLabel ?? "--:--"}
-        </span>
-      </div>
-      <p className="mt-2.5 text-left text-sm font-normal leading-relaxed text-[#5B6378]">
-        {countdownLabel
-          ? t("upgrade.downloadCheckoutReserveUrgencyLine")
-          : t("upgrade.downloadCheckoutReservedFileHintNoTimer")}
-      </p>
-    </div>
-  );
-}
 
 function StepItem({
   label,
@@ -111,26 +41,6 @@ function StepItem({
   );
 }
 
-function SandboxFeatureRow({
-  Icon,
-  children,
-}: {
-  Icon: ComponentType<{ className?: string; strokeWidth?: number }>;
-  children: ReactNode;
-}) {
-  return (
-    <li className="flex gap-4 sm:gap-5 items-start text-[13px] text-[#374151] leading-snug">
-      <span
-        className="inline-flex h-[1lh] w-[22px] shrink-0 items-center justify-center self-start text-[#111827]"
-        aria-hidden
-      >
-        <Icon className="w-[22px] h-[22px] shrink-0" strokeWidth={1.25} />
-      </span>
-      <span className="min-w-0 flex-1">{children}</span>
-    </li>
-  );
-}
-
 /** Strikethrough “was” prices shown before current trial / monthly amounts */
 const PRICE_WAS_TRIAL = "$5.99";
 const PRICE_WAS_MONTHLY = "$39";
@@ -154,81 +64,6 @@ const TRUST_EMPLOYER_LOGOS: { file: string; label: string }[] = [
   { file: "spotyfy.png", label: "Spotify" },
   { file: "vw.png", label: "Volkswagen" },
 ];
-
-const TRUSTPILOT_GREEN = "#00B67A";
-
-function TrustpilotStarFull({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path
-        fill={TRUSTPILOT_GREEN}
-        d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"
-      />
-    </svg>
-  );
-}
-
-function TrustpilotStars45({ size = "lg" }: { size?: "lg" | "sm" }) {
-  const dim = size === "lg" ? "h-8 w-8" : "h-3.5 w-3.5";
-  return (
-    <div className="flex items-center justify-center gap-0.5">
-      {[0, 1, 2, 3].map((i) => (
-        <TrustpilotStarFull key={i} className={`${dim} shrink-0`} />
-      ))}
-      <div className={`relative shrink-0 ${dim}`}>
-        <TrustpilotStarFull className={`${dim} opacity-[0.22]`} />
-        <div className="absolute inset-0 w-1/2 overflow-hidden">
-          <TrustpilotStarFull className={dim} />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function TrustpilotStars5Small() {
-  return (
-    <div className="flex justify-start gap-0.5">
-      {[0, 1, 2, 3, 4].map((i) => (
-        <TrustpilotStarFull key={i} className="h-3.5 w-3.5 shrink-0" />
-      ))}
-    </div>
-  );
-}
-
-function CheckoutMobileTrustReviews() {
-  return (
-    <div className="flex w-full flex-col items-center gap-4">
-      <h2 className="text-center text-lg font-semibold tracking-tight text-[#111827]">
-        {t("upgrade.checkoutReviewsTitle")}
-      </h2>
-      <div className="flex w-full flex-col items-center gap-2 rounded-xl border border-[#E8EDF3] bg-[#fafbfc] px-4 py-5">
-        <p className="text-2xl font-bold leading-none text-[#191919]">{t("upgrade.checkoutTrustExcellent")}</p>
-        <TrustpilotStars45 size="lg" />
-        <p className="text-center text-sm font-semibold text-[#191919]">{t("upgrade.checkoutTrustReviewsOnTrustpilot")}</p>
-        <p className="text-base font-bold text-[#191919]">{t("upgrade.checkoutTrustScoreOutOf5")}</p>
-        <p className="text-center text-xs leading-snug text-[#6B7280]">{t("upgrade.checkoutTrustBasedOnReviews")}</p>
-      </div>
-      <div className="flex w-full flex-col gap-3 text-left">
-        <article className="rounded-xl border border-[#E6EAF4] bg-[#f7f9fc] px-3.5 py-3">
-          <p className="text-sm font-semibold text-[#111827]">{t("upgrade.checkoutReview1Author")}</p>
-          <div className="my-1.5">
-            <TrustpilotStars5Small />
-          </div>
-          <p className="text-[13px] leading-snug text-[#374151]">{t("upgrade.checkoutReview1Text")}</p>
-          <p className="mt-2 text-[11px] text-[#94a3b8]">{t("upgrade.checkoutReview1Ago")}</p>
-        </article>
-        <article className="rounded-xl border border-[#E6EAF4] bg-[#f7f9fc] px-3.5 py-3">
-          <p className="text-sm font-semibold text-[#111827]">{t("upgrade.checkoutReview2Author")}</p>
-          <div className="my-1.5">
-            <TrustpilotStars5Small />
-          </div>
-          <p className="text-[13px] leading-snug text-[#374151]">{t("upgrade.checkoutReview2Text")}</p>
-          <p className="mt-2 text-[11px] text-[#94a3b8]">{t("upgrade.checkoutReview2Ago")}</p>
-        </article>
-      </div>
-    </div>
-  );
-}
 
 function EmployerTrustStrip() {
   return (
@@ -268,11 +103,6 @@ export default function DownloadCheckout() {
   const pendingExportToken = (fromState?.pendingExportToken || params.get("pending") || "").trim();
   const returnTo = (fromState?.returnTo || params.get("return_to") || "/optimize").trim() || "/optimize";
   const resumeDocRaw = (fromState?.resumeDoc || params.get("doc") || "").trim();
-  const resumeDocFullLabel = useMemo(() => improvedResumeBasename(resumeDocRaw), [resumeDocRaw]);
-  const resumeDocDisplay = useMemo(
-    () => improvedResumeCheckoutLabel(resumeDocRaw || "Resume.pdf"),
-    [resumeDocRaw],
-  );
   const canceled = params.get("cancel") === "1";
   const sandboxMode = params.get("sandbox") === "1";
   const expiresAtRaw = (params.get("exp") || "").trim();
@@ -287,15 +117,6 @@ export default function DownloadCheckout() {
     !sandboxMode && pendingExportToken
       ? Math.max(0, Math.floor((effectiveEndMs - nowMs) / 1000))
       : null;
-
-  const displayCountdownSeconds =
-    pendingExportToken ? Math.max(0, Math.floor((effectiveEndMs - nowMs) / 1000)) : null;
-  const reserveCountdownLabel = useMemo(() => {
-    if (displayCountdownSeconds === null) return null;
-    const mm = Math.floor(displayCountdownSeconds / 60);
-    const ss = displayCountdownSeconds % 60;
-    return `${String(mm).padStart(2, "0")}:${String(ss).padStart(2, "0")}`;
-  }, [displayCountdownSeconds]);
 
   useEffect(() => {
     if (!pendingExportToken) return;
@@ -383,8 +204,32 @@ export default function DownloadCheckout() {
         </div>
       </header>
 
-      <main className="max-w-[1200px] mx-auto px-6 pt-3 pb-[calc(16rem+env(safe-area-inset-bottom,0px))] lg:px-8 lg:pb-14 lg:pt-8">
-        <h1 className="text-center mb-3 lg:mb-5 max-w-2xl mx-auto">
+      <main className="max-w-[1200px] mx-auto px-6 pt-3 pb-[calc(8rem+env(safe-area-inset-bottom,0px))] lg:px-8 lg:pb-14 lg:pt-8">
+        <div className="md:hidden mb-6 space-y-5">
+          <h2 className="text-[22px] font-bold leading-tight tracking-tight text-[#111827]">
+            {t("upgrade.sandboxResumeOptimizedTitle")}
+          </h2>
+          <p className="text-[14px] leading-relaxed text-[#6B7280]">{t("upgrade.sandboxResumeOptimizedSub")}</p>
+          <div className="rounded-xl bg-white border border-[#E8ECF4] px-3 py-4 grid grid-cols-3 gap-2 text-center shadow-[0_1px_3px_rgba(15,23,42,0.04)]">
+            <div className="min-w-0 space-y-1">
+              <ShieldCheckIcon className="mx-auto h-6 w-6 text-emerald-500" aria-hidden />
+              <p className="text-[11px] font-semibold text-[#111827] leading-tight">{t("upgrade.sandboxBenefitAtsTitle")}</p>
+              <p className="text-[10px] text-[#6B7280] leading-tight">{t("upgrade.sandboxBenefitAtsSub")}</p>
+            </div>
+            <div className="min-w-0 space-y-1 border-x border-[#E5E7EB] px-1">
+              <SparklesIcon className="mx-auto h-6 w-6 text-violet-500" aria-hidden />
+              <p className="text-[11px] font-semibold text-[#111827] leading-tight">{t("upgrade.sandboxBenefitInterviewsTitle")}</p>
+              <p className="text-[10px] text-[#6B7280] leading-tight">{t("upgrade.sandboxBenefitInterviewsSub")}</p>
+            </div>
+            <div className="min-w-0 space-y-1">
+              <RocketLaunchIcon className="mx-auto h-6 w-6 text-pink-500" aria-hidden />
+              <p className="text-[11px] font-semibold text-[#111827] leading-tight">{t("upgrade.sandboxBenefitInstantTitle")}</p>
+              <p className="text-[10px] text-[#6B7280] leading-tight">{t("upgrade.sandboxBenefitInstantSub")}</p>
+            </div>
+          </div>
+        </div>
+
+        <h1 className="text-center mb-3 lg:mb-5 max-w-2xl mx-auto hidden md:block">
           <span className="block text-3xl leading-tight md:text-[2rem] md:leading-tight font-semibold tracking-tight text-[#111827]">
             {t("upgrade.checkoutPageTitleLine1")}
           </span>
@@ -392,15 +237,6 @@ export default function DownloadCheckout() {
             {t("upgrade.checkoutPageTitleLine2")}
           </span>
         </h1>
-
-        <div className="w-full md:hidden py-6 mb-6">
-          <img
-            src="/media/best-resume-download.svg"
-            alt=""
-            className="mx-auto h-auto w-full max-w-full object-contain object-center max-h-[min(48vh,360px)]"
-            decoding="async"
-          />
-        </div>
 
         {showCheckoutSubtitle ? (
           <div className="mb-4 space-y-2 text-[13px] text-[#5B6378] max-w-2xl mx-auto text-center leading-relaxed">
@@ -441,8 +277,12 @@ export default function DownloadCheckout() {
                               <span className="h-2 w-2 rounded-full bg-[#4578FC]" />
                             ) : null}
                           </span>
-                          <div className="flex min-w-0 flex-wrap items-center gap-2">
-                            <span className="text-sm font-medium text-[#111827]">7-days</span>
+                          <div className="flex min-w-0 flex-wrap items-start gap-x-2 gap-y-1">
+                            <div className="flex min-w-0 flex-col gap-0.5">
+                              <span className="text-sm font-medium text-[#111827]">
+                                {t("upgrade.sandboxTrialAccessLabel")}
+                              </span>
+                            </div>
                             <span className="inline-flex shrink-0 items-center rounded-md bg-gradient-to-r from-[#4578FC] to-[#5B6CF0] px-3 py-1 text-xs font-bold uppercase tracking-wide text-white shadow-sm sm:px-3.5 sm:py-1.5 sm:text-[13px]">
                               Most popular
                             </span>
@@ -469,7 +309,11 @@ export default function DownloadCheckout() {
                               <span className="h-2 w-2 rounded-full bg-[#4578FC]" />
                             ) : null}
                           </span>
-                          <p className="text-sm font-medium text-[#111827]">7-days</p>
+                          <div className="flex min-w-0 flex-col gap-0.5">
+                            <p className="text-sm font-medium text-[#111827]">
+                              {t("upgrade.sandboxTrialAccessLabel")}
+                            </p>
+                          </div>
                         </div>
                         <p className="flex flex-wrap items-baseline gap-2 text-xl lg:text-2xl font-bold tracking-tight text-[#111827] tabular-nums leading-none">
                           <span className="text-base lg:text-lg font-semibold text-[#9CA3AF] line-through decoration-[#9CA3AF]">
@@ -508,7 +352,11 @@ export default function DownloadCheckout() {
                             <span className="h-2 w-2 rounded-full bg-[#4578FC]" />
                           ) : null}
                         </span>
-                        <p className="text-sm font-medium text-[#111827]">{t("upgrade.monthlyTitle")}</p>
+                        <div className="flex min-w-0 flex-col gap-0.5">
+                          <p className="text-sm font-medium text-[#111827]">
+                            {t("upgrade.sandboxMonthlyAccessLabel")}
+                          </p>
+                        </div>
                       </div>
                       <div className="shrink-0 text-right">
                         <p className="flex flex-wrap items-baseline justify-end gap-2 text-2xl sm:text-3xl font-bold tracking-tight text-[#111827] tabular-nums leading-none">
@@ -523,19 +371,23 @@ export default function DownloadCheckout() {
                       </div>
                     </div>
                     <div className="hidden lg:flex lg:flex-col lg:gap-2">
-                      <div className="flex items-start gap-2.5">
-                        <span
-                          className={`mt-0.5 flex h-4 w-4 shrink-0 rounded-full border-2 items-center justify-center ${
-                            selectedPlan === "monthly" ? "border-[#4578FC]" : "border-[#D1D5DB]"
-                          }`}
-                          aria-hidden
-                        >
-                          {selectedPlan === "monthly" ? (
-                            <span className="h-2 w-2 rounded-full bg-[#4578FC]" />
-                          ) : null}
-                        </span>
-                        <p className="text-sm font-medium text-[#111827]">{t("upgrade.monthlyTitle")}</p>
-                      </div>
+                        <div className="flex items-start gap-2.5">
+                          <span
+                            className={`mt-0.5 flex h-4 w-4 shrink-0 rounded-full border-2 items-center justify-center ${
+                              selectedPlan === "monthly" ? "border-[#4578FC]" : "border-[#D1D5DB]"
+                            }`}
+                            aria-hidden
+                          >
+                            {selectedPlan === "monthly" ? (
+                              <span className="h-2 w-2 rounded-full bg-[#4578FC]" />
+                            ) : null}
+                          </span>
+                          <div className="flex min-w-0 flex-col gap-0.5">
+                            <p className="text-sm font-medium text-[#111827]">
+                              {t("upgrade.sandboxMonthlyAccessLabel")}
+                            </p>
+                          </div>
+                        </div>
                       <p className="flex flex-wrap items-baseline gap-2 text-xl lg:text-2xl font-bold tracking-tight text-[#111827] tabular-nums leading-none">
                         <span className="text-base lg:text-lg font-semibold text-[#9CA3AF] line-through decoration-[#9CA3AF]">
                           {PRICE_WAS_MONTHLY}
@@ -549,37 +401,27 @@ export default function DownloadCheckout() {
                   </button>
                 </div>
 
-                <div className="mt-2 rounded-xl border border-[#E6EAF4] bg-white px-6 py-7 shadow-[0_1px_3px_rgba(15,23,42,0.04)] sm:rounded-none sm:border-0 sm:bg-transparent sm:px-5 sm:py-6 sm:shadow-none lg:mt-2 lg:px-6 lg:py-6">
-                  <ul className="shrink-0 space-y-[20px] lg:space-y-6">
-                    <SandboxFeatureRow Icon={DocumentDuplicateIcon}>
-                      <strong className="font-semibold text-[#111827]">Unlimited</strong> ATS scans &amp; AI resume
-                      optimization
-                    </SandboxFeatureRow>
-                    <SandboxFeatureRow Icon={BriefcaseIcon}>
-                      Job-specific tailoring &amp; ATS keyword matching
-                    </SandboxFeatureRow>
-                    <SandboxFeatureRow Icon={DocumentTextIcon}>
-                      Save multiple tailored resumes · PDF export
-                    </SandboxFeatureRow>
-                    <SandboxFeatureRow Icon={AcademicCapIcon}>
-                      Full access 7 days, then {t("upgrade.monthlyTitle").toLowerCase()} · AI optimize &amp; PDF
-                    </SandboxFeatureRow>
-                    <SandboxFeatureRow Icon={ClockIcon}>
-                      Auto-renews at <span className="font-normal">{t("upgrade.monthlyPrice")}</span>/mo after 7 days
-                    </SandboxFeatureRow>
-                    <SandboxFeatureRow Icon={BanknotesIcon}>
-                      <strong className="font-semibold text-[#111827]">Money Back Guarantee</strong>
-                    </SandboxFeatureRow>
+                <div className="mt-5 lg:hidden">
+                  <ul className="rounded-xl border border-[#E6EAF4] bg-white px-4 py-4 space-y-3 shadow-[0_1px_3px_rgba(15,23,42,0.04)]">
+                    {[
+                      t("upgrade.sandboxShortFeature1"),
+                      t("upgrade.sandboxShortFeature2"),
+                      t("upgrade.sandboxShortFeature3"),
+                      t("upgrade.sandboxShortFeature4"),
+                    ].map((text) => (
+                      <li key={text} className="flex gap-2.5 items-start text-[13px] leading-snug text-[#374151]">
+                        <CheckIcon className="h-5 w-5 shrink-0 text-emerald-500 mt-0.5" strokeWidth={2.25} aria-hidden />
+                        <span>{text}</span>
+                      </li>
+                    ))}
                   </ul>
                 </div>
+
             </>
           </div>
 
-          <aside className="min-w-0 h-full flex flex-col rounded-2xl bg-white border border-[#E6EAF4] p-6 md:p-8 shadow-[0_4px_24px_rgba(15,23,42,0.06)] lg:row-start-1 lg:col-start-2">
-            <div className="lg:hidden w-full shrink-0">
-              <CheckoutMobileTrustReviews />
-            </div>
-            <div className="hidden lg:flex lg:flex-col flex-1 min-h-0">
+          <aside className="min-w-0 h-full hidden lg:flex flex-col rounded-2xl bg-white border border-[#E6EAF4] p-6 md:p-8 shadow-[0_4px_24px_rgba(15,23,42,0.06)] lg:row-start-1 lg:col-start-2">
+            <div className="flex flex-col flex-1 min-h-0">
               <h2 className="text-lg md:text-xl font-semibold tracking-tight text-[#111827] mb-6 shrink-0 text-center">
                 {t("upgrade.allSubscriptionBenefits")}
               </h2>
@@ -603,22 +445,24 @@ export default function DownloadCheckout() {
                 ))}
               </ul>
             </div>
-            <div className="mt-6 max-lg:hidden shrink-0 flex flex-col items-stretch">
-              <CheckoutResumeReserveBlock
-                fileShort={resumeDocDisplay}
-                fileRaw={resumeDocFullLabel}
-                countdownLabel={reserveCountdownLabel}
-              />
+            <div className="mt-6 shrink-0 flex flex-col items-stretch">
               <button
                 type="button"
                 disabled={continueDisabled}
                 onClick={() => void startCheckout(selectedPlan)}
-                className="w-full h-12 rounded-xl text-sm font-semibold text-white bg-[#339d5d] hover:bg-[#2e8a52] disabled:opacity-50 disabled:pointer-events-none transition-colors shadow-sm"
+                className="w-full h-[52px] rounded-xl text-[15px] font-semibold text-white shadow-lg disabled:opacity-50 disabled:pointer-events-none transition-all bg-gradient-to-r from-[#6366f1] via-[#7c3aed] to-[#2563eb] hover:opacity-95 inline-flex items-center justify-center gap-2"
               >
-                {loadingPlan !== null ? t("upgrade.redirectingStripe") : t("upgrade.checkoutContinue")}
+                {loadingPlan !== null ? (
+                  t("upgrade.redirectingStripe")
+                ) : (
+                  <>
+                    <LockClosedIcon className="h-5 w-5 shrink-0" aria-hidden />
+                    {t("upgrade.sandboxUnlockDownloadCta")}
+                  </>
+                )}
               </button>
-              <p className="mt-2.5 text-center text-[11px] leading-snug text-[#5B6570] sm:text-xs sm:leading-normal">
-                <span className="font-medium text-[#374151]">{t("upgrade.checkoutMoneyBackGuarantee")}</span>
+              <p className="mt-2.5 text-center text-[11px] leading-snug text-[#6B7280] sm:text-xs sm:leading-normal">
+                {t("upgrade.sandboxCancelHint")}
               </p>
             </div>
           </aside>
@@ -634,21 +478,25 @@ export default function DownloadCheckout() {
         role="presentation"
       >
         <div className="max-w-[1200px] mx-auto flex flex-col items-stretch">
-          <CheckoutResumeReserveBlock
-            fileShort={resumeDocDisplay}
-            fileRaw={resumeDocFullLabel}
-            countdownLabel={reserveCountdownLabel}
-          />
           <button
             type="button"
             disabled={continueDisabled}
             onClick={() => void startCheckout(selectedPlan)}
-            className="w-full h-12 rounded-xl text-sm font-semibold text-white bg-[#339d5d] hover:bg-[#2e8a52] disabled:opacity-50 disabled:pointer-events-none transition-colors shadow-sm"
+            className="w-full h-[52px] rounded-xl text-[15px] font-semibold text-white shadow-lg disabled:opacity-50 disabled:pointer-events-none transition-all bg-gradient-to-r from-[#6366f1] via-[#7c3aed] to-[#2563eb] hover:opacity-95 inline-flex items-center justify-center gap-2"
           >
-            {loadingPlan !== null ? t("upgrade.redirectingStripe") : t("upgrade.checkoutContinue")}
+            {loadingPlan !== null ? (
+              t("upgrade.redirectingStripe")
+            ) : (
+              <>
+                <LockClosedIcon className="h-5 w-5 shrink-0" aria-hidden />
+                {t("upgrade.sandboxUnlockDownloadCta")}
+              </>
+            )}
           </button>
+          <p className="mt-3 text-center text-[11px] leading-snug text-[#6B7280] px-0.5">{t("upgrade.sandboxCancelHint")}</p>
         </div>
       </div>
+
     </div>
   );
 }

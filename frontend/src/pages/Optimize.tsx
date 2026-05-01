@@ -5,6 +5,7 @@ import { SparklesIcon, ArrowUpTrayIcon, ArrowDownTrayIcon, ArrowPathIcon, ArrowL
 import * as api from "../api";
 import { useAuth } from "../contexts/AuthContext";
 import { t, tFormat } from "../i18n";
+import { storeCheckoutResumePreview } from "../checkoutResumePreview";
 import { PostResultResumeStudio } from "../components/PostResultResumeStudio";
 import { PipelineStepper } from "../components/PipelineStepper";
 
@@ -2081,11 +2082,12 @@ export default function Optimize() {
     }
   }
 
-  function openDownloadCheckoutFlow() {
+  function openDownloadCheckoutFlow(previewDataUrl: string | null = null) {
     if (!user || user.id === "local") {
       navigate("/login");
       return;
     }
+    storeCheckoutResumePreview(previewDataUrl);
     persistOptimizeSnapshotForCheckout();
     const q = new URLSearchParams();
     q.set("return_to", "/optimize");
@@ -2614,7 +2616,13 @@ export default function Optimize() {
               <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch">
                 <button
                   type="button"
-                  onClick={hasPaidPlan ? handleDownloadCustomPdf : openDownloadCheckoutFlow}
+                  onClick={
+                    hasPaidPlan
+                      ? () => {
+                          void handleDownloadCustomPdf();
+                        }
+                      : () => openDownloadCheckoutFlow(null)
+                  }
                   className={ctaPrimaryCls}
                   style={{ background: "linear-gradient(160deg, #5e8afc 0%, #4578FC 45%, #3d6ae6 100%)" }}
                   disabled={pendingPdfDownloadLoading || optimizePaywallCheckoutLoading}
@@ -3044,7 +3052,13 @@ export default function Optimize() {
                     initialPhotoDataUrl={photoDataUrl}
                     onTemplateChange={setSelectedTemplateId}
                     onPhotoChange={setPhotoDataUrl}
-                    onDownload={hasPaidPlan ? handleDownloadCustomPdf : openDownloadCheckoutFlow}
+                    onDownload={
+                      hasPaidPlan
+                        ? () => {
+                            void handleDownloadCustomPdf();
+                          }
+                        : openDownloadCheckoutFlow
+                    }
                     onTailorAnother={() => setPostResultFlow("newJobWarning")}
                     onImproveEvenStronger={() => {
                       if (user?.id !== "local" && !hasPaidPlan) {
