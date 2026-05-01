@@ -1865,6 +1865,9 @@ async def api_register(request: Request, req: LoginRequest) -> JSONResponse:
         request,
         LoginResponse(access_token=token, user=_user_out(user, subscription=subscription), registration=True),
     )
+
+
+@router.post("/auth/login", response_model=LoginResponse)
 async def api_login(request: Request, req: LoginRequest) -> JSONResponse:
     """Login with email and password."""
     pool = await get_pool()
