@@ -67,6 +67,28 @@ function SandboxFeatureRow({
   );
 }
 
+/** Same six bullets under plan cards on mobile and desktop checkout */
+function CheckoutPlanFeatureListItems() {
+  return (
+    <>
+      <SandboxFeatureRow Icon={DocumentDuplicateIcon}>
+        <strong className="font-semibold text-[#111827]">Unlimited</strong> ATS scans & AI resume optimization
+      </SandboxFeatureRow>
+      <SandboxFeatureRow Icon={BriefcaseIcon}>Job-specific tailoring & ATS keyword matching</SandboxFeatureRow>
+      <SandboxFeatureRow Icon={DocumentTextIcon}>Save multiple tailored resumes · PDF export</SandboxFeatureRow>
+      <SandboxFeatureRow Icon={AcademicCapIcon}>
+        Full access 7 days, then {t("upgrade.monthlyTitle").toLowerCase()} · AI optimize & PDF
+      </SandboxFeatureRow>
+      <SandboxFeatureRow Icon={ClockIcon}>
+        Auto-renews at <span className="font-normal">{t("upgrade.monthlyPrice")}</span>/mo after 7 days
+      </SandboxFeatureRow>
+      <SandboxFeatureRow Icon={BanknotesIcon}>
+        <strong className="font-semibold text-[#111827]">Money Back Guarantee</strong>
+      </SandboxFeatureRow>
+    </>
+  );
+}
+
 /** Strikethrough “was” prices shown before current trial / monthly amounts */
 const PRICE_WAS_TRIAL = "$5.99";
 const PRICE_WAS_MONTHLY = "$39";
@@ -428,25 +450,7 @@ export default function DownloadCheckout() {
 
                 <div className="mt-2 hidden lg:block rounded-xl border border-[#E6EAF4] bg-white px-6 py-7 shadow-[0_1px_3px_rgba(15,23,42,0.04)] lg:mt-4 lg:px-6 lg:py-6">
                   <ul className="shrink-0 space-y-6">
-                    <SandboxFeatureRow Icon={DocumentDuplicateIcon}>
-                      <strong className="font-semibold text-[#111827]">Unlimited</strong> ATS scans & AI resume
-                      optimization
-                    </SandboxFeatureRow>
-                    <SandboxFeatureRow Icon={BriefcaseIcon}>
-                      Job-specific tailoring & ATS keyword matching
-                    </SandboxFeatureRow>
-                    <SandboxFeatureRow Icon={DocumentTextIcon}>
-                      Save multiple tailored resumes · PDF export
-                    </SandboxFeatureRow>
-                    <SandboxFeatureRow Icon={AcademicCapIcon}>
-                      Full access 7 days, then {t("upgrade.monthlyTitle").toLowerCase()} · AI optimize & PDF
-                    </SandboxFeatureRow>
-                    <SandboxFeatureRow Icon={ClockIcon}>
-                      Auto-renews at <span className="font-normal">{t("upgrade.monthlyPrice")}</span>/mo after 7 days
-                    </SandboxFeatureRow>
-                    <SandboxFeatureRow Icon={BanknotesIcon}>
-                      <strong className="font-semibold text-[#111827]">Money Back Guarantee</strong>
-                    </SandboxFeatureRow>
+                    <CheckoutPlanFeatureListItems />
                   </ul>
                 </div>
 
@@ -455,19 +459,11 @@ export default function DownloadCheckout() {
                 </div>
 
                 <div className="mt-5 lg:hidden">
-                  <ul className="rounded-xl border border-[#E6EAF4] bg-white px-4 py-4 space-y-3 shadow-[0_1px_3px_rgba(15,23,42,0.04)]">
-                    {[
-                      t("upgrade.sandboxShortFeature1"),
-                      t("upgrade.sandboxShortFeature2"),
-                      t("upgrade.sandboxShortFeature3"),
-                      t("upgrade.sandboxShortFeature4"),
-                    ].map((text) => (
-                      <li key={text} className="flex gap-2.5 items-start text-[13px] leading-snug text-[#374151]">
-                        <CheckIcon className="h-5 w-5 shrink-0 text-emerald-500 mt-0.5" strokeWidth={2.25} aria-hidden />
-                        <span>{text}</span>
-                      </li>
-                    ))}
-                  </ul>
+                  <div className="rounded-xl border border-[#E6EAF4] bg-white px-4 py-5 shadow-[0_1px_3px_rgba(15,23,42,0.04)]">
+                    <ul className="shrink-0 space-y-5">
+                      <CheckoutPlanFeatureListItems />
+                    </ul>
+                  </div>
                 </div>
 
             </>
