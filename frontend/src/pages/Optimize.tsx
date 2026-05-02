@@ -1,13 +1,13 @@
 import { useState, useEffect, useLayoutEffect, useRef, useId, useMemo } from "react";
 import { useLocation, useNavigate, useSearchParams, Link } from "react-router-dom";
 import { Disclosure, DisclosureButton, DisclosurePanel } from "@headlessui/react";
-import { SparklesIcon, ArrowUpTrayIcon, ArrowDownTrayIcon, ArrowPathIcon, ArrowLeftIcon, BriefcaseIcon, ClipboardDocumentIcon, ExclamationTriangleIcon, CheckCircleIcon, CheckIcon, ChevronDownIcon } from "@heroicons/react/24/outline";
+import { SparklesIcon, ArrowUpTrayIcon, ArrowDownTrayIcon, ArrowPathIcon, ArrowLeftIcon, BriefcaseIcon, ClipboardDocumentIcon, ExclamationTriangleIcon, CheckCircleIcon, CheckIcon, ChevronDownIcon, MagnifyingGlassIcon } from "@heroicons/react/24/outline";
 import * as api from "../api";
 import { useAuth } from "../contexts/AuthContext";
 import { t, tFormat } from "../i18n";
 import { storeCheckoutResumePreview } from "../checkoutResumePreview";
 import { PostResultResumeStudio } from "../components/PostResultResumeStudio";
-import { PipelineStepper } from "../components/PipelineStepper";
+import { PipelineVerticalStepCards } from "../components/PipelineVerticalStepCards";
 
 const RESUME_FILE_ACCEPT = ".txt,.md,.html,.htm,.tex,.pdf,.doc,.docx";
 const RESUME_TEXT_EXTS = ["txt", "md", "html", "htm", "tex", "pdf", "doc", "docx"];
@@ -258,48 +258,79 @@ function LoaderFactCard({ fact }: { fact: string }) {
   );
 }
 
-/** Visible main column height: below app header and main pt/pb (matches Layout `<main>`). Fallback when `--app-header-height` unset (e.g. admin shell). */
-const MAIN_LOADER_HEIGHT =
-  "min-h-0 h-[calc(100dvh-var(--app-header-height,3.5rem)-2rem)] max-h-[calc(100dvh-var(--app-header-height,3.5rem)-2rem)]";
-
+/** Loader fills the scrollable main column; no faux full-viewport gradient sheet */
 function OptimizePipelineLoader({
   labels,
+  subtitles,
   completedSteps,
   fact,
-  microLine,
   topHint,
   ariaLabel,
   variant = "main",
+  heroVariant = "analysis",
 }: {
   labels: readonly string[];
+  subtitles?: readonly string[];
   completedSteps: number;
   fact?: string;
-  microLine?: string;
   topHint?: string;
   ariaLabel: string;
-  /** `overlay`: parent is `fixed inset-0` — fill it without nested 100dvh. */
   variant?: "main" | "overlay";
+  heroVariant?: "analysis" | "optimize" | "restore";
 }) {
+  const heroTitle =
+    heroVariant === "optimize"
+      ? t("optimize.loaderHeroOptimizeTitle")
+      : heroVariant === "restore"
+        ? t("optimize.restoringResumeSession")
+        : t("optimize.loaderHeroAnalysisTitle");
+  const heroDesc =
+    heroVariant === "optimize"
+      ? t("optimize.loaderHeroOptimizeDesc")
+      : heroVariant === "restore"
+        ? t("optimize.doNotClosePage")
+        : t("optimize.loaderHeroAnalysisDesc");
+
   return (
     <div
       className={
         variant === "overlay"
-          ? "flex h-full min-h-0 w-full flex-col items-center justify-center text-center"
-          : `flex w-full flex-col items-center justify-center overflow-y-auto bg-[linear-gradient(180deg,#F2F3F9_0%,#FAFBFE_42%,#ffffff_100%)] text-center ${MAIN_LOADER_HEIGHT}`
+          ? "flex h-full min-h-0 w-full flex-col items-center justify-center overflow-y-auto px-4 py-8 text-center"
+          : "flex w-full min-h-0 flex-col items-center justify-start overflow-y-auto px-3 py-6 text-center sm:px-4 sm:py-10"
       }
       role="status"
       aria-live="polite"
       aria-label={ariaLabel}
     >
-      <div className="flex w-full max-w-lg flex-col items-center gap-2.5 sm:gap-3 px-0">
+      <div className="flex w-full max-w-lg flex-col items-center gap-4 sm:gap-6">
         {topHint ? (
           <p className="text-[10px] font-medium uppercase tracking-wider text-[#94a3b8]">{topHint}</p>
         ) : null}
-        {microLine ? (
-          <p className="text-sm font-normal leading-relaxed text-[#475569]">{microLine}</p>
-        ) : null}
+
+        <div className="flex flex-col items-center gap-3 px-1">
+          <div className="relative">
+            <div className="rounded-full bg-white p-3.5 shadow-[0_4px_28px_-14px_rgba(69,120,252,0.45)] ring-1 ring-[#4578FC]/12">
+              {heroVariant === "optimize" ? (
+                <SparklesIcon className="h-8 w-8 text-[#4578FC]" aria-hidden />
+              ) : (
+                <MagnifyingGlassIcon className="h-8 w-8 text-[#4578FC]" aria-hidden />
+              )}
+            </div>
+            {heroVariant === "analysis" ? (
+              <SparklesIcon
+                className="pointer-events-none absolute -right-1 -top-1 h-5 w-5 text-violet-400 opacity-95"
+                aria-hidden
+              />
+            ) : null}
+          </div>
+          <div className="max-w-lg space-y-2">
+            <h2 className="text-xl font-bold tracking-tight text-[#0f172a] sm:text-2xl sm:leading-snug">{heroTitle}</h2>
+            <p className="text-sm leading-relaxed text-[#64748b] sm:text-[15px]">{heroDesc}</p>
+          </div>
+        </div>
+
         <div className="w-full pt-1">
-          <PipelineStepper labels={labels} completedSteps={completedSteps} />
+          <PipelineVerticalStepCards labels={labels} subtitles={subtitles} completedSteps={completedSteps} />
         </div>
         {fact ? <LoaderFactCard fact={fact} /> : null}
       </div>
@@ -1321,6 +1352,20 @@ export default function Optimize() {
     () =>
       [1, 2, 3, 4, 5].map((i) =>
         isImproveMode ? t(`optimize.pipelineOptimizeImprove${i}`) : t(`optimize.pipelineOptimizeTailor${i}`),
+      ),
+    [isImproveMode],
+  );
+  const pipelineAnalysisSubtitles = useMemo(
+    () =>
+      [1, 2, 3, 4, 5].map((i) =>
+        isImproveMode ? t(`optimize.pipelineAnalysisImprove${i}Sub`) : t(`optimize.pipelineAnalysisTailor${i}Sub`),
+      ),
+    [isImproveMode],
+  );
+  const pipelineOptimizeSubtitles = useMemo(
+    () =>
+      [1, 2, 3, 4, 5].map((i) =>
+        isImproveMode ? t(`optimize.pipelineOptimizeImprove${i}Sub`) : t(`optimize.pipelineOptimizeTailor${i}Sub`),
       ),
     [isImproveMode],
   );
@@ -2477,16 +2522,6 @@ export default function Optimize() {
   }, [stage]);
 
   useEffect(() => {
-    if (stage !== "loading" && stage !== "scanning") return;
-    if (typeof document === "undefined") return;
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = previous;
-    };
-  }, [stage]);
-
-  useEffect(() => {
     if (!resumeBootstrapping) {
       setBootstrapPipelineCompleted(0);
       return;
@@ -2650,16 +2685,15 @@ export default function Optimize() {
     >
         {resumeBootstrapping && (
           <div
-            className="fixed inset-0 z-[60] flex flex-col overflow-hidden bg-[linear-gradient(180deg,#F2F3F9_0%,#FAFBFE_42%,#ffffff_100%)] px-4"
+            className="fixed inset-0 z-[60] flex flex-col overflow-hidden bg-[#F2F3F9] px-4"
             role="status"
             aria-live="polite"
           >
             <OptimizePipelineLoader
               variant="overlay"
+              heroVariant="restore"
               labels={[t("optimize.pipelineRestore1"), t("optimize.pipelineRestore2"), t("optimize.pipelineRestore3")]}
               completedSteps={bootstrapPipelineCompleted}
-              microLine={t("optimize.doNotClosePage")}
-              topHint={t("optimize.restoringResumeSession")}
               ariaLabel={t("optimize.restoringResumeSession")}
             />
           </div>
@@ -3488,10 +3522,11 @@ export default function Optimize() {
             <>
               {(stage === "scanning" || (stage === "assessment" && preScores == null)) && (
                 <OptimizePipelineLoader
+                  heroVariant="analysis"
                   labels={pipelineAnalysisLabels}
+                  subtitles={pipelineAnalysisSubtitles}
                   completedSteps={analysisPipelineCompleted}
                   fact={!awaitingLandingClaim ? activeLoadingHint : undefined}
-                  microLine={t("optimize.loaderMicroHint")}
                   topHint={
                     awaitingLandingClaim
                       ? t("optimize.preparingLandingCheckSub")
@@ -3509,10 +3544,11 @@ export default function Optimize() {
 
               {stage === "loading" && (
                 <OptimizePipelineLoader
+                  heroVariant="optimize"
                   labels={pipelineOptimizeLabels}
+                  subtitles={pipelineOptimizeSubtitles}
                   completedSteps={optimizePipelineCompleted}
                   fact={activeLoadingHint}
-                  microLine={t("optimize.loaderMicroHint")}
                   ariaLabel={t("optimize.improvingResume")}
                 />
               )}

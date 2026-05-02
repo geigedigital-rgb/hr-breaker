@@ -293,7 +293,7 @@ export default function Layout() {
 
       {/* Main Content Area — insets for fixed UI (e.g. Optimize “do not close”) aligned with column below header */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative bg-[#F2F3F9] [--app-sidebar-width:0px] md:[--app-sidebar-width:16rem] [--app-header-height:3.5rem] md:[--app-header-height:4rem]">
-        <header className="shrink-0 bg-white border-b border-[#EBEDF5] flex items-center justify-between px-4 md:px-6 h-14 md:h-16 z-10 relative gap-3">
+        <header className="sticky top-0 z-30 shrink-0 bg-white border-b border-[#EBEDF5] flex items-center justify-between px-4 md:px-6 h-14 md:h-16 gap-3 shadow-[0_1px_0_rgba(15,23,42,0.04)]">
           <div className="flex items-center min-w-0 gap-2 md:gap-3">
             <button
               type="button"
