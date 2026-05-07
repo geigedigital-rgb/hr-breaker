@@ -141,7 +141,6 @@ export default function DownloadCheckout() {
   const location = useLocation();
   const [params] = useSearchParams();
   const [loadingPlan, setLoadingPlan] = useState<"trial" | "monthly" | null>(null);
-  const [loadingStripeTest, setLoadingStripeTest] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedPlan, setSelectedPlan] = useState<"trial" | "monthly">("trial");
   const fromState = location.state as {
@@ -154,8 +153,6 @@ export default function DownloadCheckout() {
   const resumeDocRaw = (fromState?.resumeDoc || params.get("doc") || "").trim();
   const canceled = params.get("cancel") === "1";
   const sandboxMode = params.get("sandbox") === "1";
-  const showAdminStripeTest =
-    sandboxMode && user && user.id !== "local" && api.isAdminUser(user);
   const expiresAtRaw = (params.get("exp") || "").trim();
   const expiresAtMs = useMemo(() => {
     const n = Date.parse(expiresAtRaw);
@@ -224,36 +221,6 @@ export default function DownloadCheckout() {
       setLoadingPlan(null);
     }
   }
-
-  async function startStripeTestCheckout() {
-    if (!user || user.id === "local") {
-      navigate("/login");
-      return;
-    }
-    if (!window.confirm(t("upgrade.adminStripeTestConfirm"))) return;
-    setError(null);
-    setLoadingStripeTest(true);
-    try {
-      const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
-      const successUrl = `${baseUrl}/upgrade?success=1`;
-      const cancelQs = new URLSearchParams(location.search);
-      if (!cancelQs.get("sandbox")) cancelQs.set("sandbox", "1");
-      const cancelUrl = `${baseUrl}${location.pathname}?${cancelQs.toString()}`;
-      const { url } = await api.createCheckoutSession({
-        price_key: selectedPlan,
-        success_url: successUrl,
-        cancel_url: cancelUrl,
-      });
-      if (url) window.location.href = url;
-      else setError("Could not open checkout. Please try again.");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Checkout error");
-    } finally {
-      setLoadingStripeTest(false);
-    }
-  }
-
-  const adminTestBusy = loadingStripeTest || loadingPlan !== null;
 
   return (
     <div className="min-h-screen bg-[#F5F8FF] text-[#181819]">
@@ -528,20 +495,6 @@ export default function DownloadCheckout() {
               </ul>
             </div>
             <div className="mt-6 shrink-0 flex flex-col items-stretch">
-              {showAdminStripeTest ? (
-                <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50/95 px-4 py-3 text-left shadow-sm">
-                  <p className="text-[12px] font-semibold text-amber-950">{t("upgrade.adminStripeTestTitle")}</p>
-                  <p className="mt-1.5 text-[11px] leading-snug text-amber-900/90">{t("upgrade.adminStripeTestHint")}</p>
-                  <button
-                    type="button"
-                    disabled={adminTestBusy}
-                    onClick={() => void startStripeTestCheckout()}
-                    className="mt-3 w-full rounded-lg border border-amber-300/80 bg-white px-3 py-2.5 text-[13px] font-semibold text-amber-950 shadow-sm transition-colors hover:bg-amber-100/50 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {loadingStripeTest ? t("upgrade.redirectingStripe") : t("upgrade.adminStripeTestCta")}
-                  </button>
-                </div>
-              ) : null}
               <button
                 type="button"
                 disabled={continueDisabled}
@@ -574,20 +527,6 @@ export default function DownloadCheckout() {
         role="presentation"
       >
         <div className="max-w-[1200px] mx-auto flex flex-col items-stretch">
-          {showAdminStripeTest ? (
-            <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50/95 px-4 py-3 text-left shadow-sm">
-              <p className="text-[12px] font-semibold text-amber-950">{t("upgrade.adminStripeTestTitle")}</p>
-              <p className="mt-1.5 text-[11px] leading-snug text-amber-900/90">{t("upgrade.adminStripeTestHint")}</p>
-              <button
-                type="button"
-                disabled={adminTestBusy}
-                onClick={() => void startStripeTestCheckout()}
-                className="mt-3 w-full rounded-lg border border-amber-300/80 bg-white px-3 py-2.5 text-[13px] font-semibold text-amber-950 shadow-sm hover:bg-amber-100/50 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {loadingStripeTest ? t("upgrade.redirectingStripe") : t("upgrade.adminStripeTestCta")}
-              </button>
-            </div>
-          ) : null}
           <button
             type="button"
             disabled={continueDisabled}

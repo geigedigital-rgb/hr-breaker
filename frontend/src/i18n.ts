@@ -711,12 +711,6 @@ const en = {
     sandboxSecurePayment: "Secure payment",
     sandboxUnlockDownloadCta: "Unlock & Download Now",
     sandboxCancelHint: "Cancel any time online or by email info@pitchcv.app",
-    adminStripeTestTitle: "Admin: real Stripe Checkout (test keys)",
-    adminStripeTestHint:
-      "Uses server Stripe keys (test or live). Card 4242 4242 4242 4242 — any future expiry, any CVC. Applies to the plan selected above.",
-    adminStripeTestConfirm:
-      "Open real Stripe Checkout for the selected plan? This is not a UI preview — it creates a real Checkout session.",
-    adminStripeTestCta: "Confirm and open Stripe Checkout",
   },
   admin: {
     panelLabel: "Admin panel",
