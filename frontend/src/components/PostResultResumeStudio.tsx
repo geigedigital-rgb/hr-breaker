@@ -87,6 +87,7 @@ export function PostResultResumeStudio({
   onTailorAnother,
   onImproveEvenStronger,
   showImproveEvenStronger,
+  sandboxVariant = false,
 }: {
   qualityPct: number;
   jobTitle: string;
@@ -102,6 +103,8 @@ export function PostResultResumeStudio({
   onTailorAnother: () => void;
   onImproveEvenStronger: () => void;
   showImproveEvenStronger: boolean;
+  /** Visual Sandbox: preview first, then template carousel (marketing-style layout). */
+  sandboxVariant?: boolean;
 }) {
   const stripRef = useRef<HTMLDivElement>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
@@ -283,10 +286,22 @@ export function PostResultResumeStudio({
   const showFallbackPreview = templatesLoadError || !templates.length;
   const effectivePreviewUrl = showFallbackPreview ? fallbackPreviewUrl : mainPreviewUrl;
 
-  return (
-    <div className="w-full flex flex-col gap-6">
-      <section className="w-full rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-4 sm:p-5">
+  const templateBlock = (
+    <section
+      className={
+        sandboxVariant
+          ? "w-full rounded-2xl border border-[#E8ECF4] bg-white p-5 shadow-[0_4px_28px_-12px_rgba(15,23,42,0.08)] sm:p-6"
+          : "w-full rounded-2xl border border-[#EBEDF5] bg-[#FAFAFC] p-4 sm:p-5"
+      }
+    >
+      {sandboxVariant ? (
+        <div className="mb-1">
+          <p className="text-[15px] font-semibold text-[#181819]">{t("admin.visualSandbox.chooseTemplateTitle")}</p>
+          <p className="mt-1 text-[12px] leading-relaxed text-[#6B7280]">{t("admin.visualSandbox.chooseTemplateSub")}</p>
+        </div>
+      ) : (
         <p className="text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider">{t("optimize.chooseTemplate")}</p>
+      )}
         {templatesLoadError && (
           <p className="mt-2 text-[12px] text-amber-800 bg-amber-50 border border-amber-200/80 rounded-lg px-3 py-2">
             {t("optimize.templatesUnavailable")}
@@ -297,7 +312,11 @@ export function PostResultResumeStudio({
         )}
         <div className="relative mt-4">
           {canScrollLeft && (
-            <div className="absolute left-0 top-0 bottom-0 z-10 flex items-center pl-1 pr-4 bg-gradient-to-r from-[#FAFAFC] via-[#FAFAFC] to-transparent pointer-events-none">
+            <div
+              className={`absolute left-0 top-0 bottom-0 z-10 flex items-center pl-1 pr-4 bg-gradient-to-r to-transparent pointer-events-none ${
+                sandboxVariant ? "from-white via-white" : "from-[#FAFAFC] via-[#FAFAFC]"
+              }`}
+            >
               <button
                 type="button"
                 onClick={() => scrollStrip(-1)}
@@ -325,12 +344,20 @@ export function PostResultResumeStudio({
                   className="shrink-0 w-[100px] text-center transition-all scroll-ml-1 group"
                   style={{ scrollSnapAlign: "start" }}
                 >
-                  <p className={`mb-2 line-clamp-1 text-[10px] font-medium leading-tight transition-colors ${selected ? "text-[#4578FC]" : "text-[#181819]"}`}>
-                    {tmpl.name}
-                  </p>
-                  <div className={`aspect-[210/297] w-full overflow-hidden rounded-lg bg-[#f1f5f9] transition-all ${
-                    selected ? "ring-2 ring-[#4578FC] ring-offset-2 shadow-md" : "ring-1 ring-[#E8ECF4] group-hover:ring-[#C7D2FE] shadow-sm"
-                  }`}>
+                  <div className="relative">
+                    <p className={`mb-2 line-clamp-1 text-[10px] font-medium leading-tight transition-colors ${selected ? "text-[#4578FC]" : "text-[#181819]"}`}>
+                      {tmpl.name}
+                    </p>
+                    <div
+                      className={`relative aspect-[210/297] w-full overflow-hidden rounded-lg bg-[#f1f5f9] transition-all ${
+                        selected ? "ring-2 ring-[#4578FC] ring-offset-2 shadow-md" : "ring-1 ring-[#E8ECF4] group-hover:ring-[#C7D2FE] shadow-sm"
+                      }`}
+                    >
+                      {sandboxVariant && selected && (
+                        <span className="absolute right-1 top-1 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-[#4578FC] text-white shadow-md ring-2 ring-white">
+                          <CheckIcon className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden />
+                        </span>
+                      )}
                     {th === "loading" && <div className="h-full w-full animate-pulse bg-[#e2e8f0]" />}
                     {th === "error" && (
                       <div className="flex h-full items-center justify-center p-1 text-center text-[8px] text-[#64748b]">
@@ -340,6 +367,7 @@ export function PostResultResumeStudio({
                     {typeof th === "string" && th.startsWith("data:") && (
                       <img src={th} alt="" className="h-full w-full object-cover object-top" />
                     )}
+                  </div>
                   </div>
                 </button>
               );
@@ -362,7 +390,11 @@ export function PostResultResumeStudio({
             )}
           </div>
           {canScrollRight && (
-            <div className="absolute right-0 top-0 bottom-0 z-10 flex items-center pr-1 pl-4 bg-gradient-to-l from-[#FAFAFC] via-[#FAFAFC] to-transparent pointer-events-none">
+            <div
+              className={`absolute right-0 top-0 bottom-0 z-10 flex items-center pr-1 pl-4 bg-gradient-to-l to-transparent pointer-events-none ${
+                sandboxVariant ? "from-white via-white" : "from-[#FAFAFC] via-[#FAFAFC]"
+              }`}
+            >
               <button
                 type="button"
                 onClick={() => scrollStrip(1)}
@@ -375,7 +407,9 @@ export function PostResultResumeStudio({
           )}
         </div>
       </section>
+  );
 
+  const photoBlock = (
       <section className="w-full rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-4 sm:p-5">
         <p className="text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider">{t("optimize.addPhoto")}</p>
         <p className="mt-1 max-w-lg text-[12px] text-[#6B7280] leading-relaxed">{t("optimize.photoCropHint")}</p>
@@ -417,7 +451,9 @@ export function PostResultResumeStudio({
           </div>
         </div>
       </section>
+  );
 
+  const previewBlock = (
       <section className="relative w-full overflow-hidden rounded-2xl border border-[#E8ECF4] bg-white shadow-[0_8px_40px_-12px_rgba(15,23,42,0.12)]">
         <div className="flex flex-wrap items-center gap-3 border-b border-[#EDF1F7] bg-[#FAFAFC] px-4 py-3 sm:px-5">
           <span className={`inline-flex h-9 min-w-[2.25rem] items-center justify-center gap-1 rounded-full px-2.5 text-[13px] font-bold ring-1 ${
@@ -521,6 +557,23 @@ export function PostResultResumeStudio({
           </div>
         </div>
       </section>
+  );
+
+  return (
+    <div className="w-full flex flex-col gap-6">
+      {sandboxVariant ? (
+        <>
+          {previewBlock}
+          {templateBlock}
+          {photoBlock}
+        </>
+      ) : (
+        <>
+          {templateBlock}
+          {photoBlock}
+          {previewBlock}
+        </>
+      )}
     </div>
   );
 }

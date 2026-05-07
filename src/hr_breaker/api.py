@@ -2243,6 +2243,11 @@ class CreateCheckoutRequest(BaseModel):
     price_key: str = Field(..., description="trial or monthly")
     success_url: str = Field(..., description="URL to redirect after success")
     cancel_url: str = Field(..., description="URL to redirect if user cancels")
+    ga_client_id: str | None = Field(
+        default=None,
+        description="GA4 client_id from browser _ga cookie (for Measurement Protocol purchase)",
+        max_length=128,
+    )
 
 
 class CreateCheckoutResponse(BaseModel):
@@ -2288,6 +2293,7 @@ async def api_create_checkout_session(
             pool=pool,
             get_or_create_customer_id=_get_or_create_stripe_customer_id,
             set_stripe_customer_id=user_set_stripe_customer_id,
+            ga_client_id=req.ga_client_id,
         )
     except Exception as e:
         logger.error("Checkout creation failed: %s", e)

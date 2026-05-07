@@ -108,6 +108,10 @@ class Settings(BaseModel):
     stripe_price_trial_id: str = ""   # One-time trial signup fee (e.g. $1.69), 7-day access line item
     stripe_price_monthly_id: str = ""  # Recurring $29/month
 
+    # GA4 Measurement Protocol (Stripe webhook → server-side `purchase`). Stream → Measurement Protocol API secrets.
+    ga4_measurement_id: str = ""  # G-XXXXXXXXXX
+    ga4_api_secret: str = ""
+
     # Landing (pitchcv.app): public trial analysis, no auth
     landing_allowed_origins: str = ""  # Comma-separated, e.g. https://pitchcv.app,https://www.pitchcv.app
     landing_rate_limit_hours: int = 24  # 1 request per IP per N hours
@@ -203,6 +207,8 @@ def get_settings() -> Settings:
         stripe_publishable_key=os.getenv("STRIPE_PUBLISHABLE_KEY", ""),
         stripe_price_trial_id=os.getenv("STRIPE_PRICE_TRIAL_ID", ""),
         stripe_price_monthly_id=os.getenv("STRIPE_PRICE_MONTHLY_ID", ""),
+        ga4_measurement_id=os.getenv("GA4_MEASUREMENT_ID", "").strip(),
+        ga4_api_secret=os.getenv("GA4_API_SECRET", "").strip(),
         landing_allowed_origins=os.getenv("LANDING_ALLOWED_ORIGINS", ""),
         landing_rate_limit_hours=int(os.getenv("LANDING_RATE_LIMIT_HOURS", "24")),
         landing_max_resume_chars=int(os.getenv("LANDING_MAX_RESUME_CHARS", "50000")),

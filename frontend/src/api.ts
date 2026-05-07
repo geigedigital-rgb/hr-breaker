@@ -4,6 +4,7 @@ import {
   isAdminPipelineCaptureEnabled,
 } from "./adminPipelineLogStore";
 import type { AdminPipelineLogEntry } from "./adminPipelineLogStore";
+import { getGaClientIdFromCookie } from "./analyticsGa";
 
 const API = "/api";
 const AUTH_TOKEN_KEY = "hr_breaker_token";
@@ -797,10 +798,14 @@ export async function createCheckoutSession(params: {
   success_url: string;
   cancel_url: string;
 }): Promise<CreateCheckoutResponse> {
+  const ga_client_id = getGaClientIdFromCookie();
   const r = await fetch(`${API}/payments/create-checkout-session`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
-    body: JSON.stringify(params),
+    body: JSON.stringify({
+      ...params,
+      ...(ga_client_id ? { ga_client_id } : {}),
+    }),
   });
   const data = await parseJsonOrThrow<CreateCheckoutResponse & { detail?: string }>(r);
   if (!r.ok) throw new Error(data.detail || r.statusText);

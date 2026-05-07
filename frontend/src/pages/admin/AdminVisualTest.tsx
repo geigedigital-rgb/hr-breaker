@@ -2,7 +2,19 @@ import { useMemo, useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { Disclosure, DisclosureButton, DisclosurePanel } from "@headlessui/react";
-import { SparklesIcon, ChevronDownIcon, CheckIcon, EyeIcon } from "@heroicons/react/24/outline";
+import {
+  ArrowRightIcon,
+  BoltIcon,
+  CheckIcon,
+  ChevronDownIcon,
+  EyeIcon,
+  KeyIcon,
+  SparklesIcon,
+  UserCircleIcon,
+  AcademicCapIcon,
+  BriefcaseIcon,
+  DocumentTextIcon,
+} from "@heroicons/react/24/outline";
 import { t, tFormat } from "../../i18n";
 import * as api from "../../api";
 import { PostResultResumeStudio } from "../../components/PostResultResumeStudio";
@@ -47,6 +59,24 @@ const MOCK = {
       items: ["Keyword alignment with posting", "Stack grouped for ATS", "Nice-to-have tools surfaced"],
     },
   ],
+  /** Same shape as `/analyze` `callback_blockers` — headline / impact / action from LLM */
+  callback_blockers: [
+    {
+      headline: "Missing important keywords",
+      impact: "ATS may rank you below candidates who mirror the posting language.",
+      action: "Mirror 4–6 phrases from the job description in summary and skills.",
+    },
+    {
+      headline: "Weak measurable outcomes",
+      impact: "Recruiters cannot verify impact when bullets stay qualitative.",
+      action: "Add metrics (% , $ , scope) to two experience bullets.",
+    },
+    {
+      headline: "Leadership signal unclear",
+      impact: "You may read as an individual contributor instead of a lead.",
+      action: "Add one line: team size, stakeholders, or budget scope.",
+    },
+  ] satisfies api.CallbackBlockerOut[],
   resultFilters: [
     { filter_name: "ContentLengthChecker", passed: true, score: 0.95, threshold: 0.8 },
     { filter_name: "DataValidator", passed: true, score: 1.0, threshold: 0.5 },
@@ -104,72 +134,69 @@ function cleanReason(label: string): string {
     .trim();
 }
 
-function impactFromIssue(label: string): string {
-  const l = label.toLowerCase();
-  if (l.includes("ci/cd")) return "ATS treats you as less production-ready and lowers shortlist priority.";
-  if (l.includes("figma")) return "Cross-team collaboration signal is weak for product roles.";
-  if (l.includes("metrics")) return "Without numbers, recruiters cannot estimate your real impact.";
-  if (l.includes("leadership")) return "You look like an individual contributor instead of a leader.";
-  return "This gap reduces relevance and increases rejection risk at screening stage.";
-}
-
-function fixFromIssue(label: string): string {
-  const l = label.toLowerCase();
-  if (l.includes("ci/cd")) return "Add one bullet showing CI/CD ownership and release impact.";
-  if (l.includes("figma")) return "Mention collaboration with design and product discovery artifacts.";
-  if (l.includes("metrics")) return "Rewrite 2-3 bullets with measurable outcomes (%, $, team size).";
-  if (l.includes("leadership")) return "Add one leadership example with team scope and business result.";
-  return "Add a focused bullet in summary/experience tied to this requirement.";
-}
-
-function priorityScore(label: string): number {
-  const l = label.toLowerCase();
-  let score = 1;
-  if (l.includes("missing")) score += 3;
-  if (l.includes("none")) score += 3;
-  if (l.includes("weak")) score += 2;
-  if (l.includes("metrics") || l.includes("leadership") || l.includes("ci/cd")) score += 2;
-  return score;
-}
-
-function boostPctFromIssue(label: string): number {
-  return Math.min(15, 4 + (priorityScore(label) % 10));
-}
-
-function matchTierShort(pct: number): { label: string; barClass: string; textClass: string } {
+function matchTierShort(
+  pct: number,
+  opts?: { excellentFrom?: number }
+): { label: string; hint: string; barClass: string; textClass: string } {
+  const excellentFrom = opts?.excellentFrom ?? 85;
   const p = Math.max(0, Math.min(100, Math.round(pct)));
-  if (p >= 85) {
+
+  if (p >= excellentFrom) {
     return {
-      label: t("optimize.resumeQualityLevelExcellent"),
+      label: t("admin.visualSandbox.matchTierExcellent"),
+      hint: t("admin.visualSandbox.matchTierExcellentHint"),
       barClass: "bg-gradient-to-r from-emerald-500 to-emerald-400",
       textClass: "text-emerald-700",
     };
   }
+
+  // Between 78 and “excellent” threshold only when excellent is 85+ — 78% is already a strong baseline.
+  if (excellentFrom > 78 && p >= 78 && p < excellentFrom) {
+    return {
+      label: t("admin.visualSandbox.matchTierSolid"),
+      hint: t("admin.visualSandbox.matchTierSolidHint"),
+      barClass: "bg-gradient-to-r from-teal-500 to-emerald-400",
+      textClass: "text-teal-700",
+    };
+  }
+
   if (p >= 65) {
     return {
-      label: t("optimize.resumeQualityLevelStrong"),
+      label: t("admin.visualSandbox.matchTierNeedsRefinement"),
+      hint: t("admin.visualSandbox.matchTierNeedsRefinementHint"),
       barClass: "bg-gradient-to-r from-amber-500 to-amber-400",
       textClass: "text-amber-700",
     };
   }
   if (p >= 45) {
     return {
-      label: t("optimize.resumeQualityLevelGood"),
+      label: t("admin.visualSandbox.matchTierFair"),
+      hint: t("admin.visualSandbox.matchTierFairHint"),
       barClass: "bg-gradient-to-r from-amber-500 to-orange-400",
       textClass: "text-orange-700",
     };
   }
   return {
-    label: t("optimize.resumeQualityLevelFair"),
+    label: t("admin.visualSandbox.matchTierNeedsWork"),
+    hint: t("admin.visualSandbox.matchTierNeedsWorkHint"),
     barClass: "bg-gradient-to-r from-orange-500 to-rose-400",
     textClass: "text-orange-800",
   };
 }
 
-function categoryAvgBoost(problems: string[]): number {
-  if (!problems.length) return 0;
-  return Math.round(problems.reduce((s, l) => s + boostPctFromIssue(l), 0) / problems.length);
+/** Stable mock “boost” percent per callback row (prod API has no numeric boost). */
+function boostPctForSandboxBlocker(i: number): number {
+  return 6 + ((i * 5) % 10);
 }
+
+function impactToneForBlocker(cb: api.CallbackBlockerOut, index: number): "high" | "medium" {
+  const h = cb.headline.toLowerCase();
+  if (h.includes("missing") || h.includes("keyword") || h.includes("measurable")) return "high";
+  if (h.includes("leadership") || h.includes("signal")) return index === 0 ? "high" : "medium";
+  return index === 0 ? "high" : "medium";
+}
+
+const CALLBACK_PREVIEW_ICONS = [KeyIcon, BoltIcon, UserCircleIcon] as const;
 
 function mixHex(a: string, b: string, t: number): string {
   const ah = a.replace("#", "");
@@ -265,14 +292,7 @@ function ScoreRing({
   );
 }
 
-function getQualityLevelLabelSandbox(qualityPct: number): string {
-  const q = Math.max(0, Math.min(100, Math.round(qualityPct)));
-  if (q >= 80) return t("optimize.resumeQualityLevelExcellent");
-  if (q >= 60) return t("optimize.resumeQualityLevelStrong");
-  if (q >= 45) return t("optimize.resumeQualityLevelGood");
-  if (q >= 25) return t("optimize.resumeQualityLevelFair");
-  return t("optimize.resumeQualityLevelLow");
-}
+const RESULT_KEY_ICONS = [DocumentTextIcon, BriefcaseIcon, AcademicCapIcon] as const;
 
 export default function AdminVisualTest() {
   const navigate = useNavigate();
@@ -313,177 +333,184 @@ export default function AdminVisualTest() {
     const problems = group.labels.filter((label) => isProblemLabel(label));
     return { category: group.category, problems };
   });
+  const totalIssueCount = treatmentGroups.reduce((n, g) => n + g.problems.length, 0);
+
+  const resultTierResult = useMemo(
+    () => matchTierShort(studioMatchPct, { excellentFrom: 78 }),
+    [studioMatchPct],
+  );
+  const resultImprovementCount = useMemo(
+    () => MOCK.resultKeyChanges.reduce((n, g) => n + g.items.length, 0),
+    [],
+  );
+  const resultScoreFactorLines = useMemo(
+    () => [
+      t("admin.visualSandbox.resultScoreFactor1"),
+      t("admin.visualSandbox.resultScoreFactor2"),
+      t("admin.visualSandbox.resultScoreFactor3"),
+      t("admin.visualSandbox.resultScoreFactor4"),
+      t("admin.visualSandbox.resultScoreFactor5"),
+    ],
+    [],
+  );
+  const resultTopBucketPct = studioMatchPct >= 92 ? 2 : studioMatchPct >= 85 ? 5 : null;
 
   const currentMatchPct = assessmentQualityPct;
   const potentialMatchPct = studioMatchPct;
   const currentTier = matchTierShort(currentMatchPct);
-  const potentialTier = matchTierShort(potentialMatchPct);
+  const potentialTier = matchTierShort(potentialMatchPct, { excellentFrom: 78 });
+
+  const assessmentHero = (
+    <div className="w-full min-w-0 space-y-1">
+      <h2 className="text-[20px] sm:text-[22px] font-semibold leading-snug tracking-tight text-[#181819]">
+        {t("admin.visualSandbox.assessmentTitleLead")}{" "}
+        <span className="text-[#6366F1]">{t("admin.visualSandbox.assessmentTitleHighlight")}</span>
+      </h2>
+      <p className="text-[13px] leading-relaxed text-[#6B7280]">{t("admin.visualSandbox.assessmentSubtitle")}</p>
+    </div>
+  );
+
   const assessmentLeftColumn = (
     <div className="flex flex-col gap-5 w-full min-w-0 overflow-x-hidden">
-      <div className="space-y-1">
-        <h2 className="text-[20px] sm:text-[22px] font-semibold leading-snug tracking-tight text-[#181819]">
-          {t("admin.visualSandbox.assessmentTitleLead")}{" "}
-          <span className="text-[#6366F1]">{t("admin.visualSandbox.assessmentTitleHighlight")}</span>
-        </h2>
-        <p className="text-[13px] leading-relaxed text-[#6B7280]">{t("admin.visualSandbox.assessmentSubtitle")}</p>
-      </div>
-
-      <section className="rounded-2xl border border-[#EBEDF5] bg-white p-4 shadow-[0_2px_16px_-12px_rgba(15,23,42,0.1)] sm:p-6">
-        <p className="mb-5 text-[11px] font-semibold uppercase tracking-wider text-[#6B7280]">{t("optimize.overallMatchScore")}</p>
-        <div className="flex flex-col items-stretch gap-10 lg:flex-row lg:items-center lg:justify-between lg:gap-12">
-          <div className="flex flex-1 flex-wrap justify-center gap-12 sm:justify-center sm:gap-16 lg:gap-20">
-            <div className="flex flex-col items-center text-center">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-[#6B7280]">{t("admin.visualSandbox.currentMatch")}</p>
-              <div className="relative mt-4 h-[128px] w-[128px]">
-                <ScoreRing percent={currentMatchPct} size={128} thickness={15} mode="score" />
-                <span className="absolute inset-0 flex items-center justify-center text-[30px] font-bold tabular-nums text-[#181819]">{currentMatchPct}%</span>
-              </div>
-              <p className={`mt-4 text-[16px] font-semibold leading-none ${currentTier.textClass}`}>{currentTier.label}</p>
-            </div>
-            <div className="flex flex-col items-center text-center">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-[#6B7280]">{t("admin.visualSandbox.potentialMatch")}</p>
-              <div className="relative mt-4 h-[128px] w-[128px]">
-                <ScoreRing percent={potentialMatchPct} size={128} thickness={15} mode="score" />
-                <span className={`absolute inset-0 flex items-center justify-center text-[30px] font-bold tabular-nums ${potentialTier.textClass}`}>{potentialMatchPct}%</span>
-              </div>
-              <p className={`mt-4 text-[16px] font-semibold leading-none ${potentialTier.textClass}`}>{potentialTier.label}</p>
+      <section className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] sm:p-6">
+        <p className="mb-6 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">{t("optimize.overallMatchScore")}</p>
+        <div className="grid flex-1 grid-cols-1 items-start gap-8 sm:grid-cols-[1fr_auto_1fr] sm:gap-4">
+          <div className="min-w-0 text-center sm:text-left">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">{t("admin.visualSandbox.currentMatch")}</p>
+            <p className="mt-2 text-[clamp(2rem,8vw,2.75rem)] font-bold tabular-nums leading-none tracking-tight text-[#0f172a]">{currentMatchPct}%</p>
+            <p className={`mt-2 text-[15px] font-semibold ${currentTier.textClass}`}>{currentTier.label}</p>
+            <p className="mx-auto mt-1 max-w-[240px] text-[11px] leading-snug text-slate-500 sm:mx-0">{currentTier.hint}</p>
+            <div className="mx-auto mt-4 h-2 max-w-[220px] overflow-hidden rounded-full bg-slate-100 sm:mx-0 sm:max-w-none">
+              <div className={`h-full rounded-full ${currentTier.barClass}`} style={{ width: `${currentMatchPct}%` }} />
             </div>
           </div>
-          <div className="flex shrink-0 flex-col items-center justify-center rounded-2xl border border-[#E8ECF4] bg-[#F8FAFC] px-10 py-10 text-center lg:min-w-[220px]">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-[#6B7280]">{t("admin.visualSandbox.atsFriendlyLabel")}</p>
-            <p className="mt-3 flex items-baseline justify-center gap-0.5 tabular-nums">
-              <span className="text-[44px] font-bold leading-none tracking-tight text-[#181819]">{MOCK.atsFriendlyScore}</span>
-              <span className="text-[24px] font-semibold text-[#9CA3AF]">/100</span>
-            </p>
+          <div className="flex justify-center sm:pt-10">
+            <ArrowRightIcon className="h-6 w-6 shrink-0 text-slate-300 rotate-90 sm:rotate-0" aria-hidden />
+          </div>
+          <div className="min-w-0 text-center sm:text-left">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">{t("admin.visualSandbox.potentialMatch")}</p>
+            <p className={`mt-2 text-[clamp(2rem,8vw,2.75rem)] font-bold tabular-nums leading-none ${potentialTier.textClass}`}>{potentialMatchPct}%</p>
+            <p className={`mt-2 text-[15px] font-semibold ${potentialTier.textClass}`}>{potentialTier.label}</p>
+            <p className="mx-auto mt-1 max-w-[240px] text-[11px] leading-snug text-slate-500 sm:mx-0">{potentialTier.hint}</p>
+            <div className="mx-auto mt-4 h-2 max-w-[220px] overflow-hidden rounded-full bg-slate-100 sm:mx-0 sm:max-w-none">
+              <div className={`h-full rounded-full ${potentialTier.barClass}`} style={{ width: `${potentialMatchPct}%` }} />
+            </div>
           </div>
         </div>
       </section>
 
-      <div className="w-full min-w-0 max-w-full overflow-x-clip">
-        <div
-          className="w-full min-w-0 max-w-full rounded-[22px] border border-transparent critical-border-shimmer p-[1px] overflow-hidden [contain:paint]"
-          style={{
-            background:
-              "linear-gradient(#FAFAFC, #FAFAFC) padding-box, linear-gradient(120deg, #F36B7F 0%, #E94A63 45%, #C92A4B 100%) border-box, linear-gradient(120deg, rgba(255,255,255,0) 40%, rgba(255,255,255,0.85) 50%, rgba(255,255,255,0) 60%) border-box",
-            backgroundSize: "100% 100%, 100% 100%, 165% 165%",
-            backgroundPosition: "0 0, 0 0, 125% 0",
-            animation: "criticalBorderShimmer 3.2s linear infinite",
-          }}
-        >
-          <div className="rounded-[21px] bg-white p-4 sm:p-6 min-w-0 overflow-x-hidden">
-            <div className="flex items-start gap-2 mb-1.5 w-full min-w-0">
-              <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-[1.5px] border-[#C92A4B] text-[#C92A4B] text-[13px] font-bold">
-                !
-              </span>
-              <p className="text-[15px] sm:text-base font-semibold text-[#181819] leading-snug min-w-0 flex-1 break-words">
-                {t("optimize.whyNoCallbacksTitle")}
-              </p>
-            </div>
-            <p className="mt-1.5 text-[13px] text-[#4B5563] leading-relaxed break-words">{scanSummaryText}</p>
+      <section className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] sm:p-6">
+        <div className="border-b border-slate-100 pb-4">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-indigo-600">
+            {t("admin.visualSandbox.recommendationsEyebrow")}
+          </p>
+          <h3 className="mt-2 text-[17px] font-semibold tracking-tight text-[#0f172a]">{t("optimize.whyNoCallbacksTitle")}</h3>
+          <p className="mt-2 text-[13px] leading-relaxed text-slate-500">{scanSummaryText}</p>
+        </div>
 
-            <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3 sm:gap-4">
-              {treatmentGroups.map((group) => {
-                const avgBoost = categoryAvgBoost(group.problems);
-                return (
+        <ul className="mt-4 space-y-3">
+          {MOCK.callback_blockers.map((cb, i) => {
+            const Icon = CALLBACK_PREVIEW_ICONS[i % CALLBACK_PREVIEW_ICONS.length];
+            const tone = impactToneForBlocker(cb, i);
+            const boost = boostPctForSandboxBlocker(i);
+            return (
+              <li
+                key={cb.headline}
+                className="rounded-xl border border-slate-200/70 bg-gradient-to-b from-white to-slate-50/50 p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
+              >
+                <div className="flex gap-3">
                   <div
-                    key={group.category}
-                    className="flex items-start justify-between gap-4 rounded-xl border border-[#EDF1F7] bg-[#FAFBFF] px-4 py-4 sm:min-h-[108px]"
+                    className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${
+                      tone === "high"
+                        ? "bg-red-50 text-red-600"
+                        : "bg-amber-50 text-amber-700"
+                    }`}
+                    aria-hidden
                   >
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[13px] font-semibold leading-snug text-[#181819]">{group.category}</p>
-                      <p className="mt-1 text-[11px] leading-snug text-[#6B7280]">{t("optimize.issuesToFix")}</p>
-                    </div>
-                    <div className="shrink-0 text-right">
-                      <p className="text-[34px] font-bold leading-none tabular-nums text-[#181819]">{group.problems.length}</p>
-                      {group.problems.length > 0 ? (
-                        <p className="mt-1 text-[17px] font-semibold tabular-nums text-emerald-600">+{avgBoost}%</p>
-                      ) : (
-                        <p className="mt-1 text-[13px] font-medium text-[#9CA3AF]">—</p>
-                      )}
-                    </div>
+                    <Icon className="h-5 w-5" strokeWidth={1.5} />
                   </div>
-                );
-              })}
-            </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[14px] font-semibold leading-snug text-[#0f172a]">{cb.headline}</p>
+                    <p className="mt-1.5 text-[12px] leading-snug text-slate-600">{cb.action}</p>
+                  </div>
+                  <div className="flex shrink-0 flex-col items-end gap-1.5 self-start">
+                    <span
+                      className={`rounded-lg px-2.5 py-1 text-[11px] font-medium tracking-tight ${
+                        tone === "high"
+                          ? "bg-red-50 text-red-800"
+                          : "bg-amber-50 text-amber-900"
+                      }`}
+                    >
+                      {tone === "high" ? t("admin.visualSandbox.impactHigh") : t("admin.visualSandbox.impactMedium")}
+                    </span>
+                    <span className="text-[13px] font-semibold tabular-nums text-[#0f766e]">
+                      {tFormat(t("admin.visualSandbox.potentialBoost"), { pct: boost })}
+                    </span>
+                  </div>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
 
-            <Disclosure>
-              {({ open }) => (
-                <div className="mt-6 border-t border-[#EDF1F7] pt-5">
-                  <DisclosureButton className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] px-4 py-3.5 text-[14px] font-semibold text-[#181819] transition-colors hover:bg-[#F3F4F6]">
-                    <span>{t("admin.visualSandbox.expandIssueDetails")}</span>
-                    <ChevronDownIcon className={`h-5 w-5 shrink-0 text-[#6B7280] transition-transform ${open ? "rotate-180" : ""}`} />
-                  </DisclosureButton>
-                  <DisclosurePanel className="mt-5 space-y-6">
-                    {treatmentGroups.map((group) => (
-                      <div key={`detail-${group.category}`}>
-                        <p className="text-[13px] font-semibold text-[#181819]">{group.category}</p>
-                        {group.problems.length > 0 ? (
-                          <ul className="mt-3 space-y-3">
-                            {group.problems.map((label) => (
-                              <li key={`${group.category}-${label}`} className="rounded-xl bg-[#F8FAFD] px-3.5 py-3 ring-1 ring-[#EDF1F7]">
-                                <p className="text-[12px] font-semibold text-[#181819]">{cleanReason(label)}</p>
-                                <p className="mt-1.5 text-[12px] leading-relaxed text-[#4B5563]">
-                                  <span className="font-semibold text-[#181819]">{t("optimize.ifIgnored")}</span> {impactFromIssue(label)}
-                                </p>
-                                <p className="mt-1.5 text-[12px] leading-relaxed text-[#4B5563]">
-                                  <span className="font-semibold text-[#181819]">{t("optimize.whatToChange")}</span> {fixFromIssue(label)}
-                                </p>
-                              </li>
-                            ))}
-                          </ul>
-                        ) : (
-                          <p className="mt-2 text-[12px] text-[#6B7280]">{t("optimize.noBlockingInCategory")}</p>
-                        )}
+        <Disclosure>
+          {({ open }) => (
+            <div className="mt-2 border-t border-slate-100 pt-4">
+              <DisclosureButton className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-[13px] font-semibold text-[#0f172a] shadow-sm transition-colors hover:bg-slate-50">
+                <span>{tFormat(t("admin.visualSandbox.seeGapBreakdown"), { count: totalIssueCount })}</span>
+                <ChevronDownIcon className={`h-5 w-5 shrink-0 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`} />
+              </DisclosureButton>
+              <DisclosurePanel className="mt-4 rounded-xl border border-slate-200 bg-white px-3 py-3">
+                <div className="grid max-h-[min(50vh,340px)] grid-cols-1 gap-2 overflow-y-auto sm:grid-cols-2">
+                  {treatmentGroups
+                    .filter((g) => g.problems.length > 0)
+                    .map((group) => (
+                      <div
+                        key={group.category}
+                        className="rounded-xl border border-slate-200/90 bg-white p-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
+                      >
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">{group.category}</p>
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {group.problems.map((label) => (
+                            <span
+                              key={`${group.category}-${label}`}
+                              className="inline-flex max-w-full break-words rounded-md bg-white px-2 py-1 text-[11px] font-medium leading-snug text-[#334155] ring-1 ring-slate-200/90"
+                            >
+                              {cleanReason(label)}
+                            </span>
+                          ))}
+                        </div>
                       </div>
                     ))}
-                  </DisclosurePanel>
                 </div>
-              )}
-            </Disclosure>
-          </div>
-        </div>
-      </div>
-
-      <section className="rounded-2xl border border-[#E8E4FF] bg-gradient-to-br from-[#F5F3FF] via-white to-[#EDE9FE] p-5 shadow-sm sm:p-6">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-center">
-          <div className="flex min-w-0 flex-1 gap-4">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#818CF8] to-[#6366F1] shadow-md">
-              <SparklesIcon className="h-7 w-7 text-white" aria-hidden />
+              </DisclosurePanel>
             </div>
-            <div className="min-w-0 flex-1 space-y-3">
-              <p className="text-[14px] font-semibold leading-snug text-[#181819] sm:text-[15px]">
-                {tFormat(t("admin.visualSandbox.autoImproveBannerTitle"), { pct: potentialMatchPct })}
-              </p>
-              <ul className="space-y-1.5">
-                {[t("admin.visualSandbox.autoImproveBullet1"), t("admin.visualSandbox.autoImproveBullet2"), t("admin.visualSandbox.autoImproveBullet3")].map((line) => (
-                  <li key={line} className="flex items-center gap-2 text-[12px] text-[#374151]">
-                    <CheckIcon className="h-4 w-4 shrink-0 text-emerald-600" strokeWidth={2.5} aria-hidden />
-                    {line}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-          <button
-            type="button"
-            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full px-6 py-3 text-[14px] font-semibold text-white shadow-[0_4px_14px_-4px_rgba(99,102,241,0.55)] transition-all hover:opacity-[0.97] active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-[#6366F1]/35 focus:ring-offset-2"
-            style={{ background: "linear-gradient(165deg, #818cf8 0%, #6366f1 45%, #4f46e5 100%)" }}
-          >
-            {t("admin.visualSandbox.autoImproveBannerCta")}
-          </button>
-        </div>
+          )}
+        </Disclosure>
       </section>
     </div>
   );
 
   const assessmentRightColumn = (
-    <aside className="w-full min-w-0 lg:sticky lg:top-20 lg:self-start">
-      <div className="mb-4">
-        <h3 className="text-[15px] font-semibold text-[#181819]">{t("admin.visualSandbox.previewTitle")}</h3>
-        <p className="mt-1 text-[12px] leading-relaxed text-[#6B7280]">{t("admin.visualSandbox.previewSubtitle")}</p>
-      </div>
-
+    <aside className="flex w-full min-w-0 flex-col gap-4 lg:sticky lg:top-20 lg:self-start">
       <div className="overflow-hidden rounded-2xl border border-[#E8ECF4] bg-white shadow-[0_8px_32px_-12px_rgba(15,23,42,0.12)]">
+        <div className="flex flex-nowrap items-center gap-3 border-b border-[#E8ECF4] bg-[#FAFBFC] px-4 py-3">
+          <div className="shrink-0">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">{t("admin.visualSandbox.atsFriendlyLabel")}</p>
+            <div className="mt-0.5 flex items-baseline gap-0.5 tabular-nums leading-none">
+              <span className="text-[1.375rem] font-bold tracking-tight text-[#0f172a]">{MOCK.atsFriendlyScore}</span>
+              <span className="text-sm font-medium text-slate-400">/100</span>
+            </div>
+          </div>
+          <div className="min-w-0 flex-1 self-center">
+            <div className="h-1.5 w-full min-w-0 overflow-hidden rounded-full bg-slate-200/80">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-indigo-400 via-violet-400 to-emerald-400"
+                style={{ width: `${MOCK.atsFriendlyScore}%` }}
+              />
+            </div>
+          </div>
+        </div>
         <div className="relative aspect-[210/270] bg-[#F4F6FA]">
           {mockThumbUrl ? (
             <img src={mockThumbUrl} alt="" className="absolute inset-0 h-full w-full object-cover object-top" />
@@ -510,105 +537,169 @@ export default function AdminVisualTest() {
           </div>
         </div>
       </div>
+
+      <section className="rounded-2xl border border-[#E8E4FF] bg-gradient-to-br from-[#F5F3FF] via-white to-[#EDE9FE] p-5 shadow-sm sm:p-6">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-center">
+          <div className="flex min-w-0 flex-1 gap-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#818CF8] to-[#6366F1] shadow-md">
+              <SparklesIcon className="h-7 w-7 text-white" aria-hidden />
+            </div>
+            <div className="min-w-0 flex-1 space-y-3">
+              <p className="text-[14px] font-semibold leading-snug text-[#181819] sm:text-[15px]">
+                {tFormat(t("admin.visualSandbox.autoImproveBannerTitle"), { pct: potentialMatchPct })}
+              </p>
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+                {[t("admin.visualSandbox.autoImproveBullet1"), t("admin.visualSandbox.autoImproveBullet2"), t("admin.visualSandbox.autoImproveBullet3")].map((line) => (
+                  <span key={line} className="inline-flex items-center gap-1.5 text-[12px] text-[#374151]">
+                    <CheckIcon className="h-4 w-4 shrink-0 text-emerald-600" strokeWidth={2.5} aria-hidden />
+                    {line}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="inline-flex w-full shrink-0 items-center justify-center gap-2 rounded-full px-6 py-3 text-[14px] font-semibold text-white shadow-[0_4px_14px_-4px_rgba(99,102,241,0.55)] transition-all hover:opacity-[0.97] active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-[#6366F1]/35 focus:ring-offset-2 sm:w-auto"
+            style={{ background: "linear-gradient(165deg, #818cf8 0%, #6366f1 45%, #4f46e5 100%)" }}
+          >
+            {t("admin.visualSandbox.autoImproveBannerCta")}
+          </button>
+        </div>
+      </section>
     </aside>
   );
 
   const assessmentBlock = (
-    <div className="flex w-full min-w-0 flex-col gap-8 lg:flex-row lg:items-start lg:gap-10">
-      <div className="w-full min-w-0 lg:w-[65%]">{assessmentLeftColumn}</div>
-      <div className="w-full min-w-0 lg:w-[35%]">{assessmentRightColumn}</div>
+    <div className="flex w-full min-w-0 flex-col gap-8">
+      {assessmentHero}
+      <div className="flex w-full min-w-0 flex-col gap-8 lg:flex-row lg:items-start lg:gap-10">
+        <div className="w-full min-w-0 lg:w-[65%]">{assessmentLeftColumn}</div>
+        <div className="w-full min-w-0 lg:w-[35%]">{assessmentRightColumn}</div>
+      </div>
     </div>
   );
 
   const resultBlock = (
-    <div className="flex flex-col gap-4 w-full min-w-0 max-w-3xl mx-auto items-stretch overflow-x-hidden">
-      {/* Post–auto-improve match card (prod: green state + resume quality ring) */}
-      <section className="w-full rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-4 sm:p-5">
-        <p className="text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider mb-3">{t("optimize.overallMatchScore")}</p>
-        <div className="rounded-xl border border-[#BBF7D0] bg-[#F0FDF4] p-3.5 sm:p-4.5">
-          <div className="flex flex-col gap-4 sm:gap-5">
-            <div className="flex flex-col lg:flex-row items-center lg:items-center gap-5 lg:gap-6 min-w-0 max-w-full">
-              <div className="flex items-center gap-3 shrink-0 max-w-full min-w-0 justify-center flex-wrap sm:flex-nowrap">
-                <div className="w-[72px] sm:w-[84px] shrink-0 rounded bg-white shadow-[0_2px_8px_-4px_rgba(20,25,40,0.12)] border border-[#E8ECF4] flex flex-col relative aspect-[210/297] overflow-hidden group">
-                  {mockThumbUrl ? (
-                    <img src={mockThumbUrl} alt="" className="absolute inset-0 w-full h-full object-cover object-top opacity-90" />
-                  ) : (
-                    <div className="absolute inset-0 bg-[#F0FDF4] flex flex-col p-2 gap-1.5 opacity-70">
-                      <div className="w-1/2 h-1.5 bg-[#BBF7D0] rounded-full mx-auto mb-1" />
-                      <div className="w-full h-1 bg-[#BBF7D0] rounded-full" />
-                      <div className="w-5/6 h-1 bg-[#BBF7D0] rounded-full" />
-                      <div className="w-full h-1 bg-[#BBF7D0] rounded-full mt-1" />
-                      <div className="w-4/5 h-1 bg-[#BBF7D0] rounded-full" />
-                      <div className="w-full h-1 bg-[#BBF7D0] rounded-full" />
-                    </div>
-                  )}
-                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/5 backdrop-blur-[1px] pointer-events-none">
-                    <span className="text-[9px] font-semibold text-[#166534] uppercase tracking-wider bg-white/95 px-1.5 py-0.5 rounded shadow-sm">{t("home.resume")}</span>
-                  </div>
-                </div>
-                <span className="text-[#8A94A6] text-xl font-light">+</span>
-                <div className="w-[72px] sm:w-[84px] shrink-0 rounded bg-white shadow-[0_2px_8px_-4px_rgba(20,25,40,0.12)] border border-[#E8ECF4] flex flex-col relative aspect-[210/297] p-2 text-center justify-center">
-                  <p className="text-[10px] sm:text-[11px] font-semibold text-[#181819] leading-tight line-clamp-4">Senior Product Manager</p>
-                  <p className="text-[8px] sm:text-[9px] text-[#6B7280] mt-1.5 line-clamp-2">TechCorp</p>
-                </div>
-              </div>
-              <div className="hidden lg:block w-px h-[100px] bg-[#BBF7D0] shrink-0" />
-              <div className="lg:hidden w-full h-px bg-[#BBF7D0]" />
-              <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-4 flex-1 w-full min-w-0 justify-center sm:justify-start">
-                <div className="sm:hidden shrink-0 relative w-[104px] h-[104px]">
-                  <ScoreRing percent={studioMatchPct} size={104} thickness={12} mode="score" />
-                  <span className="absolute inset-0 flex items-center justify-center text-[19px] font-bold text-[#166534] tabular-nums">{studioMatchPct}%</span>
-                </div>
-                <div className="hidden sm:block lg:hidden shrink-0 relative w-[110px] h-[110px]">
-                  <ScoreRing percent={studioMatchPct} size={110} thickness={13} mode="score" />
-                  <span className="absolute inset-0 flex items-center justify-center text-[21px] font-bold text-[#166534] tabular-nums">{studioMatchPct}%</span>
-                </div>
-                <div className="hidden lg:block shrink-0 relative w-[118px] h-[118px]">
-                  <ScoreRing percent={studioMatchPct} size={118} thickness={14} mode="score" />
-                  <span className="absolute inset-0 flex items-center justify-center text-[22px] font-bold text-[#166534] tabular-nums">{studioMatchPct}%</span>
-                </div>
-                <div className="text-center sm:text-left flex-1 min-w-0">
-                  <p className="text-[11px] font-semibold text-[#166534] uppercase tracking-wider">
-                    {t("optimize.resumeQuality")} ({getQualityLevelLabelSandbox(studioMatchPct)})
-                  </p>
-                  <p className="mt-1.5 sm:mt-1 text-[11px] sm:text-[12px] text-[#6B7280] leading-relaxed max-w-[280px] mx-auto sm:mx-0">
-                    {t("optimize.resumeQualityHintHigh")}
-                  </p>
-                </div>
+    <div className="flex w-full min-w-0 max-w-5xl flex-col gap-8 overflow-x-hidden mx-auto items-stretch">
+      <div className="space-y-2">
+        <h2 className="text-[22px] font-semibold leading-snug tracking-tight text-[#0f172a] sm:text-[24px]">
+          {t("admin.visualSandbox.resultOptimizedTitle")}
+        </h2>
+        <p className="text-[14px] leading-relaxed text-[#64748b]">{t("admin.visualSandbox.resultOptimizedSubtitle")}</p>
+      </div>
+
+      <section className="w-full rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50/95 via-white to-white p-6 shadow-[0_1px_3px_rgba(15,23,42,0.06)] sm:p-8">
+        <div className="grid grid-cols-1 items-start gap-10 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:gap-8">
+          <div className="min-w-0 text-center lg:text-left">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#64748b]">
+              {t("admin.visualSandbox.resultYourMatchScoreLabel")}
+            </p>
+            <p className="mt-2 text-[clamp(2.5rem,10vw,3.5rem)] font-bold tabular-nums leading-none tracking-tight text-emerald-700">
+              {studioMatchPct}%
+            </p>
+            <p className={`mt-2 text-[16px] font-semibold ${resultTierResult.textClass}`}>{resultTierResult.label}</p>
+            <p className="mx-auto mt-2 max-w-[280px] text-[13px] leading-snug text-[#64748b] lg:mx-0">{resultTierResult.hint}</p>
+            {resultTopBucketPct != null && (
+              <span className="mt-4 inline-flex rounded-full bg-emerald-100 px-3 py-1 text-[11px] font-semibold text-emerald-900">
+                {tFormat(t("admin.visualSandbox.resultTopCandidatesBadge"), { pct: resultTopBucketPct })}
+              </span>
+            )}
+          </div>
+
+          <div className="relative mx-auto flex shrink-0 justify-center lg:mx-0">
+            <span className="absolute -left-3 top-6 h-2 w-2 rounded-full bg-emerald-400/45" aria-hidden />
+            <span className="absolute -right-2 bottom-10 h-1.5 w-1.5 rounded-full bg-teal-300/60" aria-hidden />
+            <span className="absolute left-8 -top-1 h-1.5 w-1.5 rounded-full bg-emerald-300/50" aria-hidden />
+            <span className="absolute -bottom-1 right-6 h-2 w-2 rounded-full bg-lime-400/35" aria-hidden />
+            <div className="relative h-[120px] w-[120px] shrink-0">
+              <ScoreRing percent={studioMatchPct} size={120} thickness={14} mode="score" />
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                <CheckIcon className="h-10 w-10 text-emerald-600" strokeWidth={2.25} aria-hidden />
               </div>
             </div>
           </div>
+
+          <div className="hidden min-w-0 border-l border-emerald-100 pl-6 lg:block">
+            <p className="text-[12px] font-medium text-[#64748b]">{t("admin.visualSandbox.resultScoreBasedOn")}</p>
+            <ul className="mt-4 space-y-3">
+              {resultScoreFactorLines.map((line) => (
+                <li key={line} className="flex items-start gap-2.5 text-[13px] leading-snug text-[#334155]">
+                  <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-100">
+                    <CheckIcon className="h-3 w-3 text-emerald-700" strokeWidth={2.5} aria-hidden />
+                  </span>
+                  {line}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+
+        <div className="mt-8 border-t border-emerald-100 pt-6 lg:hidden">
+          <p className="text-[12px] font-medium text-[#64748b]">{t("admin.visualSandbox.resultScoreBasedOn")}</p>
+          <ul className="mt-3 space-y-2.5">
+            {resultScoreFactorLines.map((line) => (
+              <li key={line} className="flex items-start gap-2.5 text-[13px] text-[#334155]">
+                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-100">
+                  <CheckIcon className="h-3 w-3 text-emerald-700" strokeWidth={2.5} aria-hidden />
+                </span>
+                {line}
+              </li>
+            ))}
+          </ul>
         </div>
       </section>
 
-      <section className="w-full rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-4 sm:p-5">
-        <h3 className="text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider mb-2">{t("optimize.keyChanges")}</h3>
-        <div className="space-y-3">
-          {MOCK.resultKeyChanges.map((group, idx) => (
-            <div key={idx} className="space-y-1.5">
-              <p className="text-[13px] font-semibold text-[#181819]">{group.category}</p>
-              {group.description && <p className="text-[13px] text-[#4B5563] leading-relaxed">{group.description}</p>}
-              {group.items.length > 0 && (
-                <div className="flex flex-wrap gap-1.5">
-                  {group.items.map((item, i) => (
-                    <span
-                      key={i}
-                      className="inline-flex items-center gap-1.5 pl-2 pr-2.5 py-1 rounded-full text-[11px] font-medium text-[#181819] bg-[#ECFDF5] border border-[#A7F3D0]"
-                    >
-                      <CheckIcon className="w-3.5 h-3.5 shrink-0 text-emerald-600" strokeWidth={2.5} aria-hidden />
-                      {item}
-                    </span>
-                  ))}
+      <section className="w-full">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h3 className="text-[17px] font-semibold tracking-tight text-[#0f172a]">{t("admin.visualSandbox.resultKeyChangesTitle")}</h3>
+            <p className="mt-1 text-[13px] leading-relaxed text-[#64748b]">{t("admin.visualSandbox.resultKeyChangesSubtitle")}</p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2 text-[13px] font-semibold text-emerald-700">
+            <CheckIcon className="h-5 w-5 shrink-0" strokeWidth={2} aria-hidden />
+            {tFormat(t("admin.visualSandbox.resultImprovementsApplied"), { count: resultImprovementCount })}
+          </div>
+        </div>
+
+        <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {MOCK.resultKeyChanges.map((group, idx) => {
+            const Icon = RESULT_KEY_ICONS[idx % RESULT_KEY_ICONS.length];
+            const subtitle = group.description ?? group.items[0] ?? "";
+            return (
+              <div
+                key={group.category}
+                className="flex gap-3 rounded-xl border border-slate-200/90 bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
+              >
+                <div
+                  className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${
+                    idx === 0
+                      ? "bg-violet-50 text-violet-600"
+                      : idx === 1
+                        ? "bg-amber-50 text-amber-700"
+                        : "bg-emerald-50 text-emerald-700"
+                  }`}
+                  aria-hidden
+                >
+                  <Icon className="h-5 w-5" strokeWidth={1.5} />
                 </div>
-              )}
-            </div>
-          ))}
+                <div className="min-w-0 flex-1">
+                  <p className="text-[14px] font-semibold text-[#0f172a]">{group.category}</p>
+                  <p className="mt-1 text-[12px] leading-snug text-[#64748b]">{subtitle}</p>
+                </div>
+                <div className="flex shrink-0 flex-col items-end gap-0.5">
+                  <CheckIcon className="h-4 w-4 text-emerald-600" strokeWidth={2.5} aria-hidden />
+                  <span className="text-[11px] font-semibold text-emerald-700">{t("admin.visualSandbox.resultImprovedLabel")}</span>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </section>
 
-      {/* Same block as prod Optimize: templates strip, photo, PDF preview, CTAs */}
-      <div className="mt-4 w-full max-w-3xl mx-auto">
+      <div className="w-full">
         <PostResultResumeStudio
+          sandboxVariant
           qualityPct={studioMatchPct}
           jobTitle={`${MOCK.displaySpecialty} — TechCorp`}
           fallbackPreviewUrl={mockThumbUrl}
@@ -633,16 +724,6 @@ export default function AdminVisualTest() {
 
   return (
     <div className="space-y-6 pb-24 sm:pb-12 w-full min-w-0">
-      <style>{`
-        @keyframes criticalBorderShimmer {
-          0% {
-            background-position: 0 0, 0 0, 125% 0;
-          }
-          100% {
-            background-position: 0 0, 0 0, -125% 0;
-          }
-        }
-      `}</style>
       {portalTarget &&
         createPortal(
           <div className="flex items-center justify-between w-full">

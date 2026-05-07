@@ -16,6 +16,8 @@ from typing import Any
 from hr_breaker.config import get_settings
 from hr_breaker.services.usage_audit import log_usage_event
 
+from hr_breaker.services.ga4_measurement import normalize_ga_client_id, send_ga4_purchase_event
+
 from hr_breaker.services.db import email_winback_delete_pending_for_user
 
 logger = logging.getLogger(__name__)
@@ -166,6 +168,7 @@ async def create_checkout_session(
     pool,
     get_or_create_customer_id,
     set_stripe_customer_id,
+    ga_client_id: str | None = None,
 ) -> str:
     """
     Create Stripe Checkout session.
@@ -185,13 +188,18 @@ async def create_checkout_session(
     trial_fee_price = (settings.stripe_price_trial_id or "").strip()
 
     line_items: list[dict] = [{"price": price_id, "quantity": 1}]
+    md: dict[str, str] = {"hr_breaker_user_id": user_id, "price_key": price_key}
+    if ga_client_id:
+        cid = normalize_ga_client_id(ga_client_id)
+        if cid:
+            md["ga_client_id"] = cid
     session_params = {
         "customer": customer_id,
         "mode": "subscription",
         "line_items": line_items,
         "success_url": success_url,
         "cancel_url": cancel_url,
-        "metadata": {"hr_breaker_user_id": user_id, "price_key": price_key},
+        "metadata": md,
         "allow_promotion_codes": True,
     }
     if is_trial:
@@ -215,6 +223,52 @@ async def create_checkout_session(
         detail = _stripe_error_detail(e)
         logger.error("Stripe Checkout Error: %s", detail)
         raise ValueError(f"Stripe Checkout: {detail}") from e
+
+
+async def _maybe_ga4_purchase_checkout(
+    session: object,
+    user_id: str,
+    metadata: dict[str, str],
+    *,
+    checkout_success: bool,
+) -> None:
+    """
+    Server-side GA4 `purchase` via Measurement Protocol (checkout.session.completed).
+    Skips if GA4 env unset, no ga_client_id in metadata, or checkout did not succeed (e.g. legacy trial fee charge failed).
+    Does not raise — webhook must complete even if GA4 fails.
+    """
+    if not checkout_success:
+        return
+    cid = normalize_ga_client_id(metadata.get("ga_client_id"))
+    if not cid:
+        return
+    payment_status = (_stripe_get(session, "payment_status", None) or "").strip().lower()
+    if payment_status == "unpaid":
+        return
+    amount_raw = _stripe_get(session, "amount_total", None)
+    try:
+        cents = int(amount_raw) if amount_raw is not None else 0
+    except (TypeError, ValueError):
+        cents = 0
+    value = cents / 100.0
+    currency = (_stripe_get(session, "currency", None) or "usd").strip().lower() or "usd"
+    session_id = (_stripe_get(session, "id", None) or "").strip()
+    if not session_id:
+        return
+    price_key = (metadata.get("price_key") or "").strip()
+    if price_key == PRICE_KEY_TRIAL:
+        item_id, item_name = "trial", "PitchCV trial subscription"
+    else:
+        item_id, item_name = "monthly", "PitchCV monthly subscription"
+    await send_ga4_purchase_event(
+        client_id=cid,
+        user_id=user_id,
+        transaction_id=session_id,
+        value=value,
+        currency=currency,
+        item_id=item_id,
+        item_name=item_name,
+    )
 
 
 def construct_event(payload: bytes, sig_header: str) -> object:
@@ -346,6 +400,7 @@ async def handle_checkout_session_completed(
                 await email_winback_delete_pending_for_user(pool, str(user_id))
             except Exception as e:
                 logger.debug("email_winback_delete_pending_for_user: %s", e)
+        await _maybe_ga4_purchase_checkout(session, user_id, metadata, checkout_success=trial_checkout_ok)
         return
 
     # Active (no trial window) — e.g. monthly signup
@@ -376,6 +431,7 @@ async def handle_checkout_session_completed(
             await email_winback_delete_pending_for_user(pool, str(user_id))
         except Exception as e:
             logger.debug("email_winback_delete_pending_for_user: %s", e)
+        await _maybe_ga4_purchase_checkout(session, user_id, metadata, checkout_success=True)
     else:
         logger.warning(
             "checkout.session.completed: unhandled subscription state user=%s sub=%s status=%s trial_end=%s period_end=%s",
