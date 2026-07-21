@@ -220,6 +220,7 @@ export type HistoryItem = {
   job_url?: string | null;
   source_checksum?: string;
   source_was_pdf?: boolean;
+  original_filename?: string | null;
 };
 export type HistoryResponse = { items: HistoryItem[] };
 
@@ -305,7 +306,7 @@ export async function getResumeThumbnailUrl(file: File): Promise<string> {
   return URL.createObjectURL(blob);
 }
 
-export type RegisterUploadResponse = { filename: string };
+export type RegisterUploadResponse = { filename: string; original_filename?: string | null };
 
 export async function registerResumeUpload(file: File): Promise<RegisterUploadResponse> {
   const form = new FormData();
@@ -448,6 +449,7 @@ export type LandingClaimResponse = {
   resume_content: string;
   job_text: string | null;
   resume_filename: string;
+  original_filename?: string | null;
 };
 
 export async function getLandingPending(token: string): Promise<LandingPendingResponse> {

@@ -4,6 +4,7 @@ import { EnvelopeIcon, LockClosedIcon, DocumentTextIcon, CheckCircleIcon } from 
 import * as api from "../api";
 import { useAuth } from "../contexts/AuthContext";
 import { t } from "../i18n";
+import { displayFilename } from "../utils/filenames";
 
 const LANDING_PENDING_KEY = "landing_pending_token";
 const PARTNER_REF_CODE_KEY = "partner_ref_code";
@@ -311,7 +312,7 @@ export default function Login() {
                   <div className="flex items-center gap-2.5 ds-card !rounded-[var(--radius-md)] px-3 py-2.5">
                     <DocumentTextIcon className="w-4 h-4 shrink-0 text-[var(--accent)]" />
                     <span className="text-xs font-medium text-[var(--text)] truncate" title={pendingData.resume_filename}>
-                      {pendingData.resume_filename}
+                      {displayFilename(pendingData.resume_filename)}
                     </span>
                   </div>
                   {!pendingData.resume_only && (

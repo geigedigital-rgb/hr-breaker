@@ -32,6 +32,7 @@ def _record_to_dict(r: GeneratedPDF) -> dict:
         "company_logo_url": r.company_logo_url,
         "job_url": r.job_url,
         "source_was_pdf": r.source_was_pdf,
+        "original_filename": r.original_filename,
     }
 
 
@@ -59,6 +60,7 @@ def _dict_to_record(d: dict, output_dir: Path) -> GeneratedPDF:
         company_logo_url=d.get("company_logo_url"),
         job_url=d.get("job_url"),
         source_was_pdf=d.get("source_was_pdf", False),
+        original_filename=d.get("original_filename"),
     )
 
 

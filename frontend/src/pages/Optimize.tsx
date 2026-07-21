@@ -1475,7 +1475,9 @@ export default function Optimize() {
             state: {
               resumeContent: data.resume_content,
               uploadedFileName: data.resume_filename,
-              sourceWasPdf: (data.resume_filename || "").toLowerCase().endsWith(".pdf"),
+              originalFileName: data.original_filename || undefined,
+              sourceWasPdf: (data.resume_filename || "").toLowerCase().endsWith(".pdf")
+                || Boolean(data.original_filename?.toLowerCase().endsWith(".pdf")),
             },
           });
           setClaimGate(false);
@@ -1483,7 +1485,10 @@ export default function Optimize() {
         }
         setResumeContent(data.resume_content);
         setUploadedFileName(data.resume_filename);
-        setResumeSourceWasPdf((data.resume_filename || "").toLowerCase().endsWith(".pdf"));
+        setResumeSourceWasPdf(
+          (data.resume_filename || "").toLowerCase().endsWith(".pdf")
+            || Boolean(data.original_filename?.toLowerCase().endsWith(".pdf")),
+        );
         setJobInput(job);
         setJobMode("text");
         setResult(null);
@@ -1749,6 +1754,7 @@ export default function Optimize() {
     const state = location.state as {
       resumeContent?: string;
       uploadedFileName?: string;
+      originalFileName?: string;
       sourceWasPdf?: boolean;
       improveMode?: boolean;
       jobInputPreset?: string;

@@ -56,3 +56,4 @@ class GeneratedPDF(BaseModel):
     company_logo_url: str | None = None
     job_url: str | None = None
     source_was_pdf: bool = False
+    original_filename: str | None = None

@@ -81,7 +81,8 @@ CREATE TABLE IF NOT EXISTS {TABLE} (
     post_keyword_score REAL,
     company_logo_url TEXT,
     job_url TEXT,
-    source_was_pdf BOOLEAN NOT NULL DEFAULT FALSE
+    source_was_pdf BOOLEAN NOT NULL DEFAULT FALSE,
+    original_filename TEXT
 );
 """
 
@@ -225,6 +226,9 @@ async def init_table(pool) -> None:
         )
         await conn.execute(
             f"ALTER TABLE {TABLE} ADD COLUMN IF NOT EXISTS source_was_pdf BOOLEAN NOT NULL DEFAULT FALSE"
+        )
+        await conn.execute(
+            f"ALTER TABLE {TABLE} ADD COLUMN IF NOT EXISTS original_filename TEXT"
         )
         await conn.execute(f"CREATE INDEX IF NOT EXISTS idx_resumes_user_id ON {TABLE}(user_id)")
         # Market Readiness (non-gamified status)
@@ -549,8 +553,9 @@ async def db_insert(pool, output_dir: Path, pdf: GeneratedPDF, user_id: str) -> 
             INSERT INTO {TABLE} (
                 filename, user_id, source_checksum, company, job_title, created_at,
                 first_name, last_name, pre_ats_score, post_ats_score,
-                pre_keyword_score, post_keyword_score, company_logo_url, job_url, source_was_pdf
-            ) VALUES ($1, $2::uuid, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+                pre_keyword_score, post_keyword_score, company_logo_url, job_url, source_was_pdf,
+                original_filename
+            ) VALUES ($1, $2::uuid, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
             ON CONFLICT (filename) DO UPDATE SET
                 user_id = EXCLUDED.user_id,
                 source_checksum = EXCLUDED.source_checksum,
@@ -565,7 +570,8 @@ async def db_insert(pool, output_dir: Path, pdf: GeneratedPDF, user_id: str) -> 
                 post_keyword_score = EXCLUDED.post_keyword_score,
                 company_logo_url = EXCLUDED.company_logo_url,
                 job_url = EXCLUDED.job_url,
-                source_was_pdf = EXCLUDED.source_was_pdf
+                source_was_pdf = EXCLUDED.source_was_pdf,
+                original_filename = COALESCE(EXCLUDED.original_filename, {TABLE}.original_filename)
             """,
             pdf.path.name,
             user_id,
@@ -582,6 +588,7 @@ async def db_insert(pool, output_dir: Path, pdf: GeneratedPDF, user_id: str) -> 
             pdf.company_logo_url,
             pdf.job_url,
             pdf.source_was_pdf,
+            pdf.original_filename,
         )
 
 
@@ -607,6 +614,7 @@ def _row_to_record(row, output_dir: Path) -> GeneratedPDF:
         company_logo_url=row["company_logo_url"],
         job_url=row["job_url"],
         source_was_pdf=row.get("source_was_pdf", False),
+        original_filename=row.get("original_filename"),
     )
 
 

@@ -729,6 +729,7 @@ class HistoryItem(BaseModel):
     job_url: str | None = None
     source_checksum: str = ""
     source_was_pdf: bool = False
+    original_filename: str | None = None
 
 
 class HistoryResponse(BaseModel):
@@ -2503,6 +2504,7 @@ class LandingClaimResponse(BaseModel):
     resume_content: str
     job_text: str | None = None
     resume_filename: str
+    original_filename: str | None = None
 
 
 @router.post("/landing/save", response_model=LandingSaveResponse)
@@ -2613,21 +2615,27 @@ async def api_landing_claim(
     if not data:
         raise HTTPException(404, "Link expired or already used. Upload your files again.")
     # If landing upload was a PDF, register it into "My resumes" after login.
+    stored_filename = data["resume_filename"]
     try:
         user_id = str(user["id"]) if user else None
         pdf_body = data.get("resume_pdf_body")
         if user_id and isinstance(pdf_body, (bytes, bytearray)) and len(pdf_body) > 50:
-            await _register_uploaded_pdf_bytes(
+            stored_filename = await _register_uploaded_pdf_bytes(
                 body=bytes(pdf_body),
                 content=data["resume_content"],
                 user_id=user_id,
+                original_filename=data.get("resume_filename"),
             )
     except Exception as e:
         logger.warning("Landing claim: failed to register uploaded PDF for user: %s", e)
     return LandingClaimResponse(
         resume_content=data["resume_content"],
         job_text=data.get("job_text"),
-        resume_filename=data["resume_filename"],
+        resume_filename=stored_filename,
+        original_filename=_sanitize_original_filename(
+            data.get("resume_filename"),
+            fallback="resume.pdf",
+        ),
     )
 
 
@@ -2875,6 +2883,18 @@ async def api_resume_thumbnail(file: UploadFile = File(...)) -> Response:
 class RegisterUploadResponse(BaseModel):
     """Response after registering an uploaded PDF for «Мои резюме»."""
     filename: str
+    original_filename: str | None = None
+
+
+def _sanitize_original_filename(name: str | None, *, fallback: str = "resume.pdf") -> str:
+    """Keep a safe basename for UI display; storage still uses uploaded_*.pdf."""
+    raw = (name or "").strip().replace("\\", "/").split("/")[-1].strip()
+    if not raw:
+        return fallback
+    # Prevent path tricks / control chars; keep unicode letters for real user filenames.
+    cleaned = "".join(ch for ch in raw if ch.isprintable() and ch not in {"<", ">", ":", '"', "|", "?", "*"})
+    cleaned = cleaned.strip(" .") or fallback
+    return cleaned[:180]
 
 
 async def _register_uploaded_pdf_bytes(
@@ -2882,6 +2902,7 @@ async def _register_uploaded_pdf_bytes(
     body: bytes,
     content: str,
     user_id: str | None,
+    original_filename: str | None = None,
 ) -> str:
     """Store uploaded PDF bytes as history record (same behavior as /resume/register-upload)."""
     checksum = hashlib.sha256(content.encode()).hexdigest()
@@ -2890,6 +2911,7 @@ async def _register_uploaded_pdf_bytes(
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     safe_hash = checksum[:12]
     filename = f"uploaded_{safe_hash}_{ts}.pdf"
+    display_name = _sanitize_original_filename(original_filename, fallback="resume.pdf")
     path = settings.output_dir / filename
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(body)
@@ -2902,6 +2924,7 @@ async def _register_uploaded_pdf_bytes(
         first_name=first_name,
         last_name=last_name,
         source_was_pdf=True,
+        original_filename=display_name,
     )
     await pdf_storage.save_record_async(record, user_id=user_id)
     # Persist bytes and text in DB so uploads survive container restarts (Railway ephemeral disk).
@@ -2935,8 +2958,14 @@ async def api_register_upload(file: UploadFile = File(...), user: dict | None = 
         logger.exception("register-upload: extract text failed: %s", e)
         raise HTTPException(500, detail=f"PDF error: {e!s}")
     user_id = str(user["id"]) if user else None
-    filename = await _register_uploaded_pdf_bytes(body=body, content=content, user_id=user_id)
-    return RegisterUploadResponse(filename=filename)
+    original_filename = _sanitize_original_filename(file.filename, fallback="resume.pdf")
+    filename = await _register_uploaded_pdf_bytes(
+        body=body,
+        content=content,
+        user_id=user_id,
+        original_filename=original_filename,
+    )
+    return RegisterUploadResponse(filename=filename, original_filename=original_filename)
 
 
 @router.post("/job/parse", response_model=JobPostingOut)
@@ -6049,6 +6078,7 @@ async def api_history(user: dict | None = Depends(get_current_user)) -> HistoryR
             job_url=r.job_url,
             source_checksum=r.source_checksum,
             source_was_pdf=r.source_was_pdf,
+            original_filename=r.original_filename,
         )
         for r in records
     ]
@@ -6108,6 +6138,7 @@ async def api_download(filename: str, user: dict | None = Depends(get_current_us
     if "/" in filename or "\\" in filename:
         raise HTTPException(400, "Invalid filename")
     user_id = str(user["id"]) if user else None
+    record = None
     if user_id:
         pool = await get_pool()
         if pool and not _is_admin_user(user):
@@ -6121,7 +6152,10 @@ async def api_download(filename: str, user: dict | None = Depends(get_current_us
     path = settings.output_dir / filename
     if not path.is_file():
         raise HTTPException(404, "File not found")
-    return FileResponse(path, filename=filename, media_type="application/pdf")
+    download_name = filename
+    if record and record.original_filename:
+        download_name = _sanitize_original_filename(record.original_filename, fallback=filename)
+    return FileResponse(path, filename=download_name, media_type="application/pdf")
 
 
 @router.get("/history/open/{filename}")

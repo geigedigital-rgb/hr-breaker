@@ -4,6 +4,7 @@ import { CloudArrowUpIcon } from "@heroicons/react/24/outline";
 import * as api from "../api";
 import { useAuth } from "../contexts/AuthContext";
 import { t } from "../i18n";
+import { displayFilename, resumeLabel } from "../utils/filenames";
 
 const RESUME_FILE_ACCEPT = ".txt,.md,.html,.htm,.tex,.pdf,.doc,.docx";
 const RESUME_EXTS = ["txt", "md", "html", "htm", "tex", "pdf", "doc", "docx"];
@@ -14,22 +15,23 @@ async function readFileContent(
   file: File,
   user: ReturnType<typeof useAuth>["user"],
   refreshUser: ReturnType<typeof useAuth>["refreshUser"],
-): Promise<{ content: string; fileName: string; sourceWasPdf: boolean }> {
+): Promise<{ content: string; fileName: string; originalFileName: string; sourceWasPdf: boolean }> {
   const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+  const originalFileName = file.name;
   if (ext === "pdf") {
     const res = await api.parseResumePdf(file);
     const content = res.content ?? "";
-    let fileName = file.name;
+    let fileName = originalFileName;
     if (user) {
       const upRes = await api.registerResumeUpload(file);
       fileName = upRes.filename;
       await refreshUser();
     }
-    return { content, fileName, sourceWasPdf: true };
+    return { content, fileName, originalFileName, sourceWasPdf: true };
   }
   if (ext === "docx" || ext === "doc") {
     const res = await api.parseResumeDocx(file);
-    return { content: res.content ?? "", fileName: file.name, sourceWasPdf: false };
+    return { content: res.content ?? "", fileName: originalFileName, originalFileName, sourceWasPdf: false };
   }
   const content = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -37,7 +39,7 @@ async function readFileContent(
     reader.onerror = () => reject(new Error(t("improveResume.readFileError")));
     reader.readAsText(file, "UTF-8");
   });
-  return { content, fileName: file.name, sourceWasPdf: false };
+  return { content, fileName: originalFileName, originalFileName, sourceWasPdf: false };
 }
 
 export default function ImproveResume() {
@@ -62,11 +64,15 @@ export default function ImproveResume() {
     if (!RESUME_EXTS.includes(ext)) return;
     setUploading(true);
     try {
-      const { content, fileName, sourceWasPdf: wasPdf } = await readFileContent(file, user, refreshUser);
+      const { content, fileName, originalFileName, sourceWasPdf: wasPdf } = await readFileContent(
+        file,
+        user,
+        refreshUser,
+      );
       setResumeContent(content);
       setUploadedFileName(fileName);
       setSourceWasPdf(wasPdf);
-      setUploadedDisplayName(file.name);
+      setUploadedDisplayName(originalFileName);
       setSelectedMode(null);
       setJobDescription("");
     } catch {
@@ -92,7 +98,13 @@ export default function ImproveResume() {
   const handleImproveClick = () => {
     if (!resumeContent) return;
     navigate("/optimize", {
-      state: { resumeContent, uploadedFileName, sourceWasPdf, improveMode: true },
+      state: {
+        resumeContent,
+        uploadedFileName,
+        originalFileName: uploadedDisplayName,
+        sourceWasPdf,
+        improveMode: true,
+      },
     });
   };
 
@@ -107,6 +119,7 @@ export default function ImproveResume() {
       state: {
         resumeContent,
         uploadedFileName,
+        originalFileName: uploadedDisplayName,
         sourceWasPdf,
         jobInputPreset: jobDescription.trim(),
         autoStart: true,
@@ -127,7 +140,7 @@ export default function ImproveResume() {
         setResumeContent(data.resume_content);
         setUploadedFileName(data.resume_filename);
         setSourceWasPdf((data.resume_filename || "").toLowerCase().endsWith(".pdf"));
-        setUploadedDisplayName(data.resume_filename || "Resume");
+        setUploadedDisplayName(resumeLabel(data.original_filename, data.resume_filename, "Resume"));
         setSelectedMode(null);
         setJobDescription("");
         setSearchParams({}, { replace: true });
@@ -143,18 +156,20 @@ export default function ImproveResume() {
     const state = location.state as {
       resumeContent?: string;
       uploadedFileName?: string;
+      originalFileName?: string;
       sourceWasPdf?: boolean;
     } | null;
     if (state?.resumeContent) {
       setResumeContent(state.resumeContent);
       setUploadedFileName(state.uploadedFileName ?? null);
       setSourceWasPdf(state.sourceWasPdf ?? false);
-      setUploadedDisplayName(state.uploadedFileName ?? "Resume");
+      setUploadedDisplayName(resumeLabel(state.originalFileName, state.uploadedFileName, "Resume"));
       navigate(location.pathname, { replace: true, state: {} });
     }
   }, []);  // eslint-disable-line react-hooks/exhaustive-deps
 
   const hasJob = jobDescription.trim().length > 0;
+  const shownName = displayFilename(uploadedDisplayName || "Resume");
 
   return (
     <div className="ds-page-stage">
@@ -228,13 +243,17 @@ export default function ImproveResume() {
             decoding="async"
           />
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium text-[var(--text)] truncate">{uploadedDisplayName}</p>
+            <p className="text-sm font-medium text-[var(--text)] truncate" title={uploadedDisplayName || undefined}>
+              {shownName}
+            </p>
             <p className="text-xs text-[var(--text-muted)]">{t("improveResume.uploadedLabel")}</p>
           </div>
           <button
             type="button"
             onClick={() => {
               setResumeContent(null);
+              setUploadedFileName(null);
+              setUploadedDisplayName("");
               setSelectedMode(null);
               setJobDescription("");
             }}

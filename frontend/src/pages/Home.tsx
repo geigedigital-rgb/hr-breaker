@@ -11,6 +11,7 @@ import {
 import * as api from "../api";
 import { useAuth } from "../contexts/AuthContext";
 import { t, tFormat } from "../i18n";
+import { displayFilename, resumeLabel } from "../utils/filenames";
 
 const ADD_RESUME_ACCEPT = ".txt,.md,.html,.htm,.tex,.pdf,.doc,.docx";
 const ADD_RESUME_EXTS = ["txt", "md", "html", "htm", "tex", "pdf", "doc", "docx"];
@@ -112,7 +113,12 @@ export default function Home() {
     try {
       const content = await api.getHistoryOriginalText(item.filename);
       navigate("/improve", {
-        state: { resumeContent: content, uploadedFileName: item.filename, sourceWasPdf: item.source_was_pdf }
+        state: {
+          resumeContent: content,
+          uploadedFileName: item.filename,
+          originalFileName: resumeLabel(item.original_filename, item.filename, "Resume"),
+          sourceWasPdf: item.source_was_pdf,
+        },
       });
     } catch {
       navigate("/improve");
@@ -132,6 +138,7 @@ export default function Home() {
       let content: string;
       let sourceWasPdf = false;
       let uploadedFileName = file.name;
+      const originalFileName = file.name;
       if (ext === "pdf") {
         const res = await api.parseResumePdf(file);
         content = res.content ?? "";
@@ -153,7 +160,7 @@ export default function Home() {
         });
       }
       navigate("/optimize", {
-        state: { resumeContent: content, uploadedFileName: uploadedFileName, sourceWasPdf },
+        state: { resumeContent: content, uploadedFileName, originalFileName, sourceWasPdf },
         replace: false,
       });
     } catch {
@@ -239,7 +246,10 @@ export default function Home() {
           {!loading && !error && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
               {documents.slice(0, 10).map((item) => {
-                const name = [item.first_name, item.last_name].filter(Boolean).join(" ") || t("home.noName");
+                const name = item.original_filename
+                  ? displayFilename(item.original_filename)
+                  : [item.first_name, item.last_name].filter(Boolean).join(" ") ||
+                    displayFilename(resumeLabel(null, item.filename, t("home.noName")));
                 const previewFilename = item.optimizedItem?.filename ?? item.filename;
                 const openFilename = item.optimizedItem?.filename ?? item.filename;
                 const qualityScore = item.optimizedItem?.post_ats_score ?? null;
@@ -313,7 +323,7 @@ export default function Home() {
                         </button>
                         <a
                           href={api.downloadUrl(item.filename, api.getStoredToken())}
-                          download={item.filename}
+                          download={item.original_filename || item.filename}
                           className="inline-flex items-center gap-1.5 p-1.5 rounded-lg text-xs font-medium text-[var(--text-muted)] hover:bg-white hover:text-[var(--accent)] hover:shadow-[var(--shadow-sm)] transition-colors"
                         >
                           <ArrowDownTrayIcon className="w-4 h-4 shrink-0" />
