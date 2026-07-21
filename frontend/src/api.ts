@@ -82,6 +82,15 @@ export type OptimizeResponse = {
   /** Public link to read-only saved result (~3 days). */
   snapshot_url?: string | null;
   snapshot_expires_at?: string | null;
+  /** Same methodology as /analyze: ATS 0–100, keywords 0–1. */
+  pre_ats_score?: number | null;
+  pre_keyword_score?: number | null;
+  post_ats_score?: number | null;
+  post_keyword_score?: number | null;
+  /** Improvement in percentage points (post% − pre%). */
+  improvement_ats_pp?: number | null;
+  improvement_keyword_pp?: number | null;
+  improvement_overall_pp?: number | null;
 };
 
 /** GET /api/optimization-snapshot — same shape as server `OptimizationSnapshotPublicOut`. */
@@ -506,6 +515,7 @@ export async function optimize(params: {
   return data;
 }
 
+/** Legacy: redeem WeasyPrint hold. Product UI downloads via templates/render-pdf after pay. */
 export async function downloadPendingOptimizePdf(token: string): Promise<DownloadPendingOptimizePdfResponse> {
   const r = await fetch(`${API}/optimize/pending-export/${encodeURIComponent(token)}`, {
     method: "GET",

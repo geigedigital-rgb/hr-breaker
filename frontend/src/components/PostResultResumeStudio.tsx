@@ -103,7 +103,7 @@ export function PostResultResumeStudio({
   onTailorAnother: () => void;
   onImproveEvenStronger: () => void;
   showImproveEvenStronger: boolean;
-  /** Visual Sandbox: preview first, then template carousel (marketing-style layout). */
+  /** Visual Sandbox: one card — full preview left, photo + vertical templates right. */
   sandboxVariant?: boolean;
 }) {
   const stripRef = useRef<HTMLDivElement>(null);
@@ -290,14 +290,16 @@ export function PostResultResumeStudio({
     <section
       className={
         sandboxVariant
-          ? "w-full rounded-2xl border border-[#E8ECF4] bg-white p-5 shadow-[0_4px_28px_-12px_rgba(15,23,42,0.08)] sm:p-6"
+          ? "ds-card w-full p-5 sm:p-6"
           : "w-full rounded-2xl border border-[#EBEDF5] bg-[#FAFAFC] p-4 sm:p-5"
       }
     >
       {sandboxVariant ? (
         <div className="mb-1">
-          <p className="text-[15px] font-semibold text-[#181819]">{t("admin.visualSandbox.chooseTemplateTitle")}</p>
-          <p className="mt-1 text-[12px] leading-relaxed text-[#6B7280]">{t("admin.visualSandbox.chooseTemplateSub")}</p>
+          <p className="text-[length:var(--text-base)] font-semibold text-[var(--text)]">
+            {t("admin.visualSandbox.chooseTemplateTitle")}
+          </p>
+          <p className="ds-hint mt-1">{t("admin.visualSandbox.chooseTemplateSub")}</p>
         </div>
       ) : (
         <p className="text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider">{t("optimize.chooseTemplate")}</p>
@@ -329,7 +331,7 @@ export function PostResultResumeStudio({
           )}
           <div
             ref={stripRef}
-            className="flex min-h-[148px] w-full gap-3 overflow-x-auto pb-3 pt-1 px-1 [scrollbar-width:thin] scroll-smooth"
+            className="flex min-h-[188px] w-full gap-3 overflow-x-auto pb-3 pt-1 px-1 [scrollbar-width:thin] scroll-smooth"
             style={{ scrollSnapType: "x proximity" }}
             onScroll={handleScroll}
           >
@@ -341,26 +343,22 @@ export function PostResultResumeStudio({
                   key={tmpl.id}
                   type="button"
                   onClick={() => handleSelectTemplate(tmpl.id)}
-                  className="shrink-0 w-[100px] text-center transition-all scroll-ml-1 group"
+                  className="group shrink-0 w-[118px] scroll-ml-1 rounded-xl border border-[#E8ECF4] bg-white p-2 text-left transition-colors hover:border-[#C7D2FE]"
                   style={{ scrollSnapAlign: "start" }}
                 >
-                  <div className="relative">
-                    <p className={`mb-2 line-clamp-1 text-[10px] font-medium leading-tight transition-colors ${selected ? "text-[#4578FC]" : "text-[#181819]"}`}>
-                      {tmpl.name}
-                    </p>
-                    <div
-                      className={`relative aspect-[210/297] w-full overflow-hidden rounded-lg bg-[#f1f5f9] transition-all ${
-                        selected ? "ring-2 ring-[#4578FC] ring-offset-2 shadow-md" : "ring-1 ring-[#E8ECF4] group-hover:ring-[#C7D2FE] shadow-sm"
-                      }`}
-                    >
-                      {sandboxVariant && selected && (
-                        <span className="absolute right-1 top-1 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-[#4578FC] text-white shadow-md ring-2 ring-white">
-                          <CheckIcon className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden />
-                        </span>
-                      )}
+                  <div
+                    className={`relative aspect-[210/297] w-full overflow-hidden rounded-md bg-[#EEF2F7] ${
+                      selected ? "ring-2 ring-[#4578FC]" : "ring-1 ring-[#E8ECF4]"
+                    }`}
+                  >
+                    {selected && (
+                      <span className="absolute right-1.5 top-1.5 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-[#4578FC] text-white">
+                        <CheckIcon className="h-3 w-3" strokeWidth={2.5} aria-hidden />
+                      </span>
+                    )}
                     {th === "loading" && <div className="h-full w-full animate-pulse bg-[#e2e8f0]" />}
                     {th === "error" && (
-                      <div className="flex h-full items-center justify-center p-1 text-center text-[8px] text-[#64748b]">
+                      <div className="flex h-full items-center justify-center p-2 text-center text-[9px] text-[#64748b]">
                         {t("optimize.templatePreviewError")}
                       </div>
                     )}
@@ -368,7 +366,9 @@ export function PostResultResumeStudio({
                       <img src={th} alt="" className="h-full w-full object-cover object-top" />
                     )}
                   </div>
-                  </div>
+                  <p className="mt-2.5 line-clamp-2 min-h-[2rem] px-0.5 text-center text-[12px] font-semibold leading-snug text-[#181819]">
+                    {tmpl.name}
+                  </p>
                 </button>
               );
             })}
@@ -377,13 +377,13 @@ export function PostResultResumeStudio({
                 {["Classic", "Flat", "Onyx", "Vega"].map((label, i) => (
                   <div
                     key={label}
-                    className="w-[100px] shrink-0 text-center opacity-80"
+                    className="w-[118px] shrink-0 rounded-xl border border-[#E8ECF4] bg-white p-2 opacity-80"
                   >
-                    <p className="mb-2 text-[10px] font-medium text-[#6B7280]">{label}</p>
                     <div
-                      className="aspect-[210/297] w-full rounded-lg bg-gradient-to-br from-[#f1f5f9] to-[#e2e8f0] ring-1 ring-[#E8ECF4]"
+                      className="aspect-[210/297] w-full rounded-md bg-gradient-to-br from-[#f1f5f9] to-[#e2e8f0] ring-1 ring-[#E8ECF4]"
                       style={{ opacity: 1 - i * 0.1 }}
                     />
+                    <p className="mt-2.5 text-center text-[12px] font-semibold text-[#6B7280]">{label}</p>
                   </div>
                 ))}
               </div>
@@ -410,10 +410,27 @@ export function PostResultResumeStudio({
   );
 
   const photoBlock = (
-      <section className="w-full rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-4 sm:p-5">
-        <p className="text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider">{t("optimize.addPhoto")}</p>
-        <p className="mt-1 max-w-lg text-[12px] text-[#6B7280] leading-relaxed">{t("optimize.photoCropHint")}</p>
-        <div className="mt-4 flex flex-wrap items-center gap-4">
+      <section
+        className={
+          sandboxVariant
+            ? "ds-card flex h-full w-full flex-col p-5 sm:p-6"
+            : "w-full rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-4 sm:p-5"
+        }
+      >
+        {sandboxVariant ? (
+          <div className="mb-1">
+            <p className="text-[length:var(--text-base)] font-semibold text-[var(--text)]">
+              {t("admin.visualSandbox.addPhotoTitle")}
+            </p>
+            <p className="ds-hint mt-1">{t("admin.visualSandbox.addPhotoSub")}</p>
+          </div>
+        ) : (
+          <>
+            <p className="text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider">{t("optimize.addPhoto")}</p>
+            <p className="mt-1 max-w-lg text-[12px] text-[#6B7280] leading-relaxed">{t("optimize.photoCropHint")}</p>
+          </>
+        )}
+        <div className={`flex flex-wrap items-center gap-3 ${sandboxVariant ? "mt-4" : "mt-4 gap-4"}`}>
           <div className="flex h-16 w-16 shrink-0 overflow-hidden rounded-xl border border-[#E8ECF4] bg-[#f8fafc]">
             {photoDataUrl ? (
               <img src={photoDataUrl} alt="" className="h-full w-full object-cover" />
@@ -423,7 +440,7 @@ export function PostResultResumeStudio({
               </div>
             )}
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex min-w-0 flex-1 flex-col gap-2">
             <input
               ref={photoInputRef}
               type="file"
@@ -434,7 +451,7 @@ export function PostResultResumeStudio({
             <button
               type="button"
               onClick={() => photoInputRef.current?.click()}
-              className="inline-flex items-center justify-center rounded-xl border-2 border-[#4578FC] bg-white px-4 py-2 text-[13px] font-semibold text-[#4578FC]"
+              className="inline-flex w-full items-center justify-center rounded-xl border-2 border-[#4578FC] bg-white px-3 py-2 text-[13px] font-semibold text-[#4578FC] sm:w-auto"
             >
               {photoDataUrl ? t("optimize.changePhoto") : t("optimize.uploadPhoto")}
             </button>
@@ -442,7 +459,7 @@ export function PostResultResumeStudio({
               <button
                 type="button"
                 onClick={handleRemovePhoto}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-[#E5E7EB] bg-white px-3 py-2 text-[13px] font-medium text-[#374151]"
+                className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-[#E5E7EB] bg-white px-3 py-2 text-[13px] font-medium text-[#374151] sm:w-auto"
               >
                 <TrashIcon className="h-4 w-4" />
                 {t("optimize.removePhoto")}
@@ -454,8 +471,21 @@ export function PostResultResumeStudio({
   );
 
   const previewBlock = (
-      <section className="relative w-full overflow-hidden rounded-2xl border border-[#E8ECF4] bg-white shadow-[0_8px_40px_-12px_rgba(15,23,42,0.12)]">
-        <div className="flex flex-wrap items-center gap-3 border-b border-[#EDF1F7] bg-[#FAFAFC] px-4 py-3 sm:px-5">
+      <section
+        className={
+          sandboxVariant
+            ? "ds-card relative w-full overflow-hidden !shadow-[var(--shadow-md)]"
+            : "relative w-full overflow-hidden rounded-2xl border border-[#E8ECF4] bg-white shadow-[0_8px_40px_-12px_rgba(15,23,42,0.12)]"
+        }
+      >
+        <div
+          className={
+            sandboxVariant
+              ? "flex flex-wrap items-center gap-3 border-b border-[var(--border)]/80 px-4 py-3 sm:px-5"
+              : "flex flex-wrap items-center gap-3 border-b border-[#EDF1F7] bg-[#FAFAFC] px-4 py-3 sm:px-5"
+          }
+          style={sandboxVariant ? { background: "var(--grad-accent-soft)" } : undefined}
+        >
           <span className={`inline-flex h-9 min-w-[2.25rem] items-center justify-center gap-1 rounded-full px-2.5 text-[13px] font-bold ring-1 ${
             isImproveMode
               ? "bg-[#EEF2FF] text-[#4558ff] ring-[#C7D2FE]"
@@ -471,7 +501,10 @@ export function PostResultResumeStudio({
             )}
           </div>
         </div>
-        <div ref={mainHostRef} className="relative min-h-[200px] bg-[#F4F6FA]">
+        <div
+          ref={mainHostRef}
+          className="relative min-h-[200px] bg-[#F4F6FA]"
+        >
           {mainLoading && !showFallbackPreview && (
             <div
               className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-[#F4F6FA]/88"
@@ -490,7 +523,7 @@ export function PostResultResumeStudio({
               <img
                 src={effectivePreviewUrl}
                 alt=""
-                className="w-full block bg-white"
+                className="block w-full bg-white"
               />
             ) : (
               <div className="flex min-h-[320px] flex-col items-center justify-center gap-3 bg-white px-6 text-[13px] text-[#9CA3AF]">
@@ -511,10 +544,16 @@ export function PostResultResumeStudio({
             )}
           </div>
           <div
-            className="absolute bottom-0 left-0 right-0 border-t border-white/60 bg-white/60 px-5 pt-10 pb-8 sm:px-8 sm:pt-12 sm:pb-10 shadow-[0_-12px_40px_-12px_rgba(0,0,0,0.08)] flex flex-col items-center text-center"
+            className={`absolute bottom-0 left-0 right-0 border-t border-white/60 bg-white/60 flex flex-col items-center text-center shadow-[0_-12px_40px_-12px_rgba(0,0,0,0.08)] ${
+              sandboxVariant ? "px-4 pt-8 pb-6 sm:px-6" : "px-5 pt-10 pb-8 sm:px-8 sm:pt-12 sm:pb-10"
+            }`}
             style={{ WebkitBackdropFilter: "blur(24px) saturate(1.8)", backdropFilter: "blur(24px) saturate(1.8)" }}
           >
-            <p className="w-full text-xl font-semibold tracking-tight text-[#181819] sm:text-2xl break-words whitespace-normal">
+            <p
+              className={`w-full font-semibold tracking-tight text-[#181819] break-words whitespace-normal ${
+                sandboxVariant ? "text-lg sm:text-xl" : "text-xl sm:text-2xl"
+              }`}
+            >
               {isImproveMode
                 ? t("optimize.resultReadyImproved")
                 : tFormat(t("optimize.resultReadyForRole"), { jobTitle })}
@@ -524,7 +563,7 @@ export function PostResultResumeStudio({
                 {t("optimize.interviewChances")}: <span className="font-semibold text-[#166534]">{pct}%</span>
               </p>
             )}
-            <div className="mt-6 flex w-full max-w-[280px] sm:max-w-[320px] flex-col gap-3">
+            <div className={`mt-5 flex w-full flex-col gap-3 ${sandboxVariant ? "max-w-[260px]" : "max-w-[280px] sm:max-w-[320px]"}`}>
               <button
                 type="button"
                 onClick={() => onDownload(effectivePreviewUrl ?? null)}
@@ -559,21 +598,248 @@ export function PostResultResumeStudio({
       </section>
   );
 
+  const templateThumbButton = (tmpl: api.AdminTemplateListItem, opts?: { vertical?: boolean }) => {
+    const th = thumbs[tmpl.id];
+    const selected = selectedId === tmpl.id;
+    const vertical = opts?.vertical;
+    return (
+      <button
+        key={tmpl.id}
+        type="button"
+        onClick={() => handleSelectTemplate(tmpl.id)}
+        className={
+          vertical
+            ? "group w-full rounded-xl border border-[#E8ECF4] bg-white p-2.5 text-left transition-colors hover:border-[#C7D2FE]"
+            : "group shrink-0 w-[118px] scroll-ml-1 rounded-xl border border-[#E8ECF4] bg-white p-2 text-left transition-colors hover:border-[#C7D2FE]"
+        }
+        style={vertical ? undefined : { scrollSnapAlign: "start" }}
+      >
+        <div className={vertical ? "flex items-center gap-3" : "relative"}>
+          <div
+            className={`relative overflow-hidden rounded-md bg-[#EEF2F7] ${
+              vertical ? "aspect-[210/297] w-[84px] shrink-0" : "aspect-[210/297] w-full"
+            } ${selected ? "ring-2 ring-[#4578FC]" : "ring-1 ring-[#E8ECF4]"}`}
+          >
+            {selected && (
+              <span
+                className={`absolute z-10 flex items-center justify-center rounded-full bg-[#4578FC] text-white ${
+                  vertical ? "right-1 top-1 h-5 w-5" : "right-1.5 top-1.5 h-5 w-5"
+                }`}
+              >
+                <CheckIcon className="h-3 w-3" strokeWidth={2.5} aria-hidden />
+              </span>
+            )}
+            {th === "loading" && <div className="h-full w-full animate-pulse bg-[#e2e8f0]" />}
+            {th === "error" && (
+              <div className="flex h-full items-center justify-center p-1.5 text-center text-[8px] text-[#64748b]">
+                {t("optimize.templatePreviewError")}
+              </div>
+            )}
+            {typeof th === "string" && th.startsWith("data:") && (
+              <img src={th} alt="" className="h-full w-full object-cover object-top" />
+            )}
+          </div>
+          {vertical ? (
+            <div className="min-w-0 flex-1 py-0.5">
+              <p className="line-clamp-2 text-[13px] font-semibold leading-snug tracking-tight text-[var(--text)]">
+                {tmpl.name}
+              </p>
+            </div>
+          ) : (
+            <p className="mt-2.5 line-clamp-2 min-h-[2rem] px-0.5 text-center text-[12px] font-semibold leading-snug text-[#181819]">
+              {tmpl.name}
+            </p>
+          )}
+        </div>
+      </button>
+    );
+  };
+
+  if (sandboxVariant) {
+    return (
+      <div className="grid w-full min-w-0 grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_280px] lg:items-stretch lg:gap-7">
+        <section className="ds-card relative flex min-w-0 flex-col overflow-hidden !shadow-[var(--shadow-md)]">
+          <div
+            className="flex shrink-0 flex-wrap items-center gap-2.5 border-b border-[var(--success-soft)] px-4 py-3.5 sm:px-5"
+            style={{ background: "var(--grad-success-soft)" }}
+          >
+            <span className="ds-soft-pill ds-soft-pill--success">
+              <CheckIcon className="h-3.5 w-3.5 shrink-0" strokeWidth={2.5} aria-hidden />
+              <span className="ds-soft-pill__value">{pct}%</span>
+            </span>
+            <span className="ds-soft-pill ds-soft-pill--success">{previewMatchHeadline}</span>
+          </div>
+          <div ref={mainHostRef} className="relative min-h-[280px] overflow-hidden bg-[#F4F6FA]">
+            {mainLoading && !showFallbackPreview && (
+              <div
+                className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-[#F4F6FA]/88"
+                aria-busy="true"
+                aria-label={t("optimize.templatesLoading")}
+              >
+                <span
+                  className="h-10 w-10 shrink-0 rounded-full border-2 border-[#4578FC]/25 border-t-[#4578FC] animate-spin"
+                  aria-hidden
+                />
+                <p className="text-[13px] font-medium text-[#64748B]">{t("optimize.templatesLoading")}</p>
+              </div>
+            )}
+            <div className="relative w-full max-h-[min(92vh,1080px)] overflow-hidden">
+              {effectivePreviewUrl ? (
+                <img
+                  src={effectivePreviewUrl}
+                  alt=""
+                  className="block w-full max-h-[min(92vh,1080px)] object-cover object-top bg-white"
+                />
+              ) : (
+                <div className="flex min-h-[320px] flex-col items-center justify-center gap-3 bg-white px-6 text-[13px] text-[#9CA3AF]">
+                  {!prefetchDone && templates.length > 0 ? (
+                    <>
+                      <span
+                        className="h-10 w-10 rounded-full border-2 border-[#4578FC]/25 border-t-[#4578FC] animate-spin"
+                        aria-hidden
+                      />
+                      <p className="text-center text-[13px] font-medium text-[#64748B]">
+                        {t("optimize.templatesLoading")}
+                      </p>
+                    </>
+                  ) : (
+                    t("optimize.templatePreviewError")
+                  )}
+                </div>
+              )}
+            </div>
+            <div
+              className="absolute bottom-0 left-0 right-0 flex flex-col items-center border-t border-white/60 bg-white/60 px-4 pb-6 pt-8 text-center shadow-[0_-12px_40px_-12px_rgba(0,0,0,0.08)] sm:px-6"
+              style={{ WebkitBackdropFilter: "blur(24px) saturate(1.8)", backdropFilter: "blur(24px) saturate(1.8)" }}
+            >
+              <p className="w-full text-lg font-semibold tracking-tight text-[#181819] break-words whitespace-normal sm:text-xl">
+                {isImproveMode
+                  ? t("optimize.resultReadyImproved")
+                  : tFormat(t("optimize.resultReadyForRole"), { jobTitle })}
+              </p>
+              {!isImproveMode && (
+                <p className="mt-1 text-[13px] text-[#6B7280]">
+                  {t("optimize.interviewChances")}: <span className="font-semibold text-[#166534]">{pct}%</span>
+                </p>
+              )}
+              <div className="mt-5 flex w-full max-w-[260px] flex-col gap-3">
+                <button
+                  type="button"
+                  onClick={() => onDownload(effectivePreviewUrl ?? null)}
+                  className="inline-flex min-h-[3rem] w-full items-center justify-center gap-2 rounded-xl text-[15px] font-semibold text-white shadow-[0_0_24px_rgba(69,120,252,0.45)] transition-all hover:-translate-y-0.5 hover:shadow-[0_0_32px_rgba(69,120,252,0.6)]"
+                  style={{ background: "linear-gradient(160deg, #5e8afc 0%, #4578FC 45%, #3d6ae6 100%)" }}
+                >
+                  <ArrowDownTrayIcon className="h-5 w-5 shrink-0" />
+                  {t("optimize.downloadPdf")}
+                </button>
+                <button
+                  type="button"
+                  onClick={onTailorAnother}
+                  className="inline-flex min-h-[2.75rem] w-full items-center justify-center rounded-xl border border-[#E5E7EB] bg-white/80 px-4 text-[14px] font-medium text-[#374151] hover:bg-white transition-colors"
+                >
+                  {t("optimize.tailorAnotherVacancy")}
+                </button>
+                {showImproveEvenStronger && (
+                  <button
+                    type="button"
+                    onClick={onImproveEvenStronger}
+                    className="inline-flex min-h-[2.75rem] w-full items-center justify-center rounded-xl border border-[#E5E7EB] bg-white/80 px-4 text-[14px] font-medium text-[#374151] hover:bg-white transition-colors"
+                  >
+                    Improve even stronger
+                  </button>
+                )}
+              </div>
+              <p className="mt-4 max-w-[280px] text-[11px] leading-relaxed text-[#9CA3AF]">
+                {t("optimize.downloadPdfPaidHint")}
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <aside className="ds-card flex w-full flex-col overflow-hidden max-lg:min-h-0 lg:h-0 lg:min-h-full lg:self-stretch">
+          <div className="shrink-0 border-b border-[var(--border)]/80 px-4 pb-4 pt-4">
+            <p className="text-[length:var(--text-base)] font-semibold text-[var(--text)]">
+              {t("admin.visualSandbox.addPhotoTitle")}
+            </p>
+            <p className="ds-hint mt-1">{t("admin.visualSandbox.addPhotoSub")}</p>
+            <div className="mt-3 flex flex-col items-stretch gap-3">
+              <div className="mx-auto flex h-16 w-16 shrink-0 overflow-hidden rounded-xl border border-[#E8ECF4] bg-[#f8fafc]">
+                {photoDataUrl ? (
+                  <img src={photoDataUrl} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center text-[#CBD5E1]">
+                    <PhotoIcon className="h-7 w-7" />
+                  </div>
+                )}
+              </div>
+              <input
+                ref={photoInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={handlePhotoInput}
+              />
+              <button
+                type="button"
+                onClick={() => photoInputRef.current?.click()}
+                className="inline-flex w-full items-center justify-center rounded-xl border-2 border-[#4578FC] bg-white px-3 py-2 text-[13px] font-semibold text-[#4578FC]"
+              >
+                {photoDataUrl ? t("optimize.changePhoto") : t("optimize.uploadPhoto")}
+              </button>
+              {photoDataUrl && (
+                <button
+                  type="button"
+                  onClick={handleRemovePhoto}
+                  className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-[#E5E7EB] bg-white px-3 py-2 text-[13px] font-medium text-[#374151]"
+                >
+                  <TrashIcon className="h-4 w-4" />
+                  {t("optimize.removePhoto")}
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="flex min-h-0 flex-1 flex-col px-4 pb-4 pt-4">
+            <p className="text-[length:var(--text-base)] font-semibold text-[var(--text)]">
+              {t("admin.visualSandbox.chooseTemplateTitle")}
+            </p>
+            <p className="ds-hint mt-1">{t("admin.visualSandbox.chooseTemplateSub")}</p>
+            {templatesLoadError && (
+              <p className="mt-2 rounded-lg border border-amber-200/80 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-800">
+                {t("optimize.templatesUnavailable")}
+              </p>
+            )}
+            {!prefetchDone && templates.length > 0 && (
+              <p className="mt-2 text-[12px] text-[#6B7280]">{t("optimize.templatesLoading")}</p>
+            )}
+            <div className="mt-3 flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto overscroll-y-contain py-1 pr-1 [scrollbar-width:thin]">
+              {templates.map((tmpl) => templateThumbButton(tmpl, { vertical: true }))}
+              {templates.length === 0 && prefetchDone && (
+                <>
+                  {["Classic", "Flat", "Onyx", "Vega"].map((label) => (
+                    <div
+                      key={label}
+                      className="flex items-center gap-3 rounded-xl border border-[#E8ECF4] bg-white p-2.5 opacity-80"
+                    >
+                      <div className="aspect-[210/297] w-[84px] shrink-0 rounded-md bg-gradient-to-br from-[#f1f5f9] to-[#e2e8f0] ring-1 ring-[#E8ECF4]" />
+                      <p className="min-w-0 flex-1 text-[13px] font-semibold text-[#6B7280]">{label}</p>
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
+          </div>
+        </aside>
+      </div>
+    );
+  }
+
   return (
     <div className="w-full flex flex-col gap-6">
-      {sandboxVariant ? (
-        <>
-          {previewBlock}
-          {templateBlock}
-          {photoBlock}
-        </>
-      ) : (
-        <>
-          {templateBlock}
-          {photoBlock}
-          {previewBlock}
-        </>
-      )}
+      {templateBlock}
+      {photoBlock}
+      {previewBlock}
     </div>
   );
 }
+

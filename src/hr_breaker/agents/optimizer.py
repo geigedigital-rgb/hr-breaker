@@ -53,6 +53,12 @@ CONTENT RULES:
 - Avoid leaving an empty space at the bottom of the page if you have useful content to fill.
 - The Skills section must summarize demonstrated strengths, not echo the vacancy keyword list.
 - Do not add named tools, platforms, methods, or metrics terminology just because they appear in the job posting.
+- SECTION-AWARE KEYWORD PLACEMENT (required):
+  - Skills → only skills / tech stack terms evidenced in the source resume
+  - Experience / Projects → tools, methods, and domain terms inside role/project bullets where there is evidence
+  - Education / Certifications → degrees, schools, courses, certificates only in those sections
+  - Never move education terms into Skills, or dump project/tool keywords as a bare Skills list
+  - If a missing keyword is source-backed, place it only in the section that matches its type
 - PROJECTS: Only include projects directly relevant to this job. Skip projects already listed under Publications. If no projects are relevant, omit the section entirely.
 - PUBLICATIONS: Always use "PUBLICATIONS" (plural) as the section title, even for a single item.
 - EDUCATION: By default include only the most recent / highest degree. Include multiple degrees only if they are both relevant to the role.
@@ -63,16 +69,16 @@ CONTENT BUDGET:
 - Target: ~500 words, ~4000 characters (these are rough estimates, actual fit depends on formatting)
 - The ONLY authoritative check is page_count from check_content_length
 
-TOOLS:
+TOOLS (one-pass budget — do not loop endlessly):
 - REQUIRED: call check_content_length(html) with your final HTML before returning — output is REJECTED if you skip this
   - Returns actual page_count from rendered PDF (authoritative)
   - Also returns character/word estimates (rough guidance only)
   - If page_count > 1, trim content and call again until fits_one_page=true
-- REQUIRED: call check_keywords_tool(html) with your final HTML before returning — check keyword coverage
-  - If score < 0.40 — improve wording, prioritization, and section emphasis using only source-backed evidence, then call again
-  - You may add a missing keyword only when the original resume clearly supports it; it is better to leave a keyword missing than fabricate a skill
+- REQUIRED: call check_keywords_tool(html) at most TWICE (final HTML, optional one revise if score < 0.40)
+  - If score < 0.40 — improve wording/prioritization with source-backed evidence only, then call once more
+  - You may add a missing keyword only when the original resume clearly supports it; better leave it missing than fabricate
 - OPTIONAL: validate_structure(html) - Check HTML has proper headers/sections. Use after major structural changes.
-- OPTIONAL: preview_resume(html) - Renders PDF preview image. Use to visually check layout.
+- AVOID: preview_resume(html) — costly; skip unless layout is clearly broken. Prefer check_content_length.
 
 LINKS:
 - Preserve contacts info as in the original and never delete it
@@ -108,6 +114,7 @@ STRICT RULES - NEVER VIOLATE:
 - NEVER add specific named products, tools, methods, or platforms absent from the original, even if they appear in the job posting or seem adjacent
 - NEVER turn generic experience into specific claims (e.g. data work -> SQL/BigQuery/Tableau/Looker, experimentation work -> A/B testing/causal inference, marketing work -> campaign performance/marketing metrics) unless the source resume clearly supports that exact terminology
 - NEVER create a keyword-dump Skills section made mostly of vacancy terms without matching evidence elsewhere in the resume
+- NEVER place a keyword in the wrong section type (e.g. degree names in Skills, course names in Projects, tools only as a Skills dump when they belong in Experience bullets)
 - NEVER fabricate job titles, companies, degrees, certifications, or achievements
 - NEVER invent metrics, numbers and achievements not in original
 - DO NOT drop work experience or achievements (publications, patents, awards, etc.) unless they decrease fit
@@ -142,6 +149,7 @@ CONTENT RULES:
 - Exclude: hobbies, location, language proficiency, age — unless in the original
 - Add a strong 2-3 sentence summary section if none exists
 - The Skills section must reflect demonstrated strengths from the resume, not keyword lists
+- Keep section-aware placement: skills in Skills; tools/impact in Experience/Projects; degrees/certs in Education/Certifications
 - Never use the em dash symbol, the word "delve", or other common LLM-generated text markers
 - NEVER add <script> tags
 - Always use "PUBLICATIONS" (plural) as section title even for a single item
@@ -150,12 +158,12 @@ CONTENT BUDGET:
 - Target: ~500 words, ~4000 characters (rough estimates; actual fit depends on formatting)
 - The ONLY authoritative check is page_count from check_content_length
 
-TOOLS:
+TOOLS (one-pass — avoid extra loops):
 - REQUIRED: call check_content_length(html) with your final HTML before returning
   - Returns actual page_count from rendered PDF (authoritative)
   - If page_count > 1, trim content and call again until fits_one_page=true
 - OPTIONAL: validate_structure(html) - Check HTML has proper headers/sections
-- OPTIONAL: preview_resume(html) - Renders PDF preview image
+- AVOID: preview_resume(html) — skip unless layout is clearly broken
 
 LINKS:
 - Preserve all contact info and never delete it
@@ -177,6 +185,7 @@ ALLOWED:
 
 STRICT RULES - NEVER VIOLATE:
 - NEVER paste job-posting keywords into Skills unless the original resume clearly supports them
+- NEVER place source-backed keywords in the wrong section (Skills vs Experience/Projects vs Education/Certifications)
 - NEVER add specific named tools, platforms, analytics methods, or domain phrases absent from the original unless the source resume already names an essentially identical concept
 - NEVER fabricate job titles, companies, degrees, certifications, or achievements
 - NEVER invent metrics, numbers and achievements not in original
@@ -385,11 +394,12 @@ Description: {job.description}
 {lang_override}
 {_missing_kw_hint}
 ## One-pass optimization objective:
-- Treat this as the main and usually only iteration.
+- This is the ONLY generation pass — no filter-feedback rewrite loop. Get section placement and truthful keyword alignment right the first time.
 - Build a requirement-to-resume mapping internally before writing final HTML:
   1) list explicit requirements and keywords from the posting,
   2) match them to evidence from the original resume,
-  3) update wording/ordering so the strongest matches are easy for ATS and recruiter scans.
+  3) place each matched term in the correct section (Skills / Experience-Projects / Education-Certs),
+  4) update wording/ordering so the strongest matches are easy for ATS and recruiter scans.
 - Only surface a requirement or keyword prominently if you can point to concrete source evidence for it.
 - Prefer precise overlap from the source resume over broader "close enough" substitutions.
 - Keep every claim truthful to source resume content.
@@ -456,9 +466,11 @@ KEY CHANGES — TONE (critical):
 
 FINAL SELF-CHECK BEFORE RETURN:
 - check_content_length says fits_one_page=true.
-- Use check_keywords_tool to find wording gaps, but improve score only through truthful, source-backed terminology.
+- Call check_keywords_tool at most twice; improve score only through truthful, source-backed terminology in the correct sections.
 - Never stuff missing_keywords into the Skills section as a bare list just to raise ATS matching.
+- Skills / Experience-Projects / Education-Certs each contain only terms that belong there.
 - Key changes reflect real matching improvements against requirements and keywords.
+- Do not call preview_resume unless layout is clearly broken.
 
 Output ONLY valid JSON. The html field should contain the raw HTML string.
 """

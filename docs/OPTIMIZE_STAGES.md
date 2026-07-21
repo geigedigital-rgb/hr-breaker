@@ -1,95 +1,52 @@
 # Этапы улучшения резюме (от кнопки до PDF)
 
-Полный путь от нажатия «Улучшить резюме» до выдачи PDF на экран.
+Полный путь от нажатия «Улучшить резюме» до выдачи PDF. Подробнее про промпты и метрики: [PROMPTS_AND_FLOW.md](PROMPTS_AND_FLOW.md).
 
 ## 1. Фронтенд
 
-- Пользователь нажимает **«Улучшить резюме»** → вызывается `handleImprove()`.
-- Отправляется **POST /api/optimize** с телом: `resume_content`, `job_url` или `job_text`, `parallel: true`.
-- До ответа показывается экран «Улучшаем резюме…» с прогрессом (реальным по SSE или симулированным).
+Стадии в `Optimize.tsx`: `landing` → `idle` → `scanning` → `assessment` → `loading` → `result`.
 
-## 2. Бэкенд: `api_optimize` (api.py)
+1. **Анализ:** `POST /api/analyze` → `preScores` (ATS + keywords).
+2. **Улучшение:** `handleImprove()` → **`POST /api/optimize/stream`** (fallback `POST /api/optimize`) с `max_iterations: 1`, `pre_ats_score` / `pre_keyword_score`.
+3. **Результат:** шаблоны (`PostResultResumeStudio`), скачивание через `POST /api/templates/render-pdf` (после оплаты для free).
 
-### 2.1 Парсинг вакансии (если передан URL)
+## 2. Бэкенд: `_run_optimize` (api.py)
 
-- **Код:** `scrape_job_posting(url)` — синхронно в `asyncio.to_thread`.
-- **Что происходит:** скачивание страницы (httpx → при необходимости wayback → при необходимости playwright), извлечение текста.
-- **Время:** от секунд до десятков секунд при Cloudflare/JS.
+### 2.1 Парсинг вакансии (если URL)
 
-### 2.2 Извлечение имени из резюме
+`scrape_job_posting` — httpx → wayback → Playwright. Improve mode: без вакансии.
 
-- **Код:** `extract_name(req.resume_content)` — LLM (Gemini).
-- **Что происходит:** агент `name_extractor` читает текст резюме и возвращает `first_name`, `last_name`.
-- **Время:** несколько секунд.
+### 2.2 Имя
 
-### 2.3 Основной цикл: `optimize_for_job(source, job_text=..., max_iterations=..., parallel=...)`
+`extract_name` (LLM Flash).
 
-Выполняется в **orchestration.py**.
+### 2.3 Один проход: `optimize_for_job(..., max_iterations=1)`
 
-#### 2.3.1 Парсинг текста вакансии (LLM)
+В `orchestration.py` **всегда одна итерация** (продуктовая политика; env `MAX_ITERATIONS` игнорируется).
 
-- **Код:** `parse_job_posting(job_text)` в `optimize_for_job` (если `job` не передан).
-- **Что происходит:** агент `job_parser` превращает сырой текст вакансии в структуру: title, company, requirements, keywords, description.
-- **Время:** несколько секунд.
+1. **Генерация HTML** — `optimize_resume` (один вызов Pro LLM + tools: length, keywords ≤2).
+2. **Рендер PDF** — WeasyPrint; текст для фильтров.
+3. **Фильтры** — parallel по умолчанию (ContentLength, DataValidator, Hallucination, KeywordMatcher, LLMChecker, Vector, AIGenerated). **Повторной генерации при fail нет.**
+4. **Post scores** — `score_resume_vs_job` + KeywordMatcher → поля `post_*` в `OptimizeResponse`.
+5. **Schema** — `extract_resume_schema_strict` → `schema_json` для шаблонов.
 
-#### 2.3.2 Цикл итераций (до `max_iterations`, по умолчанию 5)
+### 2.4 PDF и ответ
 
-На каждой итерации:
+- **Paid / trial / admin:** PDF в history + `pdf_base64`.
+- **Free:** PDF удерживается (`pending_export_token` для checkout); UI после оплаты качает **template PDF**, не redeem WeasyPrint.
+- Ответ: `OptimizeResponse` с `pre_*` / `post_*` / `improvement_*_pp`, `schema_json`, `validation`, `key_changes`.
 
-1. **Генерация резюме (LLM)**  
-   - **Код:** `optimize_resume(source, job, ctx)` — агент `optimizer`.  
-   - **Что происходит:** Gemini генерирует HTML тела резюме под вакансию, с учётом предыдущей попытки и фидбека фильтров.  
-   - **Время:** основная задержка (десятки секунд).
+## 3. Шаблон и оплата
 
-2. **Рендер PDF**  
-   - **Код:** `_render_and_extract(optimized, renderer)` → `renderer.render(optimized.html)` (WeasyPrint).  
-   - **Что происходит:** HTML → PDF, запись во временный файл.  
-   - **Время:** 1–5 секунд.
+Шаблон выбирается **после** optimize. Download:
 
-3. **Извлечение текста из PDF**  
-   - **Код:** `extract_text_from_pdf(pdf_path)`.  
-   - **Что происходит:** для передачи текста фильтрам (как в ATS).  
-   - **Время:** доли секунды.
-
-4. **Запуск фильтров**  
-   - **Код:** `run_filters(optimized, job, source, parallel=True)`.  
-   - **Что происходит:**  
-     - ContentLengthChecker, DataValidator, HallucinationChecker, KeywordMatcher, **LLMChecker** (ATS), VectorSimilarityMatcher, AIGeneratedChecker и др.  
-     - При `parallel=True` все фильтры запускаются через `asyncio.gather`; часть из них снова вызывает LLM (LLMChecker, HallucinationChecker, AIGeneratedChecker и т.д.).  
-   - **Время:** несколько секунд (параллельно), но с учётом LLM — может быть десятки секунд.
-
-5. **Проверка результата**  
-   - Если `validation.passed` — выход из цикла.  
-   - Иначе следующая итерация с фидбеком (issues/suggestions) в контексте.
-
-### 2.4 Сохранение PDF и формирование ответа
-
-- **Код:** после `optimize_for_job`: `pdf_storage.generate_path(...)`, `write_bytes`, `save_record`, `base64.b64encode(pdf_bytes)`.
-- **Что происходит:** запись PDF в `output/`, запись записи в индекс, кодирование PDF в base64 для ответа.
-- **Время:** доли секунды.
-
-### 2.5 Ответ клиенту
-
-- **Код:** `return OptimizeResponse(success=..., pdf_base64=..., pdf_filename=..., validation=..., job=...)`.
-- Фронтенд получает JSON, декодирует PDF, показывает «Готово» и кнопку «Скачать PDF».
-
----
+- paid → `POST /templates/render-pdf`
+- free → `/checkout/download-resume` → Stripe → template render-pdf
 
 ## Почему процесс долгий
 
-- **Несколько вызовов LLM:** парсинг вакансии, извлечение имени, генерация резюме на каждой итерации, плюс LLM-фильтры (LLMChecker, HallucinationChecker, AIGeneratedChecker). Каждый вызов — секунды.
-- **Итерации:** до 5 попыток (генерация → рендер → фильтры); при неудаче — повтор с учётом замечаний.
-- **Рендер PDF:** WeasyPrint стабильно занимает 1–5 секунд.
+Один длинный вызов optimizer + параллельные LLM-фильтры + schema extract. Ускорение: Flash-модели, `GEMINI_THINKING_BUDGET=1024`. Итераций больше одной **нет**.
 
-Ускорение: в `.env` поставить `MAX_ITERATIONS=2`, использовать быстрые модели (например `gemini-2.5-flash`), см. README.
+## Прогресс (SSE)
 
----
-
-## Реальный прогресс (SSE)
-
-Чтобы показывать реальные проценты, бэкенд при запросе с `?stream=1` отдаёт поток Server-Sent Events:
-
-- События вида `{"percent": 0, "message": "Парсинг вакансии…"}`, …, `{"percent": 100, "message": "Готово", "result": {...}}`.
-- Проценты соответствуют завершению этапов: парсинг вакансии, извлечение имени, парсинг вакансии (LLM), итерация 1 (генерация → рендер → фильтры), итерация 2, …, сохранение PDF.
-
-Фронтенд подписывается на поток и обновляет полоску и подпись по приходящим `percent` и `message`.
+`POST /api/optimize/stream` — события `percent` / `message`, финал с `result`.

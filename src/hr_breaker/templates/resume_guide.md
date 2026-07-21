@@ -148,7 +148,12 @@ For publications: include DOI in parentheses at the end if available.
 ## Content Rules
 
 - Show concrete results with metrics when available
-- Feature keywords matching job requirements
+- Feature keywords matching job requirements **only when evidenced in the source resume**
+- Place keywords in the matching section only:
+  - **Skills** — skills / tech stack
+  - **Experience / Projects** — tools and domain terms inside bullets with evidence
+  - **Education / Certifications** — degrees, courses, certificates
+- Never dump vacancy keywords into Skills as a bare list, or put education terms under Skills
 - Prioritize experiences most relevant to the role
 - Preserve original writing style where possible
 - Include all URLs from original resume

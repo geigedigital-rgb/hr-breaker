@@ -11,9 +11,11 @@ import { clearAdminPipelineLog, getAdminPipelineSnapshot, subscribeAdminPipeline
 type AdminPipelineConsoleProps = {
   /** Narrow admin sidebar: icon-only entry point to the same full-screen log. */
   compact?: boolean;
+  /** Light sidebar (Visual Sandbox shell). */
+  light?: boolean;
 };
 
-export default function AdminPipelineConsole({ compact = false }: AdminPipelineConsoleProps) {
+export default function AdminPipelineConsole({ compact = false, light = false }: AdminPipelineConsoleProps) {
   const [panelOpen, setPanelOpen] = useState(false);
   const [entries, setEntries] = useState(getAdminPipelineSnapshot);
   const endRef = useRef<HTMLDivElement>(null);
@@ -141,13 +143,19 @@ export default function AdminPipelineConsole({ compact = false }: AdminPipelineC
   return (
     <>
       <div
-        className={`mt-3 shrink-0 border-t border-white/15 pt-3 ${compact ? "flex flex-col items-center gap-2" : ""}`}
+        className={`mt-3 shrink-0 border-t pt-3 ${
+          light ? "border-[var(--border)]" : "border-white/15"
+        } ${compact ? "flex flex-col items-center gap-2" : ""}`}
       >
         {compact ? (
           <button
             type="button"
             onClick={openPanel}
-            className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/10 text-white/90 transition-colors hover:bg-white/15"
+            className={`admin-pipeline-trigger relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl transition-colors ${
+              light
+                ? "bg-[var(--accent-soft)] text-[var(--accent)] hover:bg-[var(--accent-soft)]"
+                : "bg-white/10 text-white/90 hover:bg-white/15"
+            }`}
             title={`Pipeline log (${entries.length} events)`}
             aria-label={`Open pipeline log, ${entries.length} events`}
           >
@@ -163,22 +171,43 @@ export default function AdminPipelineConsole({ compact = false }: AdminPipelineC
             <button
               type="button"
               onClick={openPanel}
-              className="flex w-full items-center gap-2 rounded-xl bg-white/10 px-3 py-2.5 text-left transition-colors hover:bg-white/15"
+              className={`admin-pipeline-trigger flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left transition-colors ${
+                light
+                  ? "bg-[var(--accent-soft)]/70 hover:bg-[var(--accent-soft)]"
+                  : "bg-white/10 hover:bg-white/15"
+              }`}
             >
-              <CommandLineIcon className="h-5 w-5 shrink-0 text-white/90" aria-hidden />
+              <CommandLineIcon
+                className={`h-5 w-5 shrink-0 ${light ? "text-[var(--accent)]" : "text-white/90"}`}
+                aria-hidden
+              />
               <div className="min-w-0 flex-1">
-                <div className="text-xs font-semibold uppercase tracking-wide text-white/90">Pipeline log</div>
-                <div className="text-[11px] text-white/60">
+                <div
+                  className={`admin-pipeline-title text-xs font-semibold tracking-tight ${
+                    light ? "text-[var(--text)]" : "uppercase tracking-wide text-white/90"
+                  }`}
+                >
+                  Pipeline log
+                </div>
+                <div className={`admin-pipeline-sub text-[11px] ${light ? "text-[var(--text-tertiary)]" : "text-white/60"}`}>
                   {entries.length} event{entries.length === 1 ? "" : "s"} · open full console
                 </div>
               </div>
-              <span className="tabular-nums text-sm font-medium text-white/80">{entries.length}</span>
+              <span
+                className={`tabular-nums text-sm font-medium ${light ? "text-[var(--text-muted)]" : "text-white/80"}`}
+              >
+                {entries.length}
+              </span>
             </button>
             <div className="mt-1.5 flex justify-end gap-0.5">
               <button
                 type="button"
                 onClick={copyAll}
-                className="rounded-lg p-1.5 text-white/70 hover:bg-white/10 hover:text-white"
+                className={`rounded-lg p-1.5 ${
+                  light
+                    ? "text-[var(--text-tertiary)] hover:bg-[var(--accent-soft)] hover:text-[var(--text)]"
+                    : "text-white/70 hover:bg-white/10 hover:text-white"
+                }`}
                 title="Copy log"
                 aria-label="Copy log"
               >
@@ -187,7 +216,11 @@ export default function AdminPipelineConsole({ compact = false }: AdminPipelineC
               <button
                 type="button"
                 onClick={() => clearAdminPipelineLog()}
-                className="rounded-lg p-1.5 text-white/70 hover:bg-white/10 hover:text-white"
+                className={`rounded-lg p-1.5 ${
+                  light
+                    ? "text-[var(--text-tertiary)] hover:bg-[var(--accent-soft)] hover:text-[var(--text)]"
+                    : "text-white/70 hover:bg-white/10 hover:text-white"
+                }`}
                 title="Clear log"
                 aria-label="Clear log"
               >

@@ -613,6 +613,62 @@ class OptimizeResponse(BaseModel):
     # Saved result summary (TTL); link opens read-only snapshot without login.
     snapshot_url: str | None = None
     snapshot_expires_at: str | None = None
+    # Comparable match scores (same methodology as /analyze): ATS 0–100, keywords 0–1.
+    pre_ats_score: int | None = None
+    pre_keyword_score: float | None = None
+    post_ats_score: int | None = None
+    post_keyword_score: float | None = None
+    # Improvement in percentage points (post% − pre%). Keywords normalized to 0–100 first.
+    improvement_ats_pp: int | None = None
+    improvement_keyword_pp: int | None = None
+    improvement_overall_pp: int | None = None
+
+
+def _keyword_score_to_pct(score: float | None) -> int | None:
+    if score is None:
+        return None
+    try:
+        v = float(score)
+    except (TypeError, ValueError):
+        return None
+    if v <= 1.0:
+        return int(round(max(0.0, min(1.0, v)) * 100))
+    return int(round(max(0.0, min(100.0, v))))
+
+
+def _improvement_pp(pre: int | None, post: int | None) -> int | None:
+    if pre is None or post is None:
+        return None
+    return int(post) - int(pre)
+
+
+def _overall_match_pct(ats: int | None, kw_pct: int | None) -> int | None:
+    vals = [v for v in (ats, kw_pct) if v is not None]
+    if not vals:
+        return None
+    return int(round(sum(vals) / len(vals)))
+
+
+def _optimize_score_fields(
+    *,
+    pre_ats: int | None,
+    pre_kw: float | None,
+    post_ats: int | None,
+    post_kw: float | None,
+) -> dict[str, int | float | None]:
+    pre_kw_pct = _keyword_score_to_pct(pre_kw)
+    post_kw_pct = _keyword_score_to_pct(post_kw)
+    pre_overall = _overall_match_pct(pre_ats, pre_kw_pct)
+    post_overall = _overall_match_pct(post_ats, post_kw_pct)
+    return {
+        "pre_ats_score": pre_ats,
+        "pre_keyword_score": pre_kw,
+        "post_ats_score": post_ats,
+        "post_keyword_score": post_kw,
+        "improvement_ats_pp": _improvement_pp(pre_ats, post_ats),
+        "improvement_keyword_pp": _improvement_pp(pre_kw_pct, post_kw_pct),
+        "improvement_overall_pp": _improvement_pp(pre_overall, post_overall),
+    }
 
 
 class OptimizationSnapshotPublicOut(BaseModel):
@@ -4002,6 +4058,7 @@ async def _run_optimize(
         success=ok,
         pdf_base64=pdf_b64,
         pdf_filename=pdf_filename,
+        # Still issued for free checkout gate; UI downloads via templates/render-pdf after pay (see docs/PROMPTS_AND_FLOW.md).
         pending_export_token=pending_export_token,
         pending_export_expires_at=pending_export_expires_at,
         validation=validation_out,
@@ -4011,6 +4068,12 @@ async def _run_optimize(
         schema_json=schema_json,
         snapshot_url=snapshot_url_out,
         snapshot_expires_at=snapshot_expires_at_out,
+        **_optimize_score_fields(
+            pre_ats=req.pre_ats_score,
+            pre_kw=req.pre_keyword_score,
+            post_ats=post_ats,
+            post_kw=post_kw,
+        ),
     )
 
 
@@ -4070,7 +4133,11 @@ async def api_optimize_stream(req: OptimizeRequest, user: dict | None = Depends(
 
 @router.get("/optimize/pending-export/{token}")
 async def api_download_pending_optimize_export(token: str, user: dict = Depends(get_current_user)):
-    """Download previously generated optimize PDF after upgrade, without re-running optimize."""
+    """Legacy redeem of WeasyPrint hold after upgrade.
+
+    Product UI downloads via POST /templates/render-pdf after payment (see docs/PROMPTS_AND_FLOW.md).
+    Token is still issued for free checkout gating; this endpoint remains for admin/debug.
+    """
     uid = str(user.get("id") or "")
     if not uid or uid == "local":
         raise HTTPException(401, "Sign in is required")

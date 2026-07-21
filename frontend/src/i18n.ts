@@ -343,6 +343,11 @@ const en = {
     interviewChances: "Interview chances",
     interviewChancesHintHigh: "Strong match — your resume is well-positioned to land an interview for this role.",
     interviewChancesHintLow: "Improve your resume to raise your match score and boost interview chances.",
+    matchBeforeAfter: "{before}% → {after}%",
+    atsBeforeAfter: "ATS {before}% → {after}%",
+    keywordsBeforeAfter: "Keywords {before}% → {after}%",
+    improvementPpSuffix: " pp",
+    downloadSchemaMissing: "PDF is not ready yet — try again in a moment, or re-run optimization.",
     resultReadyImproved: "Your resume has been improved",
     templateHeaderImproveMode: "Resume improved",
     templateHeaderTailorMode: "Ready to apply",
@@ -524,7 +529,7 @@ const en = {
     templatesUnavailable: "Could not load template previews, using placeholders below.",
     templatePreviewError: "Preview failed for this template.",
     /** Post-optimize PDF preview header (badge % + headline) */
-    postResultPreviewMatchStrong: "Strong match for this job 🔥",
+    postResultPreviewMatchStrong: "Strong match for this job",
   },
   app: {
     errorTitle: "Something went wrong",
@@ -1102,6 +1107,8 @@ const en = {
       viewFullResume: "View full resume",
       chooseTemplateTitle: "Choose template",
       chooseTemplateSub: "Select a professional design.",
+      addPhotoTitle: "Add photo",
+      addPhotoSub: "Optional — only if you want a headshot on the resume.",
       templatesLockedOverlay:
         "Templates unlock after auto-improvement — choose a design once your resume is upgraded.",
       templateClassic: "Classic",
@@ -1123,7 +1130,7 @@ const en = {
       matchTierNeedsWork: "Needs work",
       matchTierNeedsWorkHint: "Major mismatches — rework structure, keywords, and measurable outcomes.",
       /** Result stage (after optimization) — sandbox layout */
-      resultOptimizedTitle: "Your resume is now optimized! 🎉",
+      resultOptimizedTitle: "Your resume is now optimized",
       resultOptimizedSubtitle:
         "We've applied smart improvements to maximize your match and interview chances.",
       resultYourMatchScoreLabel: "Your match score",

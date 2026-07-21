@@ -1,14 +1,84 @@
 @import "tailwindcss";
 
+/* Plus Jakarta Sans loaded in index.html — used by .ds-sandbox only */
 :root {
-  --bg-page: #F2F3F9;
-  --accent: #4578FC;
-  --accent-soft: #EAFCB6;
-  --card: #FFFFFF;
-  /* Иерархия текста по важности (UX: контраст = приоритет) */
-  --text: #181819;           /* primary — заголовки, ключевые действия, главный контент */
-  --text-muted: #5c5d6a;    /* secondary — подписи секций, пояснения */
-  --text-tertiary: #8b8d99; /* tertiary — подсказки, хинты, место для ввода (низкий приоритет) */
+  /* Surfaces */
+  --bg-page: #f2f3f9;
+  --bg-elevated: #f7f8fc;
+  --card: #ffffff;
+
+  /* Brand accent (PitchCV app) */
+  --accent: #4578fc;
+  --accent-hover: #3568ec;
+  --accent-soft: #e8eefc;
+  --accent-mid: #6b93ff;
+
+  /* Soft washes (OpenAI/Gemini-like: airy, not purple kits) */
+  --grad-page: radial-gradient(110% 70% at 8% -5%, rgba(69, 120, 252, 0.2) 0%, transparent 52%),
+    radial-gradient(80% 55% at 96% 0%, rgba(96, 200, 255, 0.16) 0%, transparent 48%),
+    radial-gradient(60% 45% at 70% 100%, rgba(45, 155, 104, 0.1) 0%, transparent 50%),
+    linear-gradient(180deg, #eef2fb 0%, #f4f5fa 40%, #f2f3f9 100%);
+  --grad-card: linear-gradient(160deg, #ffffff 0%, #f5f8ff 55%, #f8fafd 100%);
+  --grad-accent-soft: linear-gradient(125deg, rgba(69, 120, 252, 0.16) 0%, rgba(110, 190, 255, 0.12) 42%, rgba(232, 246, 239, 0.45) 100%);
+  --grad-success-soft: linear-gradient(145deg, rgba(220, 245, 232, 0.98) 0%, rgba(255, 255, 255, 0.92) 48%, rgba(232, 238, 252, 0.7) 100%);
+  --grad-accent-btn: linear-gradient(135deg, #7aa0ff 0%, #4578fc 46%, #2f5fe8 100%);
+  --grad-fill-accent: linear-gradient(90deg, #8eb0ff 0%, #4578fc 55%, #2f5fe8 100%);
+  --grad-fill-success: linear-gradient(90deg, #3ecf8e 0%, #1a7a4c 100%);
+  --grad-fill-warning: linear-gradient(90deg, #f0a04b 0%, #b45309 100%);
+  --grad-fill-danger: linear-gradient(90deg, #f07884 0%, #c03545 100%);
+  --grad-icon-accent: linear-gradient(145deg, #f4f7ff 0%, #d4e2ff 100%);
+  --grad-icon-success: linear-gradient(145deg, #f0faf4 0%, #c8eedc 100%);
+  --grad-icon-warning: linear-gradient(145deg, #fff9f0 0%, #ffe0b0 100%);
+  --grad-icon-danger: linear-gradient(145deg, #fff3f5 0%, #ffc8d0 100%);
+
+  /* Text hierarchy — contrast over “soap” greys */
+  --text: #181819;
+  --text-muted: #5a5b66;
+  --text-tertiary: #7a7c88;
+
+  /* Borders */
+  --border: #ebedf5;
+  --border-strong: #d8dbe6;
+
+  /* Semantic */
+  --success: #1a7a4c;
+  --success-soft: #e8f6ef;
+  --warning: #b45309;
+  --warning-soft: #fff4e5;
+  --danger: #c03545;
+  --danger-soft: #fdecee;
+
+  /* Type scale */
+  --text-xs: 0.75rem; /* 12 */
+  --text-sm: 0.8125rem; /* 13 */
+  --text-base: 0.9375rem; /* 15 */
+  --text-lg: 1.0625rem; /* 17 */
+  --text-xl: 1.25rem; /* 20 */
+  --text-display: 1.875rem; /* 30 */
+
+  --font-regular: 400;
+  --font-medium: 500;
+  --font-semibold: 600;
+  --font-bold: 700;
+
+  /* 4px grid */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+
+  /* Radii */
+  --radius-sm: 0.625rem;
+  --radius-md: 0.875rem;
+  --radius-lg: 1.25rem;
+  --radius-full: 9999px;
+
+  /* Soft shadows — low opacity, no glow stacks */
+  --shadow-sm: 0 1px 2px rgba(24, 24, 25, 0.04), 0 4px 16px -8px rgba(69, 120, 252, 0.08);
+  --shadow-md: 0 8px 28px -14px rgba(24, 24, 25, 0.14), 0 2px 8px -4px rgba(69, 120, 252, 0.08);
 }
 
 html {
@@ -42,15 +112,346 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* —— Design-system utilities (Visual Sandbox first; reusable app-wide) —— */
+
+.ds-sandbox {
+  font-family: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+
+.ds-sandbox-canvas {
+  background: var(--grad-page);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  margin: calc(var(--space-2) * -1);
+}
+
+@media (min-width: 640px) {
+  .ds-sandbox-canvas {
+    padding: var(--space-6);
+    margin: calc(var(--space-3) * -1);
+  }
+}
+
+.ds-title {
+  font-size: var(--text-xl);
+  font-weight: var(--font-semibold);
+  letter-spacing: -0.025em;
+  line-height: 1.28;
+  color: var(--text);
+}
+
+.ds-subtitle {
+  font-size: var(--text-sm);
+  font-weight: var(--font-regular);
+  line-height: 1.55;
+  color: var(--text-muted);
+  max-width: 42rem;
+}
+
+.ds-label {
+  font-size: var(--text-xs);
+  font-weight: var(--font-medium);
+  letter-spacing: -0.01em;
+  text-transform: none;
+  line-height: 1.35;
+  color: var(--text-tertiary);
+}
+
+.ds-hint {
+  font-size: var(--text-xs);
+  font-weight: var(--font-regular);
+  line-height: 1.45;
+  color: var(--text-tertiary);
+}
+
+.ds-body {
+  font-size: var(--text-sm);
+  font-weight: var(--font-regular);
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+.ds-card {
+  background: var(--grad-card);
+  border: 1px solid rgba(232, 236, 245, 0.95);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.ds-card--accent {
+  background: var(--grad-accent-soft);
+  border-color: rgba(69, 120, 252, 0.14);
+}
+
+.ds-card--success {
+  background: var(--grad-success-soft);
+  border-color: rgba(26, 122, 76, 0.14);
+}
+
+.ds-chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(232, 236, 245, 0.9);
+  padding: 0.25rem 0.625rem;
+  font-size: var(--text-xs);
+  font-weight: var(--font-medium);
+  line-height: 1.35;
+  color: var(--text-muted);
+  backdrop-filter: blur(6px);
+}
+
+/* Soft designer pills — no gradient text fills */
+.ds-soft-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  max-width: 100%;
+  border-radius: var(--radius-full);
+  border: 1px solid rgba(255, 255, 255, 0.75);
+  background: rgba(255, 255, 255, 0.72);
+  padding: 0.375rem 0.75rem;
+  font-size: 0.8125rem; /* 13 */
+  font-weight: var(--font-medium);
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+  color: var(--text-muted);
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.ds-soft-pill--success {
+  color: var(--success);
+  border-color: rgba(26, 122, 76, 0.14);
+  background: rgba(255, 255, 255, 0.78);
+}
+.ds-soft-pill--accent {
+  color: var(--accent);
+  border-color: rgba(69, 120, 252, 0.14);
+  background: rgba(255, 255, 255, 0.78);
+}
+.ds-soft-pill--warning {
+  color: var(--warning);
+  border-color: rgba(180, 83, 9, 0.16);
+  background: rgba(255, 255, 255, 0.78);
+}
+.ds-soft-pill--danger {
+  color: var(--danger);
+  border-color: rgba(192, 53, 69, 0.14);
+  background: rgba(255, 255, 255, 0.78);
+}
+.ds-soft-pill--muted {
+  color: var(--text-muted);
+  border-color: rgba(232, 236, 245, 0.95);
+  background: rgba(255, 255, 255, 0.7);
+}
+.ds-soft-pill__value {
+  font-weight: var(--font-bold);
+  font-variant-numeric: tabular-nums;
+}
+
+.ds-icon-well {
+  display: flex;
+  height: 2.75rem;
+  width: 2.75rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+}
+
+.ds-icon-well--accent {
+  background: var(--grad-icon-accent);
+  color: var(--accent);
+}
+.ds-icon-well--success {
+  background: var(--grad-icon-success);
+  color: var(--success);
+}
+.ds-icon-well--warning {
+  background: var(--grad-icon-warning);
+  color: var(--warning);
+}
+.ds-icon-well--danger {
+  background: var(--grad-icon-danger);
+  color: var(--danger);
+}
+
+.ds-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: var(--radius-full);
+  background: var(--grad-accent-btn);
+  color: #fff;
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  padding: 0.75rem 1.5rem;
+  border: none;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.22) inset, 0 8px 20px -10px rgba(69, 120, 252, 0.55);
+  transition: filter 0.15s ease, transform 0.1s ease;
+}
+.ds-btn-primary:hover {
+  filter: brightness(1.04);
+}
+.ds-btn-primary:active {
+  transform: scale(0.99);
+}
+.ds-btn-primary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.ds-progress-track {
+  height: 0.625rem;
+  overflow: hidden;
+  border-radius: var(--radius-full);
+  background: rgba(232, 236, 245, 0.95);
+  box-shadow: inset 0 1px 2px rgba(24, 24, 25, 0.04);
+}
+.ds-progress-fill {
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: var(--grad-fill-accent);
+  box-shadow: 0 0 12px -2px rgba(69, 120, 252, 0.35);
+}
+
+.ds-progress-fill--success {
+  background: var(--grad-fill-success);
+  box-shadow: 0 0 12px -2px rgba(26, 122, 76, 0.3);
+}
+.ds-progress-fill--warning {
+  background: var(--grad-fill-warning);
+  box-shadow: 0 0 12px -2px rgba(180, 83, 9, 0.25);
+}
+.ds-progress-fill--danger {
+  background: var(--grad-fill-danger);
+  box-shadow: 0 0 12px -2px rgba(192, 53, 69, 0.25);
+}
+
+/* —— Visual Sandbox chrome (AdminLayout only on /admin/visual) —— */
+
+.ds-sandbox-shell {
+  font-family: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+
+.ds-sandbox-aside {
+  background: var(--grad-card);
+  border-right: 1px solid rgba(232, 236, 245, 0.95);
+  color: var(--text);
+  box-shadow: 4px 0 24px -16px rgba(69, 120, 252, 0.18);
+}
+
+.ds-sandbox-aside-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  margin-bottom: 1.75rem;
+  padding: 0 0.25rem;
+}
+
+.ds-sandbox-aside-brand-mark {
+  display: flex;
+  height: 2.25rem;
+  width: 2.25rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  background: var(--grad-icon-accent);
+  color: var(--accent);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+}
+
+.ds-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  border-radius: var(--radius-full);
+  padding: 0.625rem 0.875rem;
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+  color: var(--text-muted);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.ds-nav-item:hover {
+  background: rgba(69, 120, 252, 0.06);
+  color: var(--text);
+}
+.ds-nav-item-active {
+  background: var(--grad-accent-soft);
+  color: var(--accent);
+  box-shadow: var(--shadow-sm);
+}
+.ds-nav-item-compact {
+  justify-content: center;
+  padding-left: 0.625rem;
+  padding-right: 0.625rem;
+}
+
+.ds-sandbox-header {
+  background: rgba(255, 255, 255, 0.72);
+  border-bottom: 1px solid rgba(232, 236, 245, 0.9);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.ds-sandbox-main {
+  background: var(--grad-page);
+  padding: 1.25rem 1rem 2rem;
+}
+@media (min-width: 768px) {
+  .ds-sandbox-main {
+    padding: 1.75rem 2rem 2.5rem;
+  }
+}
+
+.ds-sandbox-aside-muted {
+  color: var(--text-tertiary);
+}
+.ds-sandbox-aside-divider {
+  border-color: rgba(232, 236, 245, 0.95);
+}
+
+/* Pipeline log trigger inside light sandbox sidebar */
+.ds-sandbox-aside .admin-pipeline-trigger {
+  background: rgba(69, 120, 252, 0.08);
+  color: var(--text);
+}
+.ds-sandbox-aside .admin-pipeline-trigger:hover {
+  background: rgba(69, 120, 252, 0.12);
+}
+.ds-sandbox-aside .admin-pipeline-trigger .admin-pipeline-title {
+  color: var(--text);
+}
+.ds-sandbox-aside .admin-pipeline-trigger .admin-pipeline-sub {
+  color: var(--text-tertiary);
+}
+
 /* Лёгкая змейка градиента по бордеру блока улучшения */
 @keyframes improve-border-flow {
-  0% { background-position: 0% 50%; }
-  100% { background-position: 200% 50%; }
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: 200% 50%;
+  }
 }
 
 /* Подсветка скелетона: бегущий блик по полю вставки вакансии */
 @keyframes shimmer {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(100%); }
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
 }
-

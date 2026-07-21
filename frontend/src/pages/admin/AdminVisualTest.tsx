@@ -19,6 +19,7 @@ import { t, tFormat } from "../../i18n";
 import * as api from "../../api";
 import { PostResultResumeStudio } from "../../components/PostResultResumeStudio";
 import { storeCheckoutResumePreview } from "../../checkoutResumePreview";
+import { useAdminSandboxShell } from "../../AdminSandboxShellContext";
 
 const MOCK = {
   atsPct: 72,
@@ -137,7 +138,7 @@ function cleanReason(label: string): string {
 function matchTierShort(
   pct: number,
   opts?: { excellentFrom?: number }
-): { label: string; hint: string; barClass: string; textClass: string } {
+): { label: string; hint: string; fillMod: "" | "--success" | "--warning" | "--danger"; textClass: string } {
   const excellentFrom = opts?.excellentFrom ?? 85;
   const p = Math.max(0, Math.min(100, Math.round(pct)));
 
@@ -145,18 +146,17 @@ function matchTierShort(
     return {
       label: t("admin.visualSandbox.matchTierExcellent"),
       hint: t("admin.visualSandbox.matchTierExcellentHint"),
-      barClass: "bg-gradient-to-r from-emerald-500 to-emerald-400",
-      textClass: "text-emerald-700",
+      fillMod: "--success",
+      textClass: "text-[var(--success)]",
     };
   }
 
-  // Between 78 and “excellent” threshold only when excellent is 85+ — 78% is already a strong baseline.
   if (excellentFrom > 78 && p >= 78 && p < excellentFrom) {
     return {
       label: t("admin.visualSandbox.matchTierSolid"),
       hint: t("admin.visualSandbox.matchTierSolidHint"),
-      barClass: "bg-gradient-to-r from-teal-500 to-emerald-400",
-      textClass: "text-teal-700",
+      fillMod: "--success",
+      textClass: "text-[var(--success)]",
     };
   }
 
@@ -164,23 +164,23 @@ function matchTierShort(
     return {
       label: t("admin.visualSandbox.matchTierNeedsRefinement"),
       hint: t("admin.visualSandbox.matchTierNeedsRefinementHint"),
-      barClass: "bg-gradient-to-r from-amber-500 to-amber-400",
-      textClass: "text-amber-700",
+      fillMod: "--warning",
+      textClass: "text-[var(--warning)]",
     };
   }
   if (p >= 45) {
     return {
       label: t("admin.visualSandbox.matchTierFair"),
       hint: t("admin.visualSandbox.matchTierFairHint"),
-      barClass: "bg-gradient-to-r from-amber-500 to-orange-400",
-      textClass: "text-orange-700",
+      fillMod: "--warning",
+      textClass: "text-[var(--warning)]",
     };
   }
   return {
     label: t("admin.visualSandbox.matchTierNeedsWork"),
     hint: t("admin.visualSandbox.matchTierNeedsWorkHint"),
-    barClass: "bg-gradient-to-r from-orange-500 to-rose-400",
-    textClass: "text-orange-800",
+    fillMod: "--danger",
+    textClass: "text-[var(--danger)]",
   };
 }
 
@@ -198,104 +198,138 @@ function impactToneForBlocker(cb: api.CallbackBlockerOut, index: number): "high"
 
 const CALLBACK_PREVIEW_ICONS = [KeyIcon, BoltIcon, UserCircleIcon] as const;
 
-function mixHex(a: string, b: string, t: number): string {
-  const ah = a.replace("#", "");
-  const bh = b.replace("#", "");
-  const ar = parseInt(ah.slice(0, 2), 16);
-  const ag = parseInt(ah.slice(2, 4), 16);
-  const ab = parseInt(ah.slice(4, 6), 16);
-  const br = parseInt(bh.slice(0, 2), 16);
-  const bg = parseInt(bh.slice(2, 4), 16);
-  const bb = parseInt(bh.slice(4, 6), 16);
-  const r = Math.round(ar + (br - ar) * t);
-  const g = Math.round(ag + (bg - ag) * t);
-  const bl = Math.round(ab + (bb - ab) * t);
-  return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${bl.toString(16).padStart(2, "0")}`;
-}
-
 function scoreProgressColor(pct: number): string {
   const p = Math.max(0, Math.min(100, pct));
-  if (p <= 25) return mixHex("#dc2626", "#f59e0b", p / 25);
-  if (p <= 45) return "#f59e0b";
-  if (p <= 60) return mixHex("#f59e0b", "#16a34a", (p - 45) / 15);
-  return "#16a34a";
+  if (p <= 45) return "#c03545";
+  if (p <= 65) return "#b45309";
+  return "#1a7a4c";
 }
 
-function riskProgressColor(pct: number): string {
-  const p = Math.max(0, Math.min(100, pct));
-  if (p <= 40) return "#16a34a";
-  if (p <= 75) return mixHex("#16a34a", "#f59e0b", (p - 40) / 35);
-  return mixHex("#f59e0b", "#dc2626", (p - 75) / 25);
-}
-
-function ScoreRing({
+/** Segmented score bar — cells fill by %, tinted to match tier. */
+function SegmentedScoreBar({
   percent,
-  size = 46,
-  thickness = 6,
-  mode = "score",
+  tone,
+  segments = 12,
 }: {
   percent: number;
-  size?: number;
-  thickness?: number;
-  mode?: "score" | "risk";
+  tone: "" | "--success" | "--warning" | "--danger";
+  segments?: number;
 }) {
   const pct = Math.max(0, Math.min(100, percent));
-  const angle = (pct / 100) * 360;
-  const startDeg = 270; // 0% at 9 o'clock
-  const ringMask = `radial-gradient(farthest-side, transparent calc(100% - ${thickness}px), #000 calc(100% - ${thickness}px))`;
-  const qualityColor = mode === "risk" ? riskProgressColor(pct) : scoreProgressColor(pct);
-  const filledGradient =
-    mode === "risk"
-      ? `conic-gradient(from ${startDeg}deg, #16a34a 0%, #16a34a 40%, #f59e0b 75%, #dc2626 100%)`
-      : `conic-gradient(from ${startDeg}deg, #dc2626 0%, #f59e0b 25%, #f59e0b 45%, #16a34a 60%, #16a34a 100%)`;
-  const markerRadius = Math.max(2.5, thickness / 2 + 0.5);
-  const orbit = size / 2 - thickness / 2 - 0.25;
-  const markerDeg = startDeg + angle;
-  const markerRad = (markerDeg * Math.PI) / 180;
-  const markerX = size / 2 + orbit * Math.sin(markerRad) - markerRadius;
-  const markerY = size / 2 - orbit * Math.cos(markerRad) - markerRadius;
+  const filled = Math.round((pct / 100) * segments);
+  const gradient =
+    tone === "--success"
+      ? "var(--grad-fill-success)"
+      : tone === "--danger"
+        ? "var(--grad-fill-danger)"
+        : tone === "--warning"
+          ? "var(--grad-fill-warning)"
+          : "var(--grad-fill-accent)";
+  const glow =
+    tone === "--success"
+      ? "0 0 8px -2px rgba(26, 122, 76, 0.35)"
+      : tone === "--danger"
+        ? "0 0 8px -2px rgba(192, 53, 69, 0.3)"
+        : tone === "--warning"
+          ? "0 0 8px -2px rgba(180, 83, 9, 0.3)"
+          : "0 0 8px -2px rgba(69, 120, 252, 0.3)";
 
   return (
-    <div className="relative shrink-0" style={{ width: size, height: size }} aria-hidden>
-      <div
-        className="absolute inset-0 rounded-full"
-        style={{
-          background: filledGradient,
-          WebkitMaskImage: ringMask,
-          maskImage: ringMask,
-        }}
-      />
-      <div
-        className="absolute inset-0 rounded-full"
-        style={{
-          background:
-            pct <= 0
-              ? "#E5E7EB"
-              : pct >= 100
-                ? "transparent"
-                : `conic-gradient(from ${startDeg}deg, transparent 0deg ${angle}deg, #E5E7EB ${angle}deg 360deg)`,
-          WebkitMaskImage: ringMask,
-          maskImage: ringMask,
-        }}
-      />
-      <span
-        className="absolute rounded-full ring-2 ring-white"
-        style={{
-          width: markerRadius * 2,
-          height: markerRadius * 2,
-          left: markerX,
-          top: markerY,
-          backgroundColor: qualityColor,
-        }}
-      />
+    <div
+      className="mx-auto flex w-full max-w-[220px] gap-1 sm:mx-0 sm:max-w-none"
+      role="progressbar"
+      aria-valuenow={pct}
+      aria-valuemin={0}
+      aria-valuemax={100}
+    >
+      {Array.from({ length: segments }, (_, i) => {
+        const on = i < filled;
+        const t = segments <= 1 ? 1 : i / (segments - 1);
+        return (
+          <span
+            key={i}
+            className="h-2.5 min-w-0 flex-1 rounded-[3px] transition-opacity"
+            style={
+              on
+                ? {
+                    background: gradient,
+                    opacity: 0.55 + t * 0.45,
+                    boxShadow: glow,
+                  }
+                : {
+                    background: "rgba(232, 236, 245, 0.95)",
+                  }
+            }
+            aria-hidden
+          />
+        );
+      })}
     </div>
   );
 }
 
+/** Large semicircle gauge — light track, thick arc, design-token colors. */
+function ScoreArc({
+  percent,
+  width = 220,
+  stroke = 18,
+}: {
+  percent: number;
+  width?: number;
+  stroke?: number;
+}) {
+  const pct = Math.max(0, Math.min(100, percent));
+  const color = scoreProgressColor(pct);
+  const height = width * 0.62;
+  const cx = width / 2;
+  const cy = height - stroke / 2 - 2;
+  const r = (width - stroke) / 2 - 4;
+  // Semicircle from left (π) to right (0), through top
+  const startX = cx - r;
+  const startY = cy;
+  const endX = cx + r;
+  const endY = cy;
+  const trackPath = `M ${startX} ${startY} A ${r} ${r} 0 0 1 ${endX} ${endY}`;
+  const circumference = Math.PI * r;
+  const dash = (pct / 100) * circumference;
+
+  return (
+    <div className="relative mx-auto" style={{ width, height }} aria-hidden>
+      <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} className="overflow-visible">
+        <defs>
+          <linearGradient id="scoreArcFill" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#3ecf8e" />
+            <stop offset="100%" stopColor={color} />
+          </linearGradient>
+        </defs>
+        <path
+          d={trackPath}
+          fill="none"
+          stroke="rgba(232, 236, 245, 0.95)"
+          strokeWidth={stroke}
+          strokeLinecap="round"
+        />
+        <path
+          d={trackPath}
+          fill="none"
+          stroke="url(#scoreArcFill)"
+          strokeWidth={stroke}
+          strokeLinecap="round"
+          strokeDasharray={`${dash} ${circumference}`}
+          className="drop-shadow-[0_0_12px_rgba(26,122,76,0.25)]"
+        />
+      </svg>
+      <div className="pointer-events-none absolute inset-x-0 bottom-1 flex flex-col items-center justify-end pb-1">
+        <CheckIcon className="h-7 w-7 text-[var(--success)]" strokeWidth={2.25} />
+      </div>
+    </div>
+  );
+}
 const RESULT_KEY_ICONS = [DocumentTextIcon, BriefcaseIcon, AcademicCapIcon] as const;
 
 export default function AdminVisualTest() {
   const navigate = useNavigate();
+  const { setStudioFocus } = useAdminSandboxShell();
   const [viewMode, setViewMode] = useState<ViewMode>("both");
   const [sandboxTemplateId, setSandboxTemplateId] = useState("");
   const [sandboxPhoto, setSandboxPhoto] = useState<string | null>(null);
@@ -320,11 +354,16 @@ export default function AdminVisualTest() {
     }
   }, []);
 
-  const overallPct = Math.round((MOCK.atsPct + MOCK.kwPct) / 2);
-  /** Matches prod Optimize: main ring = resume quality (not rejection risk). */
-  const assessmentQualityPct = overallPct;
-  /** Same band as prod post–auto-improve (82–93), stable for this sandbox session. */
-  const studioMatchPct = useMemo(() => 82 + Math.floor(Math.random() * 12), []);
+  useEffect(() => {
+    const focus = viewMode === "result" || viewMode === "both";
+    setStudioFocus(focus);
+    return () => setStudioFocus(false);
+  }, [viewMode, setStudioFocus]);
+
+  /** Fixed mock pre/post match scores (no random band). */
+  const MOCK_PRE_MATCH = 70;
+  const MOCK_POST_MATCH = 86;
+  const studioMatchPct = MOCK_POST_MATCH;
 
   const scanSummaryText =
     "The current resume looks acceptable at first glance, but key proof points are missing. This is why responses stay low.";
@@ -335,10 +374,7 @@ export default function AdminVisualTest() {
   });
   const totalIssueCount = treatmentGroups.reduce((n, g) => n + g.problems.length, 0);
 
-  const resultTierResult = useMemo(
-    () => matchTierShort(studioMatchPct, { excellentFrom: 78 }),
-    [studioMatchPct],
-  );
+  const resultTierResult = matchTierShort(studioMatchPct, { excellentFrom: 78 });
   const resultImprovementCount = useMemo(
     () => MOCK.resultKeyChanges.reduce((n, g) => n + g.items.length, 0),
     [],
@@ -355,60 +391,68 @@ export default function AdminVisualTest() {
   );
   const resultTopBucketPct = studioMatchPct >= 92 ? 2 : studioMatchPct >= 85 ? 5 : null;
 
-  const currentMatchPct = assessmentQualityPct;
-  const potentialMatchPct = studioMatchPct;
+  const currentMatchPct = MOCK_PRE_MATCH;
+  const potentialMatchPct = MOCK_POST_MATCH;
   const currentTier = matchTierShort(currentMatchPct);
   const potentialTier = matchTierShort(potentialMatchPct, { excellentFrom: 78 });
 
   const assessmentHero = (
-    <div className="w-full min-w-0 space-y-1">
-      <h2 className="text-[20px] sm:text-[22px] font-semibold leading-snug tracking-tight text-[#181819]">
+    <div className="mx-auto w-full max-w-3xl min-w-0 space-y-2 text-center lg:mx-0 lg:max-w-none lg:text-left">
+      <h2 className="ds-title text-[clamp(1.25rem,2.4vw,1.5rem)]">
         {t("admin.visualSandbox.assessmentTitleLead")}{" "}
-        <span className="text-[#6366F1]">{t("admin.visualSandbox.assessmentTitleHighlight")}</span>
+        <span className="text-[var(--accent)]">{t("admin.visualSandbox.assessmentTitleHighlight")}</span>
       </h2>
-      <p className="text-[13px] leading-relaxed text-[#6B7280]">{t("admin.visualSandbox.assessmentSubtitle")}</p>
+      <p className="ds-subtitle mx-auto lg:mx-0">{t("admin.visualSandbox.assessmentSubtitle")}</p>
     </div>
   );
 
   const assessmentLeftColumn = (
     <div className="flex flex-col gap-5 w-full min-w-0 overflow-x-hidden">
-      <section className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] sm:p-6">
-        <p className="mb-6 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">{t("optimize.overallMatchScore")}</p>
-        <div className="grid flex-1 grid-cols-1 items-start gap-8 sm:grid-cols-[1fr_auto_1fr] sm:gap-4">
-          <div className="min-w-0 text-center sm:text-left">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">{t("admin.visualSandbox.currentMatch")}</p>
-            <p className="mt-2 text-[clamp(2rem,8vw,2.75rem)] font-bold tabular-nums leading-none tracking-tight text-[#0f172a]">{currentMatchPct}%</p>
-            <p className={`mt-2 text-[15px] font-semibold ${currentTier.textClass}`}>{currentTier.label}</p>
-            <p className="mx-auto mt-1 max-w-[240px] text-[11px] leading-snug text-slate-500 sm:mx-0">{currentTier.hint}</p>
-            <div className="mx-auto mt-4 h-2 max-w-[220px] overflow-hidden rounded-full bg-slate-100 sm:mx-0 sm:max-w-none">
-              <div className={`h-full rounded-full ${currentTier.barClass}`} style={{ width: `${currentMatchPct}%` }} />
+      <section className="ds-card p-5 sm:p-7">
+        <p className="ds-label mb-6 text-center sm:text-left">{t("optimize.overallMatchScore")}</p>
+        <div className="grid flex-1 grid-cols-1 gap-6 sm:grid-cols-[1fr_auto_1fr] sm:items-stretch sm:gap-5">
+          <div className="flex min-w-0 flex-col text-center sm:text-left">
+            <p className="ds-label">{t("admin.visualSandbox.currentMatch")}</p>
+            <p className="mt-2 text-[length:var(--text-display)] font-bold tabular-nums leading-none tracking-tight text-[var(--text)]">
+              {currentMatchPct}%
+            </p>
+            <p className={`mt-2 text-[length:var(--text-base)] font-semibold ${currentTier.textClass}`}>{currentTier.label}</p>
+            <p className="ds-hint mx-auto mt-1 max-w-[240px] sm:mx-0">{currentTier.hint}</p>
+            <div className="mt-auto w-full pt-4">
+              <SegmentedScoreBar percent={currentMatchPct} tone={currentTier.fillMod} />
             </div>
           </div>
-          <div className="flex justify-center sm:pt-10">
-            <ArrowRightIcon className="h-6 w-6 shrink-0 text-slate-300 rotate-90 sm:rotate-0" aria-hidden />
+          <div className="flex items-center justify-center self-center sm:self-stretch sm:items-center">
+            <ArrowRightIcon
+              className="h-5 w-5 shrink-0 text-[var(--border-strong)] rotate-90 sm:rotate-0"
+              strokeWidth={1.75}
+              aria-hidden
+            />
           </div>
-          <div className="min-w-0 text-center sm:text-left">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">{t("admin.visualSandbox.potentialMatch")}</p>
-            <p className={`mt-2 text-[clamp(2rem,8vw,2.75rem)] font-bold tabular-nums leading-none ${potentialTier.textClass}`}>{potentialMatchPct}%</p>
-            <p className={`mt-2 text-[15px] font-semibold ${potentialTier.textClass}`}>{potentialTier.label}</p>
-            <p className="mx-auto mt-1 max-w-[240px] text-[11px] leading-snug text-slate-500 sm:mx-0">{potentialTier.hint}</p>
-            <div className="mx-auto mt-4 h-2 max-w-[220px] overflow-hidden rounded-full bg-slate-100 sm:mx-0 sm:max-w-none">
-              <div className={`h-full rounded-full ${potentialTier.barClass}`} style={{ width: `${potentialMatchPct}%` }} />
+          <div className="flex min-w-0 flex-col text-center sm:text-left">
+            <p className="ds-label">{t("admin.visualSandbox.potentialMatch")}</p>
+            <p className={`mt-2 text-[length:var(--text-display)] font-bold tabular-nums leading-none ${potentialTier.textClass}`}>
+              {potentialMatchPct}%
+            </p>
+            <p className={`mt-2 text-[length:var(--text-base)] font-semibold ${potentialTier.textClass}`}>{potentialTier.label}</p>
+            <p className="ds-hint mx-auto mt-1 max-w-[240px] sm:mx-0">{potentialTier.hint}</p>
+            <div className="mt-auto w-full pt-4">
+              <SegmentedScoreBar percent={potentialMatchPct} tone={potentialTier.fillMod} />
             </div>
           </div>
         </div>
       </section>
 
-      <section className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)] sm:p-6">
-        <div className="border-b border-slate-100 pb-4">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-indigo-600">
-            {t("admin.visualSandbox.recommendationsEyebrow")}
-          </p>
-          <h3 className="mt-2 text-[17px] font-semibold tracking-tight text-[#0f172a]">{t("optimize.whyNoCallbacksTitle")}</h3>
-          <p className="mt-2 text-[13px] leading-relaxed text-slate-500">{scanSummaryText}</p>
+      <section className="ds-card p-5 sm:p-7">
+        <div className="border-b border-[var(--border)]/80 pb-5">
+          <p className="ds-label text-[var(--accent)]">{t("admin.visualSandbox.recommendationsEyebrow")}</p>
+          <h3 className="mt-1.5 text-[length:var(--text-lg)] font-semibold tracking-tight text-[var(--text)]">
+            {t("optimize.whyNoCallbacksTitle")}
+          </h3>
+          <p className="ds-body mt-2 max-w-2xl">{scanSummaryText}</p>
         </div>
 
-        <ul className="mt-4 space-y-3">
+        <ul className="mt-5 space-y-3">
           {MOCK.callback_blockers.map((cb, i) => {
             const Icon = CALLBACK_PREVIEW_ICONS[i % CALLBACK_PREVIEW_ICONS.length];
             const tone = impactToneForBlocker(cb, i);
@@ -416,34 +460,24 @@ export default function AdminVisualTest() {
             return (
               <li
                 key={cb.headline}
-                className="rounded-xl border border-slate-200/70 bg-gradient-to-b from-white to-slate-50/50 p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
+                className="rounded-[var(--radius-md)] border border-white/70 bg-white/55 p-4 shadow-[var(--shadow-sm)] backdrop-blur-sm"
               >
-                <div className="flex gap-3">
+                <div className="flex items-start gap-3.5">
                   <div
-                    className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${
-                      tone === "high"
-                        ? "bg-red-50 text-red-600"
-                        : "bg-amber-50 text-amber-700"
-                    }`}
+                    className={`ds-icon-well ${tone === "high" ? "ds-icon-well--danger" : "ds-icon-well--warning"}`}
                     aria-hidden
                   >
-                    <Icon className="h-5 w-5" strokeWidth={1.5} />
+                    <Icon className="h-5 w-5" strokeWidth={1.35} />
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[14px] font-semibold leading-snug text-[#0f172a]">{cb.headline}</p>
-                    <p className="mt-1.5 text-[12px] leading-snug text-slate-600">{cb.action}</p>
+                  <div className="min-w-0 flex-1 pt-0.5">
+                    <p className="text-[length:var(--text-sm)] font-semibold leading-snug text-[var(--text)]">{cb.headline}</p>
+                    <p className="ds-hint mt-1.5 !text-[var(--text-muted)]">{cb.action}</p>
                   </div>
-                  <div className="flex shrink-0 flex-col items-end gap-1.5 self-start">
-                    <span
-                      className={`rounded-lg px-2.5 py-1 text-[11px] font-medium tracking-tight ${
-                        tone === "high"
-                          ? "bg-red-50 text-red-800"
-                          : "bg-amber-50 text-amber-900"
-                      }`}
-                    >
+                  <div className="flex shrink-0 flex-col items-end gap-1.5 self-start pt-0.5">
+                    <span className={`ds-soft-pill ${tone === "high" ? "ds-soft-pill--danger" : "ds-soft-pill--warning"}`}>
                       {tone === "high" ? t("admin.visualSandbox.impactHigh") : t("admin.visualSandbox.impactMedium")}
                     </span>
-                    <span className="text-[13px] font-semibold tabular-nums text-[#0f766e]">
+                    <span className="text-[length:var(--text-sm)] font-semibold tabular-nums text-[var(--success)]">
                       {tFormat(t("admin.visualSandbox.potentialBoost"), { pct: boost })}
                     </span>
                   </div>
@@ -455,27 +489,23 @@ export default function AdminVisualTest() {
 
         <Disclosure>
           {({ open }) => (
-            <div className="mt-2 border-t border-slate-100 pt-4">
-              <DisclosureButton className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-[13px] font-semibold text-[#0f172a] shadow-sm transition-colors hover:bg-slate-50">
+            <div className="mt-3 border-t border-[var(--border)]/80 pt-4">
+              <DisclosureButton className="flex w-full items-center justify-center gap-2 rounded-[var(--radius-md)] border border-white/80 bg-white/70 px-4 py-3 text-[length:var(--text-sm)] font-semibold text-[var(--text)] shadow-[var(--shadow-sm)] backdrop-blur-sm transition-colors hover:bg-white">
                 <span>{tFormat(t("admin.visualSandbox.seeGapBreakdown"), { count: totalIssueCount })}</span>
-                <ChevronDownIcon className={`h-5 w-5 shrink-0 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`} />
+                <ChevronDownIcon
+                  className={`h-5 w-5 shrink-0 text-[var(--text-tertiary)] transition-transform ${open ? "rotate-180" : ""}`}
+                />
               </DisclosureButton>
-              <DisclosurePanel className="mt-4 rounded-xl border border-slate-200 bg-white px-3 py-3">
+              <DisclosurePanel className="mt-4 rounded-[var(--radius-md)] border border-white/80 bg-white/60 px-3 py-3 backdrop-blur-sm">
                 <div className="grid max-h-[min(50vh,340px)] grid-cols-1 gap-2 overflow-y-auto sm:grid-cols-2">
                   {treatmentGroups
                     .filter((g) => g.problems.length > 0)
                     .map((group) => (
-                      <div
-                        key={group.category}
-                        className="rounded-xl border border-slate-200/90 bg-white p-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
-                      >
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">{group.category}</p>
+                      <div key={group.category} className="rounded-[var(--radius-md)] border border-[var(--border)]/80 bg-white/80 p-3">
+                        <p className="ds-label">{group.category}</p>
                         <div className="mt-2 flex flex-wrap gap-1.5">
                           {group.problems.map((label) => (
-                            <span
-                              key={`${group.category}-${label}`}
-                              className="inline-flex max-w-full break-words rounded-md bg-white px-2 py-1 text-[11px] font-medium leading-snug text-[#334155] ring-1 ring-slate-200/90"
-                            >
+                            <span key={`${group.category}-${label}`} className="ds-chip">
                               {cleanReason(label)}
                             </span>
                           ))}
@@ -493,76 +523,76 @@ export default function AdminVisualTest() {
 
   const assessmentRightColumn = (
     <aside className="flex w-full min-w-0 flex-col gap-4 lg:sticky lg:top-20 lg:self-start">
-      <div className="overflow-hidden rounded-2xl border border-[#E8ECF4] bg-white shadow-[0_8px_32px_-12px_rgba(15,23,42,0.12)]">
-        <div className="flex flex-nowrap items-center gap-3 border-b border-[#E8ECF4] bg-[#FAFBFC] px-4 py-3">
+      <div className="ds-card overflow-hidden !shadow-[var(--shadow-md)]">
+        <div
+          className="flex flex-nowrap items-center gap-3 border-b border-[var(--border)]/80 px-4 py-3.5"
+          style={{ background: "var(--grad-accent-soft)" }}
+        >
           <div className="shrink-0">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">{t("admin.visualSandbox.atsFriendlyLabel")}</p>
+            <p className="ds-label">{t("admin.visualSandbox.atsFriendlyLabel")}</p>
             <div className="mt-0.5 flex items-baseline gap-0.5 tabular-nums leading-none">
-              <span className="text-[1.375rem] font-bold tracking-tight text-[#0f172a]">{MOCK.atsFriendlyScore}</span>
-              <span className="text-sm font-medium text-slate-400">/100</span>
+              <span className="text-[1.375rem] font-bold tracking-tight text-[var(--text)]">{MOCK.atsFriendlyScore}</span>
+              <span className="text-sm font-medium text-[var(--text-tertiary)]">/100</span>
             </div>
           </div>
           <div className="min-w-0 flex-1 self-center">
-            <div className="h-1.5 w-full min-w-0 overflow-hidden rounded-full bg-slate-200/80">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-indigo-400 via-violet-400 to-emerald-400"
-                style={{ width: `${MOCK.atsFriendlyScore}%` }}
-              />
+            <div className="ds-progress-track w-full min-w-0 !h-1.5">
+              <div className="ds-progress-fill" style={{ width: `${MOCK.atsFriendlyScore}%` }} />
             </div>
           </div>
         </div>
-        <div className="relative aspect-[210/270] bg-[#F4F6FA]">
+        <div className="relative aspect-[210/270] bg-[var(--bg-elevated)]">
           {mockThumbUrl ? (
             <img src={mockThumbUrl} alt="" className="absolute inset-0 h-full w-full object-cover object-top" />
           ) : (
             <div className="absolute inset-0 flex gap-3 p-4">
-              <div className="w-[28%] shrink-0 rounded-lg bg-[#1e3a5f]" />
+              <div className="w-[28%] shrink-0 rounded-[var(--radius-md)] bg-[var(--text)]/80" />
               <div className="min-w-0 flex-1 space-y-2 pt-2">
-                <div className="mx-auto h-2 w-1/2 rounded-full bg-[#DCE3F0]" />
-                <div className="h-1.5 w-full rounded bg-[#E8ECF4]" />
-                <div className="h-1.5 w-5/6 rounded bg-[#E8ECF4]" />
-                <div className="mt-4 h-1.5 w-full rounded bg-[#E8ECF4]" />
-                <div className="h-1.5 w-4/5 rounded bg-[#E8ECF4]" />
+                <div className="mx-auto h-2 w-1/2 rounded-full bg-[var(--border-strong)]" />
+                <div className="h-1.5 w-full rounded bg-[var(--border)]" />
+                <div className="h-1.5 w-5/6 rounded bg-[var(--border)]" />
+                <div className="mt-4 h-1.5 w-full rounded bg-[var(--border)]" />
+                <div className="h-1.5 w-4/5 rounded bg-[var(--border)]" />
               </div>
             </div>
           )}
-          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-white via-white/95 to-transparent px-4 pb-4 pt-16">
+          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-white via-white/90 to-transparent px-4 pb-4 pt-16">
             <button
               type="button"
-              className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#C7D2FE] bg-white/95 py-2.5 text-[13px] font-semibold text-[#4338CA] shadow-sm backdrop-blur-sm"
+              className="flex w-full items-center justify-center gap-2 rounded-[var(--radius-md)] border border-[var(--border)] bg-white/90 py-2.5 text-[length:var(--text-sm)] font-semibold text-[var(--accent)] shadow-[var(--shadow-sm)] backdrop-blur-sm"
             >
-              <EyeIcon className="h-4 w-4 shrink-0" aria-hidden />
+              <EyeIcon className="h-4 w-4 shrink-0" strokeWidth={1.5} aria-hidden />
               {t("admin.visualSandbox.viewFullResume")}
             </button>
           </div>
         </div>
       </div>
 
-      <section className="rounded-2xl border border-[#E8E4FF] bg-gradient-to-br from-[#F5F3FF] via-white to-[#EDE9FE] p-5 shadow-sm sm:p-6">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-center">
-          <div className="flex min-w-0 flex-1 gap-4">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#818CF8] to-[#6366F1] shadow-md">
-              <SparklesIcon className="h-7 w-7 text-white" aria-hidden />
+      <section className="ds-card ds-card--accent w-full p-4 sm:p-5">
+        <div className="flex flex-col gap-4">
+          <div className="flex min-w-0 items-start gap-3">
+            <div className="ds-icon-well ds-icon-well--accent !h-11 !w-11" aria-hidden>
+              <SparklesIcon className="h-5 w-5" strokeWidth={1.35} />
             </div>
-            <div className="min-w-0 flex-1 space-y-3">
-              <p className="text-[14px] font-semibold leading-snug text-[#181819] sm:text-[15px]">
+            <div className="min-w-0 flex-1 space-y-2.5 pt-0.5">
+              <p className="text-[length:var(--text-sm)] font-semibold leading-snug text-[var(--text)]">
                 {tFormat(t("admin.visualSandbox.autoImproveBannerTitle"), { pct: potentialMatchPct })}
               </p>
-              <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-                {[t("admin.visualSandbox.autoImproveBullet1"), t("admin.visualSandbox.autoImproveBullet2"), t("admin.visualSandbox.autoImproveBullet3")].map((line) => (
-                  <span key={line} className="inline-flex items-center gap-1.5 text-[12px] text-[#374151]">
-                    <CheckIcon className="h-4 w-4 shrink-0 text-emerald-600" strokeWidth={2.5} aria-hidden />
-                    {line}
-                  </span>
-                ))}
+              <div className="flex flex-col gap-1.5">
+                {[t("admin.visualSandbox.autoImproveBullet1"), t("admin.visualSandbox.autoImproveBullet2"), t("admin.visualSandbox.autoImproveBullet3")].map(
+                  (line) => (
+                    <span key={line} className="inline-flex items-center gap-1.5 text-[length:var(--text-xs)] text-[var(--text-muted)]">
+                      <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[var(--success-soft)]">
+                        <CheckIcon className="h-2.5 w-2.5 text-[var(--success)]" strokeWidth={2.5} aria-hidden />
+                      </span>
+                      {line}
+                    </span>
+                  ),
+                )}
               </div>
             </div>
           </div>
-          <button
-            type="button"
-            className="inline-flex w-full shrink-0 items-center justify-center gap-2 rounded-full px-6 py-3 text-[14px] font-semibold text-white shadow-[0_4px_14px_-4px_rgba(99,102,241,0.55)] transition-all hover:opacity-[0.97] active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-[#6366F1]/35 focus:ring-offset-2 sm:w-auto"
-            style={{ background: "linear-gradient(165deg, #818cf8 0%, #6366f1 45%, #4f46e5 100%)" }}
-          >
+          <button type="button" className="ds-btn-primary w-full">
             {t("admin.visualSandbox.autoImproveBannerCta")}
           </button>
         </div>
@@ -581,52 +611,43 @@ export default function AdminVisualTest() {
   );
 
   const resultBlock = (
-    <div className="flex w-full min-w-0 max-w-5xl flex-col gap-8 overflow-x-hidden mx-auto items-stretch">
-      <div className="space-y-2">
-        <h2 className="text-[22px] font-semibold leading-snug tracking-tight text-[#0f172a] sm:text-[24px]">
-          {t("admin.visualSandbox.resultOptimizedTitle")}
-        </h2>
-        <p className="text-[14px] leading-relaxed text-[#64748b]">{t("admin.visualSandbox.resultOptimizedSubtitle")}</p>
+    <div className="mx-auto flex w-full min-w-0 max-w-5xl flex-col items-stretch gap-8 overflow-x-hidden">
+      <div className="mx-auto max-w-2xl space-y-2 text-center sm:mx-0 sm:max-w-none sm:text-left">
+        <h2 className="ds-title text-[clamp(1.25rem,2.4vw,1.375rem)]">{t("admin.visualSandbox.resultOptimizedTitle")}</h2>
+        <p className="ds-subtitle mx-auto sm:mx-0">{t("admin.visualSandbox.resultOptimizedSubtitle")}</p>
       </div>
 
-      <section className="w-full rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50/95 via-white to-white p-6 shadow-[0_1px_3px_rgba(15,23,42,0.06)] sm:p-8">
-        <div className="grid grid-cols-1 items-start gap-10 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:gap-8">
+      <section className="ds-card ds-card--success w-full p-6 sm:p-8">
+        <div className="grid grid-cols-1 items-center gap-8 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:gap-8">
           <div className="min-w-0 text-center lg:text-left">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#64748b]">
-              {t("admin.visualSandbox.resultYourMatchScoreLabel")}
-            </p>
-            <p className="mt-2 text-[clamp(2.5rem,10vw,3.5rem)] font-bold tabular-nums leading-none tracking-tight text-emerald-700">
+            <span className="ds-soft-pill ds-soft-pill--success">{t("admin.visualSandbox.resultYourMatchScoreLabel")}</span>
+            <p className="mt-3 text-[clamp(2.5rem,10vw,3.25rem)] font-bold tabular-nums leading-none tracking-tight text-[var(--success)]">
               {studioMatchPct}%
             </p>
-            <p className={`mt-2 text-[16px] font-semibold ${resultTierResult.textClass}`}>{resultTierResult.label}</p>
-            <p className="mx-auto mt-2 max-w-[280px] text-[13px] leading-snug text-[#64748b] lg:mx-0">{resultTierResult.hint}</p>
+            <p className="mt-2 text-[length:var(--text-xs)] tabular-nums text-[var(--text-muted)]">
+              {MOCK_PRE_MATCH}% → {MOCK_POST_MATCH}%
+              <span className="ml-2 font-semibold text-[var(--success)]">+{MOCK_POST_MATCH - MOCK_PRE_MATCH} pp</span>
+            </p>
+            <p className={`mt-2 text-[length:var(--text-base)] font-semibold ${resultTierResult.textClass}`}>{resultTierResult.label}</p>
+            <p className="ds-hint mx-auto mt-2 max-w-[280px] lg:mx-0">{resultTierResult.hint}</p>
             {resultTopBucketPct != null && (
-              <span className="mt-4 inline-flex rounded-full bg-emerald-100 px-3 py-1 text-[11px] font-semibold text-emerald-900">
+              <span className="ds-soft-pill ds-soft-pill--success mt-4">
                 {tFormat(t("admin.visualSandbox.resultTopCandidatesBadge"), { pct: resultTopBucketPct })}
               </span>
             )}
           </div>
 
-          <div className="relative mx-auto flex shrink-0 justify-center lg:mx-0">
-            <span className="absolute -left-3 top-6 h-2 w-2 rounded-full bg-emerald-400/45" aria-hidden />
-            <span className="absolute -right-2 bottom-10 h-1.5 w-1.5 rounded-full bg-teal-300/60" aria-hidden />
-            <span className="absolute left-8 -top-1 h-1.5 w-1.5 rounded-full bg-emerald-300/50" aria-hidden />
-            <span className="absolute -bottom-1 right-6 h-2 w-2 rounded-full bg-lime-400/35" aria-hidden />
-            <div className="relative h-[120px] w-[120px] shrink-0">
-              <ScoreRing percent={studioMatchPct} size={120} thickness={14} mode="score" />
-              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                <CheckIcon className="h-10 w-10 text-emerald-600" strokeWidth={2.25} aria-hidden />
-              </div>
-            </div>
+          <div className="relative mx-auto flex w-full max-w-[240px] shrink-0 justify-center sm:max-w-[260px]">
+            <ScoreArc percent={studioMatchPct} width={240} stroke={20} />
           </div>
 
-          <div className="hidden min-w-0 border-l border-emerald-100 pl-6 lg:block">
-            <p className="text-[12px] font-medium text-[#64748b]">{t("admin.visualSandbox.resultScoreBasedOn")}</p>
+          <div className="hidden min-w-0 border-l border-[var(--border)]/80 pl-6 lg:block">
+            <p className="ds-hint !text-[var(--text-muted)]">{t("admin.visualSandbox.resultScoreBasedOn")}</p>
             <ul className="mt-4 space-y-3">
               {resultScoreFactorLines.map((line) => (
-                <li key={line} className="flex items-start gap-2.5 text-[13px] leading-snug text-[#334155]">
-                  <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-100">
-                    <CheckIcon className="h-3 w-3 text-emerald-700" strokeWidth={2.5} aria-hidden />
+                <li key={line} className="flex items-start gap-2.5 text-[length:var(--text-sm)] leading-snug text-[var(--text-muted)]">
+                  <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/80 shadow-[var(--shadow-sm)]">
+                    <CheckIcon className="h-3 w-3 text-[var(--success)]" strokeWidth={2.5} aria-hidden />
                   </span>
                   {line}
                 </li>
@@ -635,13 +656,13 @@ export default function AdminVisualTest() {
           </div>
         </div>
 
-        <div className="mt-8 border-t border-emerald-100 pt-6 lg:hidden">
-          <p className="text-[12px] font-medium text-[#64748b]">{t("admin.visualSandbox.resultScoreBasedOn")}</p>
+        <div className="mt-8 border-t border-[var(--border)]/80 pt-6 lg:hidden">
+          <p className="ds-hint !text-[var(--text-muted)]">{t("admin.visualSandbox.resultScoreBasedOn")}</p>
           <ul className="mt-3 space-y-2.5">
             {resultScoreFactorLines.map((line) => (
-              <li key={line} className="flex items-start gap-2.5 text-[13px] text-[#334155]">
-                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-100">
-                  <CheckIcon className="h-3 w-3 text-emerald-700" strokeWidth={2.5} aria-hidden />
+              <li key={line} className="flex items-start gap-2.5 text-[length:var(--text-sm)] text-[var(--text-muted)]">
+                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/80 shadow-[var(--shadow-sm)]">
+                  <CheckIcon className="h-3 w-3 text-[var(--success)]" strokeWidth={2.5} aria-hidden />
                 </span>
                 {line}
               </li>
@@ -652,13 +673,17 @@ export default function AdminVisualTest() {
 
       <section className="w-full">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h3 className="text-[17px] font-semibold tracking-tight text-[#0f172a]">{t("admin.visualSandbox.resultKeyChangesTitle")}</h3>
-            <p className="mt-1 text-[13px] leading-relaxed text-[#64748b]">{t("admin.visualSandbox.resultKeyChangesSubtitle")}</p>
+          <div className="text-center sm:text-left">
+            <h3 className="text-[length:var(--text-lg)] font-semibold tracking-tight text-[var(--text)]">
+              {t("admin.visualSandbox.resultKeyChangesTitle")}
+            </h3>
+            <p className="ds-subtitle mt-1 mx-auto sm:mx-0">{t("admin.visualSandbox.resultKeyChangesSubtitle")}</p>
           </div>
-          <div className="flex shrink-0 items-center gap-2 text-[13px] font-semibold text-emerald-700">
-            <CheckIcon className="h-5 w-5 shrink-0" strokeWidth={2} aria-hidden />
-            {tFormat(t("admin.visualSandbox.resultImprovementsApplied"), { count: resultImprovementCount })}
+          <div className="flex shrink-0 items-center justify-center sm:justify-end">
+            <span className="ds-soft-pill ds-soft-pill--success">
+              <CheckIcon className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
+              {tFormat(t("admin.visualSandbox.resultImprovementsApplied"), { count: resultImprovementCount })}
+            </span>
           </div>
         </div>
 
@@ -666,30 +691,21 @@ export default function AdminVisualTest() {
           {MOCK.resultKeyChanges.map((group, idx) => {
             const Icon = RESULT_KEY_ICONS[idx % RESULT_KEY_ICONS.length];
             const subtitle = group.description ?? group.items[0] ?? "";
+            const well =
+              idx === 0 ? "ds-icon-well--accent" : idx === 1 ? "ds-icon-well--warning" : "ds-icon-well--success";
             return (
-              <div
-                key={group.category}
-                className="flex gap-3 rounded-xl border border-slate-200/90 bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
-              >
-                <div
-                  className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${
-                    idx === 0
-                      ? "bg-violet-50 text-violet-600"
-                      : idx === 1
-                        ? "bg-amber-50 text-amber-700"
-                        : "bg-emerald-50 text-emerald-700"
-                  }`}
-                  aria-hidden
-                >
-                  <Icon className="h-5 w-5" strokeWidth={1.5} />
+              <div key={group.category} className="ds-card flex items-start gap-3.5 !rounded-[var(--radius-md)] p-4">
+                <div className={`ds-icon-well ${well}`} aria-hidden>
+                  <Icon className="h-5 w-5" strokeWidth={1.35} />
                 </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-[14px] font-semibold text-[#0f172a]">{group.category}</p>
-                  <p className="mt-1 text-[12px] leading-snug text-[#64748b]">{subtitle}</p>
+                <div className="min-w-0 flex-1 pt-0.5">
+                  <p className="text-[length:var(--text-sm)] font-semibold text-[var(--text)]">{group.category}</p>
+                  <p className="ds-hint mt-1">{subtitle}</p>
                 </div>
-                <div className="flex shrink-0 flex-col items-end gap-0.5">
-                  <CheckIcon className="h-4 w-4 text-emerald-600" strokeWidth={2.5} aria-hidden />
-                  <span className="text-[11px] font-semibold text-emerald-700">{t("admin.visualSandbox.resultImprovedLabel")}</span>
+                <div className="flex shrink-0 flex-col items-end gap-1 pt-0.5">
+                  <span className="ds-soft-pill ds-soft-pill--success !py-1 !px-2.5 !text-[11px]">
+                    {t("admin.visualSandbox.resultImprovedLabel")}
+                  </span>
                 </div>
               </div>
             );
@@ -716,47 +732,52 @@ export default function AdminVisualTest() {
           }}
           onTailorAnother={() => {}}
           onImproveEvenStronger={() => {}}
-          showImproveEvenStronger={studioMatchPct <= 82}
+          showImproveEvenStronger={studioMatchPct < 85}
         />
       </div>
     </div>
   );
 
   return (
-    <div className="space-y-6 pb-24 sm:pb-12 w-full min-w-0">
+    <div className="ds-sandbox space-y-8 pb-24 sm:pb-12 w-full min-w-0">
       {portalTarget &&
         createPortal(
-          <div className="flex items-center justify-between w-full">
+          <div className="ds-sandbox flex items-center justify-between w-full gap-3">
             <div className="flex flex-col min-w-0 pr-2">
               <div className="flex items-center gap-2">
-                <h1 className="text-[15px] font-semibold text-[#181819] tracking-tight truncate">Visual Sandbox</h1>
-                <span className="hidden sm:inline-block text-[11px] text-[#6B7280] truncate bg-[#F5F6FA] px-1.5 py-0.5 rounded font-medium">
+                <h1 className="text-[length:var(--text-base)] font-semibold text-[var(--text)] tracking-tight truncate">
+                  Visual Sandbox
+                </h1>
+                <span className="ds-chip hidden sm:inline-flex truncate !py-0.5 !text-[10px]">
                   Optimize UI + templates (same APIs as prod)
                 </span>
               </div>
             </div>
-            <div className="flex items-center bg-[#EBEDF5] rounded-lg p-0.5 shrink-0">
+            <div className="flex items-center rounded-[var(--radius-full)] border border-white/70 bg-white/55 p-0.5 shadow-[var(--shadow-sm)] backdrop-blur-sm shrink-0">
               {(["assessment", "result", "both"] as ViewMode[]).map((mode) => (
                 <button
                   key={mode}
                   type="button"
                   onClick={() => setViewMode(mode)}
-                  className={`px-2.5 sm:px-3 py-1 rounded-md text-[11px] sm:text-xs font-medium transition-all ${
-                    viewMode === mode ? "bg-white text-[#181819] shadow-sm" : "text-[#6B7280] hover:text-[#181819]"
+                  className={`px-2.5 sm:px-3 py-1 rounded-[var(--radius-full)] text-[11px] sm:text-xs font-medium transition-all ${
+                    viewMode === mode
+                      ? "text-white shadow-[var(--shadow-sm)]"
+                      : "text-[var(--text-tertiary)] hover:text-[var(--text)]"
                   }`}
+                  style={viewMode === mode ? { background: "var(--grad-accent-btn)" } : undefined}
                 >
                   {mode === "assessment" ? "Assessment" : mode === "result" ? "Result" : "Both"}
                 </button>
               ))}
             </div>
           </div>,
-          portalTarget
+          portalTarget,
         )}
 
       {(viewMode === "assessment" || viewMode === "both") && (
         <section>
           {viewMode === "both" && (
-            <h2 className="text-sm font-semibold text-[#6B7280] uppercase tracking-wider mb-3">Stage: Assessment (Diagnosis)</h2>
+            <h2 className="ds-label mb-3 text-center sm:text-left">Assessment</h2>
           )}
           {assessmentBlock}
         </section>
@@ -765,7 +786,7 @@ export default function AdminVisualTest() {
       {(viewMode === "result" || viewMode === "both") && (
         <section>
           {viewMode === "both" && (
-            <h2 className="text-sm font-semibold text-[#6B7280] uppercase tracking-wider mb-3 mt-8">Stage: Result (After treatment)</h2>
+            <h2 className="ds-label mb-3 mt-2 text-center sm:text-left">Result</h2>
           )}
           {resultBlock}
         </section>

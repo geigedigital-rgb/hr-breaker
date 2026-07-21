@@ -654,10 +654,24 @@ function clampPercent(value: number): number {
   return Math.max(0, Math.min(100, Math.round(value)));
 }
 
-function rollPostImproveDiagramScore(): number {
-  // Product rule: after optimization show a realistic random match range.
-  // Inclusive integer range: 82-93.
-  return 82 + Math.floor(Math.random() * 12);
+/** Prefer API post scores (same methodology as analyze); fall back to filter scores. */
+function resolvePostMatchScores(
+  result: api.OptimizeResponse | null,
+  filterAts: number | null,
+  filterKw: { score: number; threshold: number } | null,
+): { atsPct: number | null; kwPct: number | null; overallPct: number | null } {
+  if (!result || result.error) {
+    return { atsPct: null, kwPct: null, overallPct: null };
+  }
+  const atsFromApi = normalizeScorePercent(result.post_ats_score ?? null);
+  const kwFromApi = normalizeScorePercent(result.post_keyword_score ?? null);
+  const atsPct = atsFromApi ?? filterAts;
+  const kwPct =
+    kwFromApi ??
+    (filterKw != null ? normalizeScorePercent(filterKw.score) : null);
+  const vals = [atsPct, kwPct].filter((v): v is number => v != null && Number.isFinite(v));
+  const overallPct = vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : null;
+  return { atsPct, kwPct, overallPct };
 }
 
 function cleanRecommendationReason(label: string): string {
@@ -1276,6 +1290,10 @@ function snapshotDataToOptimizeResponse(snap: api.OptimizationSnapshotPublic): a
     schema_json: snap.schema_json ?? null,
     snapshot_expires_at: snap.expires_at,
     snapshot_url: null,
+    pre_ats_score: snap.pre_ats_score ?? null,
+    pre_keyword_score: snap.pre_keyword_score ?? null,
+    post_ats_score: snap.post_ats_score ?? null,
+    post_keyword_score: snap.post_keyword_score ?? null,
   };
 }
 
@@ -1292,7 +1310,6 @@ export default function Optimize() {
   const [claimGate, setClaimGate] = useState(pendingTokenInUrl);
   const [stage, setStage] = useState<Stage>(() => (pendingTokenInUrl() ? "scanning" : "landing"));
   const [result, setResult] = useState<api.OptimizeResponse | null>(null);
-  const [postImproveDiagramScore, setPostImproveDiagramScore] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
@@ -1498,7 +1515,6 @@ export default function Optimize() {
         const dr = bundle.draft;
         setError(null);
         setResult(null);
-        setPostImproveDiagramScore(null);
         setPostResultFlow("main");
         setLastUploadedPdfFile(null);
         setClaimGate(false);
@@ -1579,7 +1595,6 @@ export default function Optimize() {
         });
       }
       setResult(snapshotDataToOptimizeResponse(d));
-      setPostImproveDiagramScore(null);
       setPostResultFlow("main");
       setSelectedTemplateId((d.selected_template_id || "").trim());
       setPhotoDataUrl(d.photo_data_url?.trim() ? d.photo_data_url.trim() : null);
@@ -2215,42 +2230,70 @@ export default function Optimize() {
   }
 
   async function handleDownloadCustomPdf() {
-    if (!result?.schema_json || pendingPdfDownloadLoading) return;
+    if (pendingPdfDownloadLoading) return;
     setPendingPdfDownloadLoading(true);
     setError(null);
     try {
-      let baseSchema: any = {};
-      try {
-        baseSchema = JSON.parse(result.schema_json);
-      } catch {
-        /* ignore */
+      // Preferred path: template render from schema_json (product download path).
+      if (result?.schema_json?.trim()) {
+        let baseSchema: Record<string, unknown> = {};
+        try {
+          baseSchema = JSON.parse(result.schema_json) as Record<string, unknown>;
+        } catch {
+          /* ignore */
+        }
+        const basics =
+          baseSchema.basics && typeof baseSchema.basics === "object"
+            ? (baseSchema.basics as Record<string, unknown>)
+            : {};
+        const schemaWithPhoto = {
+          ...baseSchema,
+          basics: {
+            ...basics,
+            image: photoDataUrl || undefined,
+          },
+        };
+
+        const res = await api.renderTemplatePdf({
+          template_id: selectedTemplateId || "jsonresume-classic-inspired",
+          schema: schemaWithPhoto as unknown as api.UnifiedResumeSchema,
+        });
+
+        const u8 = b64ToUint8ArraySandbox(res.pdf_base64);
+        const blob = new Blob([u8.buffer as ArrayBuffer], { type: "application/pdf" });
+        const url = URL.createObjectURL(blob);
+        try {
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = result.pdf_filename || "Optimized_Resume.pdf";
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+        } finally {
+          URL.revokeObjectURL(url);
+        }
+        return;
       }
-      const schemaWithPhoto = {
-        ...baseSchema,
-        basics: {
-          ...(baseSchema.basics || {}),
-          image: photoDataUrl || undefined,
-        },
-      };
-      
-      const res = await api.renderTemplatePdf({
-        template_id: selectedTemplateId || "jsonresume-classic-inspired", // Fallback if empty
-        schema: schemaWithPhoto as any,
-      });
-      
-      const u8 = b64ToUint8ArraySandbox(res.pdf_base64);
-      const blob = new Blob([u8.buffer as ArrayBuffer], { type: "application/pdf" });
-      const url = URL.createObjectURL(blob);
-      try {
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = result.pdf_filename || "Optimized_Resume.pdf";
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-      } finally {
-        URL.revokeObjectURL(url);
+
+      // Fallback for paid optimize response when schema extract failed.
+      if (result?.pdf_base64) {
+        const u8 = b64ToUint8ArraySandbox(result.pdf_base64);
+        const blob = new Blob([u8.buffer as ArrayBuffer], { type: "application/pdf" });
+        const url = URL.createObjectURL(blob);
+        try {
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = result.pdf_filename || "Optimized_Resume.pdf";
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+        } finally {
+          URL.revokeObjectURL(url);
+        }
+        return;
       }
+
+      setError(t("optimize.downloadSchemaMissing"));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not render custom PDF");
     } finally {
@@ -2278,7 +2321,9 @@ export default function Optimize() {
     if (!pendingAutoImproveAfterCheckout) return;
     if (user?.id !== "local" && !hasPaidPlan) return;
     const ctx = autoImproveGateRef.current;
-    if (!ctx.preScores || !ctx.resumeContent.trim() || !ctx.jobInput.trim() || ctx.stage !== "assessment") return;
+    if (!ctx.preScores || !ctx.resumeContent.trim() || ctx.stage !== "assessment") return;
+    // Improve mode has no job; tailor mode requires job text/URL.
+    if (!isImproveMode && !ctx.jobInput.trim()) return;
     if (autoImproveStartedRef.current) return;
     autoImproveStartedRef.current = true;
     setPendingAutoImproveAfterCheckout(false);
@@ -2287,7 +2332,7 @@ export default function Optimize() {
     void runOptimizeResumeMax().finally(() => {
       autoImproveStartedRef.current = false;
     });
-  }, [pendingAutoImproveAfterCheckout, hasPaidPlan, user?.id]);
+  }, [pendingAutoImproveAfterCheckout, hasPaidPlan, user?.id, isImproveMode]);
 
   useEffect(() => {
     if (stage !== "result") setPostResultFlow("main");
@@ -2376,17 +2421,12 @@ export default function Optimize() {
 
   const atsValue = result ? getAtsScore(result) : null;
   const keywordsValue = result ? getKeywordsScore(result) : null;
-  useLayoutEffect(() => {
-    if (result && !result.error) {
-      setPostImproveDiagramScore(rollPostImproveDiagramScore());
-      return;
-    }
-    setPostImproveDiagramScore(null);
-  }, [result]);
+  const postMatch = resolvePostMatchScores(result, atsValue, keywordsValue);
 
-  /** "Improve even stronger" only when rolled score is at the low end (82); 83+ hides the CTA. */
-  const showOptimizeAgainForAts =
-    Boolean(result && !result.error && postImproveDiagramScore != null && postImproveDiagramScore <= 82);
+  /** Show "improve again" when real overall match is below 85%. */
+  const showOptimizeAgainForAts = Boolean(
+    result && !result.error && postMatch.overallPct != null && postMatch.overallPct < 85,
+  );
 
   const showSummaryBlocks = (stage === "assessment" && preScores != null) || stage === "result";
   const recommendationGroups = groupRecommendations(preScores?.recommendations, {
@@ -2539,17 +2579,20 @@ export default function Optimize() {
   const summaryData = showSummaryBlocks
     ? (() => {
         const resumeSummary = getResumeSummary(resumeContent, resumeName);
-        const normPreAts = normalizeScorePercent(preScores?.ats_score);
-        const normPreKw = normalizeScorePercent(preScores?.keyword_score);
-        const atsPct =
-          result && atsValue != null ? atsValue : normPreAts ?? 0;
-        const kwPct =
-          result && keywordsValue != null
-            ? normalizeScorePercent(keywordsValue.score) ?? 0
-            : normPreKw ?? 0;
+        const normPreAts = normalizeScorePercent(preScores?.ats_score ?? result?.pre_ats_score ?? null);
+        const normPreKw = normalizeScorePercent(preScores?.keyword_score ?? result?.pre_keyword_score ?? null);
+        const hasPost = Boolean(result && !result.error);
+        const atsPct = hasPost
+          ? (postMatch.atsPct ?? normPreAts ?? 0)
+          : (normPreAts ?? 0);
+        const kwPct = hasPost
+          ? (postMatch.kwPct ?? normPreKw ?? 0)
+          : (normPreKw ?? 0);
         const safeAts = Number.isFinite(atsPct) ? atsPct : 0;
         const safeKw = Number.isFinite(kwPct) ? kwPct : 0;
-        const overallPct = Math.round((safeAts + safeKw) / 2);
+        const overallPct = hasPost
+          ? (postMatch.overallPct ?? Math.round((safeAts + safeKw) / 2))
+          : Math.round((safeAts + safeKw) / 2);
         const normRejection = normalizeScorePercent(preScores?.rejection_risk_score);
         const riskPct =
           normRejection != null
@@ -2558,21 +2601,39 @@ export default function Optimize() {
         const displayName = resumeSummaryFromApi?.full_name?.trim() || resumeSummary.name;
         const displaySpecialty = resumeSummaryFromApi?.specialty?.trim() || resumeSummary.specialty;
         const displaySkills = resumeSummaryFromApi?.skills?.trim() || resumeSummary.skillsLine;
-        const qualityPct =
-          result && !result.error
-            ? (postImproveDiagramScore ??
-                Math.round(
-                  ((atsValue != null ? atsValue : atsPct) +
-                    (keywordsValue != null ? (normalizeScorePercent(keywordsValue.score) ?? 0) : kwPct)) /
-                    2,
-                ))
-            : clampPercent(overallPct);
+        const qualityPct = clampPercent(overallPct);
+        const preOverall =
+          normPreAts != null || normPreKw != null
+            ? Math.round(
+                ([normPreAts, normPreKw].filter((v): v is number => v != null).reduce((a, b) => a + b, 0) /
+                  Math.max(1, [normPreAts, normPreKw].filter((v): v is number => v != null).length)),
+              )
+            : null;
+        const improvementOverallPp =
+          result?.improvement_overall_pp ??
+          (hasPost && preOverall != null ? qualityPct - preOverall : null);
+        const improvementAtsPp =
+          result?.improvement_ats_pp ??
+          (hasPost && normPreAts != null && postMatch.atsPct != null
+            ? Math.round(postMatch.atsPct - normPreAts)
+            : null);
+        const improvementKwPp =
+          result?.improvement_keyword_pp ??
+          (hasPost && normPreKw != null && postMatch.kwPct != null
+            ? Math.round(postMatch.kwPct - normPreKw)
+            : null);
         return {
-          atsPct,
-          kwPct,
+          atsPct: safeAts,
+          kwPct: safeKw,
           overallPct,
           riskPct,
           qualityPct,
+          preOverall,
+          preAts: normPreAts,
+          preKw: normPreKw,
+          improvementOverallPp,
+          improvementAtsPp,
+          improvementKwPp,
           displayName,
           displaySpecialty,
           displaySkills,
@@ -2806,6 +2867,43 @@ export default function Optimize() {
                               ? `${t("optimize.resumeQuality")} (${getQualityLevelLabel(q)})`
                               : `${t("optimize.interviewChances")} (${getQualityLevelLabel(q)})`}
                           </p>
+                          {stage === "result" &&
+                            summaryData.preOverall != null &&
+                            !isImproveMode && (
+                              <p className="mt-1.5 text-[13px] font-semibold text-[#181819] tabular-nums">
+                                {tFormat(t("optimize.matchBeforeAfter"), {
+                                  before: String(summaryData.preOverall),
+                                  after: String(q),
+                                })}
+                                {summaryData.improvementOverallPp != null &&
+                                  summaryData.improvementOverallPp !== 0 && (
+                                    <span
+                                      className={`ml-2 text-[12px] font-semibold ${
+                                        summaryData.improvementOverallPp > 0
+                                          ? "text-emerald-700"
+                                          : "text-amber-700"
+                                      }`}
+                                    >
+                                      {summaryData.improvementOverallPp > 0 ? "+" : ""}
+                                      {summaryData.improvementOverallPp}
+                                      {t("optimize.improvementPpSuffix")}
+                                    </span>
+                                  )}
+                              </p>
+                            )}
+                          {stage === "result" && !isImproveMode && (
+                            <p className="mt-1 text-[11px] text-[#6B7280] tabular-nums">
+                              {tFormat(t("optimize.atsBeforeAfter"), {
+                                before: String(summaryData.preAts ?? "—"),
+                                after: String(Math.round(summaryData.atsPct)),
+                              })}
+                              {" · "}
+                              {tFormat(t("optimize.keywordsBeforeAfter"), {
+                                before: String(summaryData.preKw ?? "—"),
+                                after: String(Math.round(summaryData.kwPct)),
+                              })}
+                            </p>
+                          )}
                           <p className="mt-1.5 sm:mt-1 text-[11px] sm:text-[12px] text-[#6B7280] leading-relaxed max-w-[280px] mx-auto sm:mx-0">
                             {isImproveMode
                               ? (resultViewOk ? t("optimize.resumeQualityHintHigh") : t("optimize.resumeQualityHintLow"))
