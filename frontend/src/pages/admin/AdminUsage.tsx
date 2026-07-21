@@ -41,14 +41,14 @@ export default function AdminUsage() {
 
       {loading ? (
         <div className="flex flex-1 items-center justify-center py-12" aria-busy="true">
-          <span className="h-8 w-8 animate-spin rounded-full border-2 border-[#4578FC] border-t-transparent" />
+          <span className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--accent)] border-t-transparent" />
         </div>
       ) : items.length === 0 ? (
-        <p className="rounded-xl border border-[#EBEDF5] bg-[var(--card)] p-6 text-center text-sm text-[var(--text-muted)] shrink-0">
+        <p className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-6 text-center text-sm text-[var(--text-muted)] shrink-0">
           {t("admin.usage.empty")}
         </p>
       ) : (
-        <div className="flex flex-col flex-1 min-h-0 rounded-xl border border-[#EBEDF5] bg-[var(--card)] shadow-sm overflow-hidden">
+        <div className="flex flex-col flex-1 min-h-0 rounded-xl border border-[var(--border)] bg-[var(--card)] shadow-sm overflow-hidden">
           <div className="flex-1 min-h-0 overflow-auto overscroll-contain">
             <table className="min-w-full divide-y divide-[#EBEDF5] text-sm">
               <thead className="sticky top-0 z-20 bg-[var(--card)] shadow-[0_1px_0_#EBEDF5]">
@@ -65,7 +65,7 @@ export default function AdminUsage() {
               </thead>
               <tbody className="divide-y divide-[#EBEDF5]">
               {items.map((row) => (
-                <tr key={row.id} className="hover:bg-[#F5F6FA]/50 align-top">
+                <tr key={row.id} className="hover:bg-[var(--accent-soft)]/50 align-top">
                   <td className="px-3 py-2 text-[var(--text-tertiary)] tabular-nums whitespace-nowrap text-xs">
                     {row.created_at ? new Date(row.created_at).toLocaleString() : "—"}
                   </td>

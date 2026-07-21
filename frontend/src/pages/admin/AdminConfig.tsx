@@ -23,7 +23,7 @@ function ConfigRow({
   ok?: boolean;
 }) {
   return (
-    <div className="flex items-center justify-between py-2 border-b border-[#EBEDF5] last:border-0">
+    <div className="flex items-center justify-between py-2 border-b border-[var(--border)] last:border-0">
       <span className="text-sm text-[var(--text-muted)]">{label}</span>
       {ok !== undefined ? (
         <span
@@ -73,7 +73,7 @@ export default function AdminConfig() {
   if (!config) {
     return (
       <div className="flex items-center justify-center py-12" aria-busy="true" aria-live="polite">
-        <span className="h-8 w-8 animate-spin rounded-full border-2 border-[#4578FC] border-t-transparent" aria-hidden />
+        <span className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--accent)] border-t-transparent" aria-hidden />
       </div>
     );
   }
@@ -98,7 +98,7 @@ export default function AdminConfig() {
       ) : null}
 
       <section
-        className="rounded-xl border border-[#EBEDF5] bg-[var(--card)] p-5 shadow-sm"
+        className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-sm"
         aria-labelledby="admin-config-section"
       >
         <h3 id="admin-config-section" className="sr-only">

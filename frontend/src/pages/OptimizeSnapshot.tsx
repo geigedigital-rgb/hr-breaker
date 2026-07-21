@@ -19,9 +19,9 @@ export default function OptimizeSnapshot() {
   }, [navigate, params]);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#F2F3F9]">
+    <div className="flex min-h-screen items-center justify-center bg-[var(--bg-page)]">
       <span
-        className="h-8 w-8 animate-spin rounded-full border-2 border-[#4578FC] border-t-transparent"
+        className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--accent)] border-t-transparent"
         aria-hidden
       />
     </div>

@@ -87,7 +87,7 @@ export function PostResultResumeStudio({
   onTailorAnother,
   onImproveEvenStronger,
   showImproveEvenStronger,
-  sandboxVariant = false,
+  sandboxVariant = true,
 }: {
   qualityPct: number;
   jobTitle: string;
@@ -488,7 +488,7 @@ export function PostResultResumeStudio({
         >
           <span className={`inline-flex h-9 min-w-[2.25rem] items-center justify-center gap-1 rounded-full px-2.5 text-[13px] font-bold ring-1 ${
             isImproveMode
-              ? "bg-[#EEF2FF] text-[#4558ff] ring-[#C7D2FE]"
+              ? "bg-[#EEF2FF] text-[var(--accent)] ring-[#C7D2FE]"
               : "bg-[#ECFDF5] text-[#166534] ring-[#BBF7D0]"
           }`}>
             <CheckIcon className="h-4 w-4 shrink-0" strokeWidth={2.5} />

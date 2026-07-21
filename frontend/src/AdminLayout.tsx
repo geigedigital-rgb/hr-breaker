@@ -171,7 +171,8 @@ function AdminLayoutInner() {
   }, [sidebarHidden]);
 
   const closeMobileMenu = () => setMobileMenuOpen(false);
-  const compactSidebar = sidebarCollapsed && !mobileMenuOpen && !isSandboxRoute;
+  /** Light sandbox chrome is default for all admin routes; compact collapse always allowed. */
+  const compactSidebar = sidebarCollapsed && !mobileMenuOpen;
 
   const toggleGroup = useCallback(
     (id: string) => {
@@ -193,7 +194,8 @@ function AdminLayoutInner() {
     [pathname],
   );
 
-  const sandbox = isSandboxRoute;
+  /** Visual language from sandbox applied to every admin page (focus/portal still gated by isSandboxRoute). */
+  const sandbox = true;
 
   const linkClass = ({ isActive }: { isActive: boolean }) => {
     if (sandbox) {
@@ -245,7 +247,7 @@ function AdminLayoutInner() {
                   : "text-[11px] font-medium text-white/70 uppercase tracking-wider"
               }
             >
-              {sandbox ? "Sandbox" : t("admin.badge")}
+              {t("admin.badge")}
             </div>
           </div>
         )}
@@ -387,7 +389,7 @@ function AdminLayoutInner() {
         })}
       </nav>
 
-      {user && <AdminPipelineConsole compact={compactSidebar} light={sandbox} />}
+      {user && <AdminPipelineConsole compact={compactSidebar} light />}
 
       <div
         className={
@@ -461,7 +463,7 @@ function AdminLayoutInner() {
               ? `ds-sandbox-aside hidden md:flex ${sidebarCollapsed ? "w-20 px-2" : "w-64 px-4"} shrink-0 flex-col min-h-0 py-6 overflow-hidden z-20 transition-all duration-300`
               : `hidden md:flex ${sidebarCollapsed ? "w-20 px-2" : "w-64 px-4"} shrink-0 flex-col min-h-0 py-6 overflow-hidden text-white shadow-xl z-20 transition-all`
           }
-          style={sandbox ? undefined : { background: "linear-gradient(160deg, #2f40df 0%, #1a28a8 100%)" }}
+          style={sandbox ? undefined : { background: "linear-gradient(160deg, var(--accent) 0%, var(--accent-hover) 100%)" }}
           role="navigation"
           aria-label={t("admin.navLabel")}
         >
@@ -483,7 +485,7 @@ function AdminLayoutInner() {
                 ? "ds-sandbox-aside relative ml-0 h-full w-[86vw] max-w-[320px] flex flex-col py-5 px-4 overflow-auto shadow-2xl z-10"
                 : "relative ml-0 h-full w-[86vw] max-w-[320px] flex flex-col py-5 px-4 overflow-auto text-white shadow-2xl z-10"
             }
-            style={sandbox ? undefined : { background: "linear-gradient(160deg, #2f40df 0%, #1a28a8 100%)" }}
+            style={sandbox ? undefined : { background: "linear-gradient(160deg, var(--accent) 0%, var(--accent-hover) 100%)" }}
             role="navigation"
             aria-label={t("admin.navLabel")}
           >

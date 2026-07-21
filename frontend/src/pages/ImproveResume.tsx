@@ -157,18 +157,19 @@ export default function ImproveResume() {
   const hasJob = jobDescription.trim().length > 0;
 
   return (
-    <div className="max-w-2xl mx-auto py-2 space-y-5">
+    <div className="ds-page-stage">
+    <div className="ds-page-stage-body max-w-2xl mx-auto space-y-5">
       {/* Upload zone — shown while no file yet */}
       {!resumeContent ? (
         <>
-        <h1 className="text-xl font-bold text-[#181819] text-center tracking-tight">
+        <h1 className="text-xl font-bold text-[var(--text)] text-center tracking-tight">
           {t("improveResume.uploadSectionHeading")}
         </h1>
         <div
           className={`rounded-2xl border-2 border-dashed transition-colors cursor-pointer ${
             isDragging
-              ? "border-[#4578FC] bg-[#EEF1FC]"
-              : "border-[#c8cddc] bg-white hover:border-[#4578FC]/50 hover:bg-[#F5F6FA]"
+              ? "border-[var(--accent)] bg-[#EEF1FC]"
+              : "border-[#c8cddc] bg-white hover:border-[var(--accent)]/50 hover:bg-[var(--accent-soft)]"
           } ${uploading ? "opacity-60 pointer-events-none" : ""}`}
           onClick={() => !uploading && fileInputRef.current?.click()}
           onDragOver={(e) => {
@@ -188,18 +189,18 @@ export default function ImproveResume() {
             {uploading ? (
               <>
                 <span
-                  className="w-10 h-10 border-2 border-[#4578FC]/30 border-t-[#4578FC] rounded-full animate-spin"
+                  className="w-10 h-10 border-2 border-[var(--accent)]/30 border-t-[#4578FC] rounded-full animate-spin"
                   aria-hidden
                 />
-                <p className="text-sm font-medium text-[#4578FC]">{t("improveResume.uploading")}</p>
+                <p className="text-sm font-medium text-[var(--accent)]">{t("improveResume.uploading")}</p>
               </>
             ) : (
               <>
                 <div className="w-14 h-14 rounded-full bg-[#EEF1FC] flex items-center justify-center">
-                  <CloudArrowUpIcon className="w-7 h-7 text-[#4578FC]" />
+                  <CloudArrowUpIcon className="w-7 h-7 text-[var(--accent)]" />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-[#181819]">{t("improveResume.uploadTitle")}</p>
+                  <p className="text-sm font-semibold text-[var(--text)]">{t("improveResume.uploadTitle")}</p>
                   <p className="text-xs text-[var(--text-muted)] mt-1">{t("improveResume.uploadHint")}</p>
                 </div>
               </>
@@ -217,7 +218,7 @@ export default function ImproveResume() {
         </>
       ) : (
         /* Uploaded indicator */
-        <div className="flex items-center gap-3 rounded-2xl border border-[#EBEDF5] bg-white px-4 py-3">
+        <div className="flex items-center gap-3 ds-card px-4 py-3">
           <img
             src="/media/pdf-icon.svg"
             alt=""
@@ -227,7 +228,7 @@ export default function ImproveResume() {
             decoding="async"
           />
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium text-[#181819] truncate">{uploadedDisplayName}</p>
+            <p className="text-sm font-medium text-[var(--text)] truncate">{uploadedDisplayName}</p>
             <p className="text-xs text-[var(--text-muted)]">{t("improveResume.uploadedLabel")}</p>
           </div>
           <button
@@ -237,7 +238,7 @@ export default function ImproveResume() {
               setSelectedMode(null);
               setJobDescription("");
             }}
-            className="text-xs font-medium text-[#4578FC] hover:underline shrink-0"
+            className="text-xs font-medium text-[var(--accent)] hover:underline shrink-0"
           >
             {t("improveResume.changeResume")}
           </button>
@@ -247,7 +248,7 @@ export default function ImproveResume() {
       {/* Title + mode cards — shown only after upload */}
       {resumeContent && (
         <div className="space-y-5">
-          <h1 className="text-xl font-bold text-[#181819] text-center">{t("improveResume.pageTitle")}</h1>
+          <h1 className="text-xl font-bold text-[var(--text)] text-center">{t("improveResume.pageTitle")}</h1>
         </div>
       )}
 
@@ -257,17 +258,17 @@ export default function ImproveResume() {
           <button
             type="button"
             onClick={handleImproveClick}
-            className="w-full text-left rounded-2xl border border-[#EBEDF5] bg-white p-5 flex items-center gap-4 hover:border-[#4578FC]/40 hover:shadow-sm transition-all group"
+            className="w-full text-left ds-card p-5 flex items-center gap-4 hover:border-[var(--accent)]/40 hover:shadow-sm transition-all group"
           >
             <div className="shrink-0 w-16 h-16 flex items-center justify-center">
               <img src="/IR.svg" alt="" className="w-full h-full object-contain" draggable={false} />
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-base font-semibold text-[#181819] group-hover:text-[#4578FC] transition-colors">
+                <span className="text-base font-semibold text-[var(--text)] group-hover:text-[var(--accent)] transition-colors">
                   {t("improveResume.improveTitle")}
                 </span>
-                <span className="text-[11px] font-medium text-[#181819]/60 border border-[#c8cddc] rounded-full px-2 py-0.5">
+                <span className="text-[11px] font-medium text-[var(--text)]/60 border border-[#c8cddc] rounded-full px-2 py-0.5">
                   {t("improveResume.improveTag")}
                 </span>
               </div>
@@ -281,8 +282,8 @@ export default function ImproveResume() {
           <div
             className={`rounded-2xl border bg-white transition-all overflow-hidden ${
               selectedMode === "tailor"
-                ? "border-[#4578FC]/40 shadow-sm"
-                : "border-[#EBEDF5] hover:border-[#4578FC]/30 hover:shadow-sm"
+                ? "border-[var(--accent)]/40 shadow-sm"
+                : "border-[var(--border)] hover:border-[var(--accent)]/30 hover:shadow-sm"
             }`}
           >
             <button
@@ -297,12 +298,12 @@ export default function ImproveResume() {
                 <div className="flex items-center gap-2 flex-wrap">
                   <span
                     className={`text-base font-semibold transition-colors ${
-                      selectedMode === "tailor" ? "text-[#4578FC]" : "text-[#181819] group-hover:text-[#4578FC]"
+                      selectedMode === "tailor" ? "text-[var(--accent)]" : "text-[var(--text)] group-hover:text-[var(--accent)]"
                     }`}
                   >
                     {t("improveResume.tailorTitle")}
                   </span>
-                  <span className="text-[11px] font-medium text-[#181819]/60 border border-[#c8cddc] rounded-full px-2 py-0.5">
+                  <span className="text-[11px] font-medium text-[var(--text)]/60 border border-[#c8cddc] rounded-full px-2 py-0.5">
                     {t("improveResume.tailorTag")}
                   </span>
                 </div>
@@ -321,15 +322,14 @@ export default function ImproveResume() {
                   onChange={(e) => setJobDescription(e.target.value)}
                   placeholder={t("improveResume.jobPlaceholder")}
                   rows={5}
-                  className="w-full rounded-xl border border-[#EBEDF5] bg-[#F5F6FA] px-4 py-3 text-sm text-[#181819] placeholder:text-[#9aa3b8] resize-none focus:outline-none focus:ring-2 focus:ring-[#4578FC]/30 focus:border-[#4578FC] transition-colors"
+                  className="w-full rounded-xl border border-[var(--border)] bg-[#F5F6FA] px-4 py-3 text-sm text-[var(--text)] placeholder:text-[#9aa3b8] resize-none focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/30 focus:border-[var(--accent)] transition-colors"
                   autoFocus
                 />
                 <button
                   type="button"
                   onClick={handleTailorSubmit}
                   disabled={!hasJob}
-                  className="w-full flex items-center justify-center gap-2 h-11 rounded-xl text-sm font-semibold text-white transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                  style={{ background: "linear-gradient(160deg, #4558ff 0%, #2f40df 100%)" }}
+                  className="ds-btn-primary w-full flex items-center justify-center gap-2 !h-11 !rounded-xl !text-sm disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   {t("improveResume.tailorBtn")}
                 </button>
@@ -338,6 +338,7 @@ export default function ImproveResume() {
           </div>
         </div>
       )}
+    </div>
     </div>
   );
 }

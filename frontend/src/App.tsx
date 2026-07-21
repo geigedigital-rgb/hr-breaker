@@ -45,7 +45,7 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#F2F3F9]">
+      <div className="flex min-h-screen items-center justify-center bg-[var(--bg-page)]">
         <span className="h-8 w-8 animate-spin rounded-full border-2 border-[#4578FC] border-t-transparent" aria-hidden />
       </div>
     );
@@ -58,7 +58,7 @@ function RequirePartnerAccess({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#F2F3F9]">
+      <div className="flex min-h-screen items-center justify-center bg-[var(--bg-page)]">
         <span className="h-8 w-8 animate-spin rounded-full border-2 border-[#4578FC] border-t-transparent" aria-hidden />
       </div>
     );
@@ -72,7 +72,7 @@ function RequireAdmin({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#F2F3F9]">
+      <div className="flex min-h-screen items-center justify-center bg-[var(--bg-page)]">
         <span className="h-8 w-8 animate-spin rounded-full border-2 border-[#4578FC] border-t-transparent" aria-hidden />
       </div>
     );

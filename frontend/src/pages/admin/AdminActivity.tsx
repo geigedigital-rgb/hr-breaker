@@ -43,7 +43,7 @@ function ActivityRow({
   }
 
   return (
-    <tr className="hover:bg-[#F5F6FA]/50">
+    <tr className="hover:bg-[var(--accent-soft)]/50">
       <td className="px-4 py-3 text-[var(--text-tertiary)] tabular-nums whitespace-nowrap align-top">
         {row.created_at ? new Date(row.created_at).toLocaleString() : "—"}
       </td>
@@ -73,7 +73,7 @@ function ActivityRow({
             type="button"
             disabled={!canOpen}
             onClick={() => void handleOpenPdf()}
-            className="inline-flex items-center gap-1 rounded-lg border border-[#E8ECF4] bg-white px-2.5 py-1.5 text-xs font-medium text-[#4578FC] hover:bg-[#F5F8FF] disabled:opacity-40 disabled:cursor-not-allowed"
+            className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-white px-2.5 py-1.5 text-xs font-medium text-[var(--accent)] hover:bg-[#F5F8FF] disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <ArrowTopRightOnSquareIcon className="h-4 w-4 shrink-0" aria-hidden />
             {t("admin.activity.openPdf")}
@@ -82,7 +82,7 @@ function ActivityRow({
             <button
               type="button"
               onClick={() => void handleSource()}
-              className="inline-flex items-center gap-1 rounded-lg border border-[#E8ECF4] bg-white px-2.5 py-1.5 text-xs font-medium text-[var(--text-muted)] hover:bg-[#F5F6FA]"
+              className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-white px-2.5 py-1.5 text-xs font-medium text-[var(--text-muted)] hover:bg-[var(--accent-soft)]"
             >
               <DocumentTextIcon className="h-4 w-4 shrink-0" aria-hidden />
               {t("admin.activity.downloadSource")}
@@ -161,14 +161,14 @@ export default function AdminActivity() {
 
       {loading ? (
         <div className="flex flex-1 items-center justify-center py-12" aria-busy="true" aria-live="polite">
-          <span className="h-8 w-8 animate-spin rounded-full border-2 border-[#4578FC] border-t-transparent" aria-hidden />
+          <span className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--accent)] border-t-transparent" aria-hidden />
         </div>
       ) : items.length === 0 ? (
-        <p className="rounded-xl border border-[#EBEDF5] bg-[var(--card)] p-6 text-center text-sm text-[var(--text-muted)] shrink-0">
+        <p className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-6 text-center text-sm text-[var(--text-muted)] shrink-0">
           {t("admin.activity.empty")}
         </p>
       ) : (
-        <div className="flex flex-col flex-1 min-h-0 rounded-xl border border-[#EBEDF5] bg-[var(--card)] shadow-sm overflow-hidden">
+        <div className="flex flex-col flex-1 min-h-0 rounded-xl border border-[var(--border)] bg-[var(--card)] shadow-sm overflow-hidden">
           <div className="flex-1 min-h-0 overflow-auto overscroll-contain">
             <table className="min-w-full divide-y divide-[#EBEDF5] text-sm" role="table" aria-label={t("admin.activity.title")}>
               <thead className="sticky top-0 z-20 bg-[var(--card)] shadow-[0_1px_0_#EBEDF5]">

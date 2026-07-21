@@ -502,7 +502,7 @@ export default function AdminTemplatesLab() {
   const prevStep = STEPS[stepIndex - 1];
 
   const inputClass =
-    "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:border-[#2f40df] focus:outline-none focus:ring-1 focus:ring-[#2f40df]";
+    "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:border-[var(--accent)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]";
 
   return (
     <div className="space-y-3">
@@ -540,7 +540,7 @@ export default function AdminTemplatesLab() {
                   onClick={() => setStep(s)}
                   className={`relative rounded-full px-3 py-1.5 text-xs font-medium transition ${
                     step === s
-                      ? "bg-[#2f40df] text-white"
+                      ? "bg-[var(--accent)] text-white"
                       : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"
                   }`}
                 >
@@ -589,7 +589,7 @@ export default function AdminTemplatesLab() {
                       }
                     }}
                     disabled={!resumeSource.trim() || extracting}
-                    className="rounded-lg bg-[#2f40df] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+                    className="rounded-lg bg-[var(--accent)] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
                   >
                     {extracting ? "Parsing…" : "Parse text"}
                   </button>
@@ -627,7 +627,7 @@ export default function AdminTemplatesLab() {
                       }
                     }}
                     disabled={!resumeFile || extracting}
-                    className="rounded-lg bg-[#2f40df] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+                    className="rounded-lg bg-[var(--accent)] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
                   >
                     Parse file
                   </button>
@@ -873,7 +873,7 @@ export default function AdminTemplatesLab() {
                     work: [...s.work, { name: "", position: "", highlights: [] }],
                   }))
                 }
-                className="flex items-center gap-1.5 text-sm font-medium text-[#2f40df] hover:underline"
+                className="flex items-center gap-1.5 text-sm font-medium text-[var(--accent)] hover:underline"
               >
                 <PlusIcon className="h-5 w-5" />
                 Add work experience
@@ -1036,7 +1036,7 @@ export default function AdminTemplatesLab() {
                     education: [...s.education, { institution: "" }],
                   }))
                 }
-                className="flex items-center gap-1.5 text-sm font-medium text-[#2f40df] hover:underline"
+                className="flex items-center gap-1.5 text-sm font-medium text-[var(--accent)] hover:underline"
               >
                 <PlusIcon className="h-5 w-5" />
                 Add education
@@ -1114,7 +1114,7 @@ export default function AdminTemplatesLab() {
                     skills: [...s.skills, { name: "", keywords: [], level: null }],
                   }))
                 }
-                className="flex items-center gap-1.5 text-sm font-medium text-[#2f40df] hover:underline"
+                className="flex items-center gap-1.5 text-sm font-medium text-[var(--accent)] hover:underline"
               >
                 <PlusIcon className="h-5 w-5" />
                 Add skill group
@@ -1193,7 +1193,7 @@ export default function AdminTemplatesLab() {
                         languages: [...s.languages, { language: "" }],
                       }))
                     }
-                    className="flex items-center gap-1.5 text-sm font-medium text-[#2f40df] hover:underline"
+                    className="flex items-center gap-1.5 text-sm font-medium text-[var(--accent)] hover:underline"
                   >
                     <PlusIcon className="h-5 w-5" />
                     Add language
@@ -1218,7 +1218,7 @@ export default function AdminTemplatesLab() {
                     }
                   }}
                   disabled={!templateId}
-                  className="rounded-xl bg-[#2f40df] px-5 py-2.5 text-sm font-semibold text-white shadow-sm disabled:opacity-50"
+                  className="rounded-xl bg-[var(--accent)] px-5 py-2.5 text-sm font-semibold text-white shadow-sm disabled:opacity-50"
                 >
                   Open PDF
                 </button>
@@ -1246,7 +1246,7 @@ export default function AdminTemplatesLab() {
               <button
                 type="button"
                 onClick={() => nextStep && setStep(nextStep)}
-                className="rounded-xl bg-[#2f40df] px-5 py-2 text-sm font-semibold text-white shadow-sm"
+                className="rounded-xl bg-[var(--accent)] px-5 py-2 text-sm font-semibold text-white shadow-sm"
               >
                 Next: {nextStep}
               </button>
@@ -1292,7 +1292,7 @@ export default function AdminTemplatesLab() {
                   <ChevronDownIcon className={`h-4 w-4 transition ${templateMenuOpen ? "rotate-180" : ""}`} />
                 </button>
                 {templateMenuOpen && (
-                  <div className="absolute right-0 z-20 mt-2 w-72 max-h-72 overflow-auto rounded-xl border border-slate-200 bg-white p-1 shadow-lg">
+                  <div className="absolute right-0 z-20 mt-2 w-72 max-h-72 overflow-auto ds-card !rounded-[var(--radius-md)] p-1 shadow-lg">
                     {templates.map((t) => (
                       <button
                         key={t.id}

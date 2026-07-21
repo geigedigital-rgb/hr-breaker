@@ -675,14 +675,14 @@ export default function AdminVisualTest() {
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div className="text-center sm:text-left">
             <h3 className="text-[length:var(--text-lg)] font-semibold tracking-tight text-[var(--text)]">
-              {t("admin.visualSandbox.resultKeyChangesTitle")}
+              {t("optimize.keyChangesTitle")}
             </h3>
-            <p className="ds-subtitle mt-1 mx-auto sm:mx-0">{t("admin.visualSandbox.resultKeyChangesSubtitle")}</p>
+            <p className="ds-subtitle mt-1 mx-auto sm:mx-0">{t("optimize.keyChangesSubtitle")}</p>
           </div>
           <div className="flex shrink-0 items-center justify-center sm:justify-end">
             <span className="ds-soft-pill ds-soft-pill--success">
               <CheckIcon className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
-              {tFormat(t("admin.visualSandbox.resultImprovementsApplied"), { count: resultImprovementCount })}
+              {tFormat(t("optimize.keyChangesApplied"), { count: resultImprovementCount })}
             </span>
           </div>
         </div>
@@ -690,23 +690,48 @@ export default function AdminVisualTest() {
         <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
           {MOCK.resultKeyChanges.map((group, idx) => {
             const Icon = RESULT_KEY_ICONS[idx % RESULT_KEY_ICONS.length];
-            const subtitle = group.description ?? group.items[0] ?? "";
             const well =
               idx === 0 ? "ds-icon-well--accent" : idx === 1 ? "ds-icon-well--warning" : "ds-icon-well--success";
+            const headlines = [
+              t("optimize.keyChangeBenefitSummaryTitle"),
+              t("optimize.keyChangeBenefitExperienceTitle"),
+              t("optimize.keyChangeBenefitSkillsTitle"),
+            ];
+            const whys = [
+              t("optimize.keyChangeBenefitSummaryWhy"),
+              t("optimize.keyChangeBenefitExperienceWhy"),
+              t("optimize.keyChangeBenefitSkillsWhy"),
+            ];
             return (
-              <div key={group.category} className="ds-card flex items-start gap-3.5 !rounded-[var(--radius-md)] p-4">
-                <div className={`ds-icon-well ${well}`} aria-hidden>
-                  <Icon className="h-5 w-5" strokeWidth={1.35} />
+              <div key={group.category} className="ds-card flex flex-col !rounded-[var(--radius-md)] p-4">
+                <div className="flex items-start gap-3.5">
+                  <div className={`ds-icon-well ${well}`} aria-hidden>
+                    <Icon className="h-5 w-5" strokeWidth={1.35} />
+                  </div>
+                  <div className="min-w-0 flex-1 pt-0.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-[length:var(--text-sm)] font-semibold text-[var(--text)]">
+                        {headlines[idx] ?? group.category}
+                      </p>
+                      <span className="ds-soft-pill ds-soft-pill--success !py-1 !px-2.5 !text-[11px] shrink-0">
+                        {t("optimize.keyChangesImproved")}
+                      </span>
+                    </div>
+                    <p className="ds-body mt-1.5 !text-[12px]">{whys[idx] ?? group.description}</p>
+                  </div>
                 </div>
-                <div className="min-w-0 flex-1 pt-0.5">
-                  <p className="text-[length:var(--text-sm)] font-semibold text-[var(--text)]">{group.category}</p>
-                  <p className="ds-hint mt-1">{subtitle}</p>
-                </div>
-                <div className="flex shrink-0 flex-col items-end gap-1 pt-0.5">
-                  <span className="ds-soft-pill ds-soft-pill--success !py-1 !px-2.5 !text-[11px]">
-                    {t("admin.visualSandbox.resultImprovedLabel")}
-                  </span>
-                </div>
+                {group.items.length > 0 && (
+                  <ul className="mt-3 space-y-2 border-t border-[var(--border)]/80 pt-3">
+                    {group.items.map((item) => (
+                      <li key={item} className="flex items-start gap-2 text-[12px] leading-snug text-[var(--text-muted)]">
+                        <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[var(--success-soft)]">
+                          <CheckIcon className="h-2.5 w-2.5 text-[var(--success)]" strokeWidth={2.5} aria-hidden />
+                        </span>
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             );
           })}

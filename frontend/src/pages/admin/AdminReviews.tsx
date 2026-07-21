@@ -156,7 +156,7 @@ export default function AdminReviews() {
                 setPage(0);
                 setStatusFilter(e.target.value);
               }}
-              className="rounded-lg border border-[#EBEDF5] bg-[var(--card)] px-2 py-1.5 text-sm text-[var(--text)]"
+              className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-sm text-[var(--text)]"
             >
               {STATUS_OPTIONS.map((o) => (
                 <option key={o.v || "all"} value={o.v}>
@@ -173,7 +173,7 @@ export default function AdminReviews() {
                 setPage(0);
                 setRatingFilter(e.target.value);
               }}
-              className="rounded-lg border border-[#EBEDF5] bg-[var(--card)] px-2 py-1.5 text-sm text-[var(--text)]"
+              className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1.5 text-sm text-[var(--text)]"
             >
               <option value="">{t("admin.reviews.filterAll")}</option>
               {[1, 2, 3, 4, 5].map((n) => (
@@ -187,7 +187,7 @@ export default function AdminReviews() {
             type="button"
             disabled={exporting || loading}
             onClick={onExport}
-            className="rounded-lg border border-[#EBEDF5] bg-white px-3 py-1.5 text-xs font-medium text-[var(--text)] hover:bg-[#F5F6FA] disabled:opacity-50"
+            className="rounded-lg border border-[var(--border)] bg-white px-3 py-1.5 text-xs font-medium text-[var(--text)] hover:bg-[var(--accent-soft)] disabled:opacity-50"
           >
             {exporting ? "…" : t("admin.reviews.exportCsv")}
           </button>
@@ -201,14 +201,14 @@ export default function AdminReviews() {
 
       {loading && items.length === 0 ? (
         <div className="flex flex-1 items-center justify-center py-12">
-          <span className="h-8 w-8 animate-spin rounded-full border-2 border-[#4578FC] border-t-transparent" />
+          <span className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--accent)] border-t-transparent" />
         </div>
       ) : items.length === 0 ? (
-        <p className="rounded-xl border border-[#EBEDF5] bg-[var(--card)] p-6 text-center text-sm text-[var(--text-muted)]">
+        <p className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-6 text-center text-sm text-[var(--text-muted)]">
           {t("admin.reviews.empty")}
         </p>
       ) : (
-        <div className="flex flex-col flex-1 min-h-0 rounded-xl border border-[#EBEDF5] bg-[var(--card)] shadow-sm overflow-hidden">
+        <div className="flex flex-col flex-1 min-h-0 rounded-xl border border-[var(--border)] bg-[var(--card)] shadow-sm overflow-hidden">
           <div className="flex-1 min-h-0 overflow-auto overscroll-contain">
             <table className="min-w-full divide-y divide-[#EBEDF5] text-sm">
               <thead className="sticky top-0 z-20 bg-[var(--card)] shadow-[0_1px_0_#EBEDF5]">
@@ -235,7 +235,7 @@ export default function AdminReviews() {
               </thead>
               <tbody className="divide-y divide-[#EBEDF5]">
                 {items.map((row) => (
-                  <tr key={row.id} className="hover:bg-[#F5F6FA]/50 align-top">
+                  <tr key={row.id} className="hover:bg-[var(--accent-soft)]/50 align-top">
                     <td className="px-3 py-2 text-xs text-[var(--text-tertiary)] whitespace-nowrap tabular-nums">
                       {row.created_at ? new Date(row.created_at).toLocaleString() : "—"}
                     </td>
@@ -291,7 +291,7 @@ export default function AdminReviews() {
                         <button
                           type="button"
                           onClick={() => openEdit(row)}
-                          className="rounded border border-[#EBEDF5] px-1.5 py-0.5 text-[10px] font-medium hover:bg-[#F5F6FA]"
+                          className="rounded border border-[var(--border)] px-1.5 py-0.5 text-[10px] font-medium hover:bg-[var(--accent-soft)]"
                         >
                           {t("admin.reviews.edit")}
                         </button>
@@ -325,7 +325,7 @@ export default function AdminReviews() {
           onClick={closeEdit}
         >
           <div
-            className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-xl border border-[#EBEDF5] bg-[var(--card)] shadow-xl p-4 space-y-3"
+            className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--card)] shadow-xl p-4 space-y-3"
             onClick={(e) => e.stopPropagation()}
           >
             <h3 id="review-edit-title" className="text-base font-semibold text-[var(--text)]">
@@ -337,7 +337,7 @@ export default function AdminReviews() {
               <select
                 value={formStatus}
                 onChange={(e) => setFormStatus(e.target.value)}
-                className="mt-0.5 w-full rounded-lg border border-[#EBEDF5] px-2 py-1.5 text-sm"
+                className="mt-0.5 w-full rounded-lg border border-[var(--border)] px-2 py-1.5 text-sm"
               >
                 {STATUS_OPTIONS.filter((o) => o.v).map((o) => (
                   <option key={o.v} value={o.v}>
@@ -361,7 +361,7 @@ export default function AdminReviews() {
               <input
                 value={formTitle}
                 onChange={(e) => setFormTitle(e.target.value)}
-                className="mt-0.5 w-full rounded-lg border border-[#EBEDF5] px-2 py-1.5 text-sm"
+                className="mt-0.5 w-full rounded-lg border border-[var(--border)] px-2 py-1.5 text-sm"
               />
             </label>
             <label className="block text-xs font-medium text-[var(--text-muted)]">
@@ -370,7 +370,7 @@ export default function AdminReviews() {
                 value={formBody}
                 onChange={(e) => setFormBody(e.target.value)}
                 rows={5}
-                className="mt-0.5 w-full rounded-lg border border-[#EBEDF5] px-2 py-1.5 text-sm font-sans"
+                className="mt-0.5 w-full rounded-lg border border-[var(--border)] px-2 py-1.5 text-sm font-sans"
               />
             </label>
             <label className="block text-xs font-medium text-[var(--text-muted)]">
@@ -379,14 +379,14 @@ export default function AdminReviews() {
                 value={formNotes}
                 onChange={(e) => setFormNotes(e.target.value)}
                 rows={2}
-                className="mt-0.5 w-full rounded-lg border border-[#EBEDF5] px-2 py-1.5 text-sm"
+                className="mt-0.5 w-full rounded-lg border border-[var(--border)] px-2 py-1.5 text-sm"
               />
             </label>
             <div className="flex justify-end gap-2 pt-2">
               <button
                 type="button"
                 onClick={closeEdit}
-                className="rounded-lg border border-[#EBEDF5] px-3 py-1.5 text-sm"
+                className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-sm"
               >
                 {t("admin.reviews.cancel")}
               </button>
@@ -394,7 +394,7 @@ export default function AdminReviews() {
                 type="button"
                 disabled={saving}
                 onClick={saveEdit}
-                className="rounded-lg bg-[#4578FC] px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+                className="rounded-lg bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
               >
                 {saving ? "…" : t("admin.reviews.save")}
               </button>

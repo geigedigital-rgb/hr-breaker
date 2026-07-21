@@ -93,7 +93,7 @@ export default function Progress() {
         <button
           type="button"
           onClick={() => navigate("/settings")}
-          className="mt-4 text-sm font-medium text-[#4578FC] hover:underline"
+          className="mt-4 text-sm font-medium text-[var(--accent)] hover:underline"
         >
           {tStr("nav.settings")}
         </button>
@@ -110,8 +110,8 @@ export default function Progress() {
   const stageGlow = STAGE_GLOW[stage] ?? STAGE_GLOW.Emerging;
 
   return (
-    <div className="min-h-full bg-[#F2F3F9]">
-      <div className="max-w-5xl mx-auto p-5 pb-12 grid grid-cols-1 lg:grid-cols-[6fr_4fr] gap-5 auto-rows-auto">
+    <div className="ds-page-stage">
+      <div className="ds-page-stage-body max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-[6fr_4fr] gap-5 auto-rows-auto">
         {/* Primary Bento (60%): Score + CTA + star for current level (shadow/glow by level) */}
         <section
           className="rounded-3xl p-6 lg:p-8 flex flex-col min-h-[280px] shadow-lg border border-white/50"
@@ -130,7 +130,7 @@ export default function Progress() {
                 <button
                   type="button"
                   onClick={() => setInfoOpen(true)}
-                  className="p-1 rounded-full text-[var(--text-muted)] hover:bg-[#EBEDF5] hover:text-[#181819] transition-colors"
+                  className="p-1 rounded-full text-[var(--text-muted)] hover:bg-[#EBEDF5] hover:text-[var(--text)] transition-colors"
                   aria-label="How points are earned"
                 >
                   <InformationCircleIcon className="w-5 h-5" />
@@ -177,12 +177,12 @@ export default function Progress() {
 
         {/* Gamification Bento (40%): Rhythm + Level + roadmap */}
         <section
-          className="rounded-3xl p-6 flex flex-col shadow-md border border-[#EBEDF5] bg-white min-h-[300px]"
+          className="rounded-3xl p-6 flex flex-col shadow-md border border-[var(--border)] bg-white min-h-[300px]"
           style={{ boxShadow: "0 4px 20px rgba(0,0,0,0.06)" }}
         >
           <div className="flex items-center gap-2 rounded-full bg-[#f5f3ff] px-3 py-2 w-fit mb-4">
             <FireIcon className="w-5 h-5 text-[#7c3aed]" />
-            <span className="text-sm font-medium text-[#181819]">
+            <span className="text-sm font-medium text-[var(--text)]">
               {streak > 0 ? `${streak} days in a row` : "No streak yet"}
             </span>
           </div>
@@ -197,7 +197,7 @@ export default function Progress() {
               }}
             />
           </div>
-          <p className="text-sm font-semibold text-[#181819] mt-3">{stageLabel}</p>
+          <p className="text-sm font-semibold text-[var(--text)] mt-3">{stageLabel}</p>
           <div className="relative mt-4 flex-1 min-h-0 overflow-auto flex justify-center">
             <div className="absolute left-1/2 top-2 bottom-2 w-px -translate-x-1/2 bg-[#EBEDF5]" aria-hidden />
             <div className="relative z-10 flex flex-col items-center gap-1">
@@ -233,7 +233,7 @@ export default function Progress() {
                       )}
                     </div>
                     <p
-                      className={`text-xs font-medium whitespace-nowrap ${isCurrent ? "text-[#181819]" : "text-[var(--text-muted)]"} ${isFuture ? "opacity-60" : ""}`}
+                      className={`text-xs font-medium whitespace-nowrap ${isCurrent ? "text-[var(--text)]" : "text-[var(--text-muted)]"} ${isFuture ? "opacity-60" : ""}`}
                     >
                       {READINESS_STAGE_LABEL[s] ?? s}
                     </p>
@@ -246,23 +246,23 @@ export default function Progress() {
 
         {/* Activity Bento (full width): What caused growth — vertical list, единая палитра */}
         <section
-          className="rounded-3xl p-6 border border-[#EBEDF5] bg-white shadow-md col-span-full"
+          className="rounded-3xl p-6 border border-[var(--border)] bg-white shadow-md col-span-full"
           style={{ boxShadow: "0 4px 20px rgba(0,0,0,0.06)" }}
         >
-          <h2 className="text-sm font-semibold text-[#181819] mb-4">What drove growth</h2>
+          <h2 className="text-sm font-semibold text-[var(--text)] mb-4">What drove growth</h2>
           <ul className="space-y-2">
             {MOCK_GROWTH_EVENTS.slice(0, 5).map((ev, i) => {
               const Icon = ev.icon;
               return (
                 <li
                   key={i}
-                  className="flex items-center gap-3 py-2.5 px-3 rounded-xl bg-[#FAFAFC] border border-[#EBEDF5]"
+                  className="flex items-center gap-3 py-2.5 px-3 rounded-xl bg-[#FAFAFC] border border-[var(--border)]"
                 >
                   <span className="flex shrink-0 items-center justify-center w-9 h-9 rounded-lg bg-[#EBEDF5] text-[#6d28d9]">
                     <Icon className="w-4 h-4" />
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-[#181819]">{ev.label}</p>
+                    <p className="text-sm font-medium text-[var(--text)]">{ev.label}</p>
                     <p className="text-xs font-medium text-[var(--text-muted)] tabular-nums">+{ev.points}</p>
                   </div>
                 </li>
@@ -296,8 +296,8 @@ export default function Progress() {
               leaveFrom="translate-y-0 opacity-100"
               leaveTo="translate-y-full opacity-0"
             >
-              <Dialog.Panel className="w-full max-w-lg rounded-t-2xl bg-white p-6 shadow-xl border border-[#EBEDF5]">
-                <Dialog.Title className="text-lg font-semibold text-[#181819]">
+              <Dialog.Panel className="w-full max-w-lg rounded-t-2xl bg-white p-6 shadow-xl border border-[var(--border)]">
+                <Dialog.Title className="text-lg font-semibold text-[var(--text)]">
                   How points are earned
                 </Dialog.Title>
                 <div className="mt-3 space-y-2 text-sm text-[var(--text-muted)]">
@@ -313,7 +313,7 @@ export default function Progress() {
                 <button
                   type="button"
                   onClick={() => setInfoOpen(false)}
-                  className="mt-6 w-full rounded-xl bg-[#4578FC] text-white py-3 text-sm font-semibold hover:bg-[#3d6ae6] transition-colors"
+                  className="mt-6 w-full rounded-xl bg-[var(--accent)] text-white py-3 text-sm font-semibold hover:bg-[#3d6ae6] transition-colors"
                 >
                   Got it
                 </button>

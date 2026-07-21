@@ -58,7 +58,7 @@ export default function AdminEmailTemplates() {
           <h2 className="text-xl font-bold tracking-tight text-[var(--text)]">{t("admin.email.templates.title")}</h2>
           <p className="mt-1 text-sm text-[var(--text-muted)]">{t("admin.email.templates.subtitle")}</p>
         </header>
-        <ul className="space-y-1 rounded-xl border border-[#EBEDF5] bg-[var(--card)] p-2 shadow-sm" role="listbox" aria-label={t("admin.email.templates.listLabel")}>
+        <ul className="space-y-1 rounded-xl border border-[var(--border)] bg-[var(--card)] p-2 shadow-sm" role="listbox" aria-label={t("admin.email.templates.listLabel")}>
           {ADMIN_EMAIL_DEMO_TEMPLATES.map((tpl) => {
             const active = tpl.id === selected.id;
             return (
@@ -69,7 +69,7 @@ export default function AdminEmailTemplates() {
                   aria-selected={active}
                   onClick={() => setSelectedId(tpl.id)}
                   className={`flex w-full flex-col rounded-lg px-3 py-2.5 text-left text-sm transition-colors ${
-                    active ? "bg-[#EEF2FF] font-medium text-[#1a28a8]" : "text-[var(--text)] hover:bg-[#F5F6FA]"
+                    active ? "bg-[#EEF2FF] font-medium text-[var(--accent-hover)]" : "text-[var(--text)] hover:bg-[var(--accent-soft)]"
                   }`}
                 >
                   <span>{t(tpl.nameKey)}</span>
@@ -82,7 +82,7 @@ export default function AdminEmailTemplates() {
 
         <section
           aria-labelledby="admin-email-asset-urls"
-          className="rounded-xl border border-[#EBEDF5] bg-[var(--card)] p-3 shadow-sm"
+          className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-3 shadow-sm"
         >
           <h3 id="admin-email-asset-urls" className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
             {t("admin.email.templates.assetUrlsTitle")}
@@ -99,7 +99,7 @@ export default function AdminEmailTemplates() {
                   type="button"
                   disabled={!logoAssetUrl}
                   onClick={() => void copyAssetUrl(logoAssetUrl)}
-                  className="shrink-0 rounded-lg border border-[#EBEDF5] p-1.5 text-[var(--text-muted)] hover:bg-[#F5F6FA] disabled:opacity-40"
+                  className="shrink-0 rounded-lg border border-[var(--border)] p-1.5 text-[var(--text-muted)] hover:bg-[var(--accent-soft)] disabled:opacity-40"
                   title={t("admin.email.templates.copyLogoUrl")}
                 >
                   <ClipboardDocumentIcon className="h-4 w-4" aria-hidden />
@@ -116,7 +116,7 @@ export default function AdminEmailTemplates() {
                   type="button"
                   disabled={!heroAssetUrl}
                   onClick={() => void copyAssetUrl(heroAssetUrl)}
-                  className="shrink-0 rounded-lg border border-[#EBEDF5] p-1.5 text-[var(--text-muted)] hover:bg-[#F5F6FA] disabled:opacity-40"
+                  className="shrink-0 rounded-lg border border-[var(--border)] p-1.5 text-[var(--text-muted)] hover:bg-[var(--accent-soft)] disabled:opacity-40"
                   title={t("admin.email.templates.copyHeroUrl")}
                 >
                   <ClipboardDocumentIcon className="h-4 w-4" aria-hidden />
@@ -133,7 +133,7 @@ export default function AdminEmailTemplates() {
                   type="button"
                   disabled={!wakeupAssetUrl}
                   onClick={() => void copyAssetUrl(wakeupAssetUrl)}
-                  className="shrink-0 rounded-lg border border-[#EBEDF5] p-1.5 text-[var(--text-muted)] hover:bg-[#F5F6FA] disabled:opacity-40"
+                  className="shrink-0 rounded-lg border border-[var(--border)] p-1.5 text-[var(--text-muted)] hover:bg-[var(--accent-soft)] disabled:opacity-40"
                   title={t("admin.email.templates.copyWakeupUrl")}
                 >
                   <ClipboardDocumentIcon className="h-4 w-4" aria-hidden />
@@ -163,24 +163,24 @@ export default function AdminEmailTemplates() {
             <button
               type="button"
               onClick={() => void copyTemplateHtml()}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-[#EBEDF5] bg-[var(--card)] px-3 py-1.5 text-xs font-medium text-[var(--text)] hover:bg-[#F5F6FA]"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-1.5 text-xs font-medium text-[var(--text)] hover:bg-[var(--accent-soft)]"
               title={t("admin.email.templates.copyHtmlHint")}
             >
               <ClipboardDocumentIcon className="h-4 w-4 shrink-0 text-[var(--text-muted)]" aria-hidden />
               {t("admin.email.templates.copyHtml")}
             </button>
-            <div className="inline-flex rounded-lg border border-[#EBEDF5] bg-[var(--card)] p-0.5 text-xs font-medium">
+            <div className="inline-flex rounded-lg border border-[var(--border)] bg-[var(--card)] p-0.5 text-xs font-medium">
               <button
                 type="button"
                 onClick={() => setViewport("mobile")}
-                className={`rounded-md px-3 py-1.5 transition-colors ${viewport === "mobile" ? "bg-[#EEF2FF] text-[#1a28a8]" : "text-[var(--text-muted)] hover:text-[var(--text)]"}`}
+                className={`rounded-md px-3 py-1.5 transition-colors ${viewport === "mobile" ? "bg-[#EEF2FF] text-[var(--accent-hover)]" : "text-[var(--text-muted)] hover:text-[var(--text)]"}`}
               >
                 {t("admin.email.templates.viewportMobile")}
               </button>
               <button
                 type="button"
                 onClick={() => setViewport("desktop")}
-                className={`rounded-md px-3 py-1.5 transition-colors ${viewport === "desktop" ? "bg-[#EEF2FF] text-[#1a28a8]" : "text-[var(--text-muted)] hover:text-[var(--text)]"}`}
+                className={`rounded-md px-3 py-1.5 transition-colors ${viewport === "desktop" ? "bg-[#EEF2FF] text-[var(--accent-hover)]" : "text-[var(--text-muted)] hover:text-[var(--text)]"}`}
               >
                 {t("admin.email.templates.viewportDesktop")}
               </button>
@@ -199,7 +199,7 @@ export default function AdminEmailTemplates() {
           </p>
         )}
         <div
-          className={`mx-auto overflow-hidden rounded-xl border border-[#EBEDF5] bg-white shadow-sm ${
+          className={`mx-auto overflow-hidden ds-card !rounded-[var(--radius-md)] shadow-sm ${
             viewport === "mobile" ? "max-w-[375px]" : "w-full max-w-[640px]"
           }`}
         >

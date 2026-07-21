@@ -186,7 +186,7 @@ export default function AdminReferrals() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12" aria-busy="true" aria-live="polite">
-        <span className="h-8 w-8 animate-spin rounded-full border-2 border-[#4578FC] border-t-transparent" aria-hidden />
+        <span className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--accent)] border-t-transparent" aria-hidden />
       </div>
     );
   }
@@ -200,10 +200,10 @@ export default function AdminReferrals() {
 
       {error && <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
 
-      <section className="rounded-xl border border-[#EBEDF5] bg-white shadow-sm overflow-hidden">
-        <div className="px-4 py-3 border-b border-[#EBEDF5] flex flex-wrap items-center justify-between gap-2">
+      <section className="ds-card !rounded-[var(--radius-md)] shadow-sm overflow-hidden">
+        <div className="px-4 py-3 border-b border-[var(--border)] flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h3 className="text-sm font-semibold text-[#181819]">Partner signup links</h3>
+            <h3 className="text-sm font-semibold text-[var(--text)]">Partner signup links</h3>
             <p className="text-xs text-[var(--text-muted)] mt-0.5">
               Special <code className="text-[11px]">/login?pvc_pi=…</code> links grant partner access on first registration.
               Tokens are stored hashed; the secret is shown only once when you generate a link.
@@ -216,7 +216,7 @@ export default function AdminReferrals() {
               setShowCreateInvite((v) => !v);
               setInviteSectionError(null);
             }}
-            className="rounded-lg border border-[#4578FC] bg-[#4578FC] px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50"
+            className="rounded-lg border border-[var(--accent)] bg-[var(--accent)] px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50"
           >
             {showCreateInvite ? "Cancel" : "Generate link"}
           </button>
@@ -225,9 +225,9 @@ export default function AdminReferrals() {
           <div className="mx-4 mt-3 rounded-lg border border-red-200 bg-red-50 p-2 text-xs text-red-700">{inviteSectionError}</div>
         )}
         {showCreateInvite && (
-          <div className="px-4 py-3 border-b border-[#EBEDF5] bg-[#F8F9FC] flex flex-wrap items-end gap-3">
+          <div className="px-4 py-3 border-b border-[var(--border)] bg-[#F8F9FC] flex flex-wrap items-end gap-3">
             <label className="flex flex-col gap-1 text-xs">
-              <span className="text-[#6B7280]">Label (internal)</span>
+              <span className="text-[var(--text-muted)]">Label (internal)</span>
               <input
                 className="rounded border border-[#D6DAE8] px-2 py-1 text-sm min-w-[200px]"
                 value={createLabel}
@@ -236,7 +236,7 @@ export default function AdminReferrals() {
               />
             </label>
             <label className="flex flex-col gap-1 text-xs">
-              <span className="text-[#6B7280]">Expires (optional)</span>
+              <span className="text-[var(--text-muted)]">Expires (optional)</span>
               <input
                 type="datetime-local"
                 className="rounded border border-[#D6DAE8] px-2 py-1 text-sm"
@@ -281,7 +281,7 @@ export default function AdminReferrals() {
         )}
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
-            <thead className="bg-[#F8F9FC] text-[#6B7280]">
+            <thead className="bg-[#F8F9FC] text-[var(--text-muted)]">
               <tr>
                 <th className="px-3 py-2 text-left">Label</th>
                 <th className="px-3 py-2 text-left">Active</th>
@@ -333,10 +333,10 @@ export default function AdminReferrals() {
 
       {editInvite && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true">
-          <div className="w-full max-w-md rounded-xl border border-[#EBEDF5] bg-white p-4 shadow-lg space-y-3">
-            <h4 className="text-sm font-semibold text-[#181819]">Edit partner invite</h4>
+          <div className="w-full max-w-md ds-card !rounded-[var(--radius-md)] p-4 shadow-lg space-y-3">
+            <h4 className="text-sm font-semibold text-[var(--text)]">Edit partner invite</h4>
             <label className="flex flex-col gap-1 text-xs">
-              <span className="text-[#6B7280]">Label</span>
+              <span className="text-[var(--text-muted)]">Label</span>
               <input
                 className="rounded border border-[#D6DAE8] px-2 py-1 text-sm"
                 value={editLabel}
@@ -348,7 +348,7 @@ export default function AdminReferrals() {
               Active
             </label>
             <label className="flex flex-col gap-1 text-xs">
-              <span className="text-[#6B7280]">Expires (leave empty for no expiry)</span>
+              <span className="text-[var(--text-muted)]">Expires (leave empty for no expiry)</span>
               <input
                 type="datetime-local"
                 className="rounded border border-[#D6DAE8] px-2 py-1 text-sm"
@@ -367,7 +367,7 @@ export default function AdminReferrals() {
               <button
                 type="button"
                 disabled={inviteBusy}
-                className="rounded border border-[#4578FC] bg-[#4578FC] px-3 py-1.5 text-xs text-white disabled:opacity-50"
+                className="rounded border border-[var(--accent)] bg-[var(--accent)] px-3 py-1.5 text-xs text-white disabled:opacity-50"
                 onClick={() => void onSaveEditInvite()}
               >
                 Save
@@ -377,13 +377,13 @@ export default function AdminReferrals() {
         </div>
       )}
 
-      <section className="rounded-xl border border-[#EBEDF5] bg-white shadow-sm overflow-hidden">
-        <div className="px-4 py-3 border-b border-[#EBEDF5]">
-          <h3 className="text-sm font-semibold text-[#181819]">Chains</h3>
+      <section className="ds-card !rounded-[var(--radius-md)] shadow-sm overflow-hidden">
+        <div className="px-4 py-3 border-b border-[var(--border)]">
+          <h3 className="text-sm font-semibold text-[var(--text)]">Chains</h3>
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
-            <thead className="bg-[#F8F9FC] text-[#6B7280]">
+            <thead className="bg-[#F8F9FC] text-[var(--text-muted)]">
               <tr>
                 <th className="px-3 py-2 text-left">Referrer</th>
                 <th className="px-3 py-2 text-left">Invited</th>
@@ -449,13 +449,13 @@ export default function AdminReferrals() {
         </div>
       </section>
 
-      <section className="rounded-xl border border-[#EBEDF5] bg-white shadow-sm overflow-hidden">
-        <div className="px-4 py-3 border-b border-[#EBEDF5]">
-          <h3 className="text-sm font-semibold text-[#181819]">Events</h3>
+      <section className="ds-card !rounded-[var(--radius-md)] shadow-sm overflow-hidden">
+        <div className="px-4 py-3 border-b border-[var(--border)]">
+          <h3 className="text-sm font-semibold text-[var(--text)]">Events</h3>
         </div>
         <div className="max-h-[320px] overflow-auto">
           <table className="min-w-full text-sm">
-            <thead className="bg-[#F8F9FC] text-[#6B7280]">
+            <thead className="bg-[#F8F9FC] text-[var(--text-muted)]">
               <tr>
                 <th className="px-3 py-2 text-left">Type</th>
                 <th className="px-3 py-2 text-left">Referrer</th>

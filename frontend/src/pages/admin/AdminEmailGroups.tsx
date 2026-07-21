@@ -86,7 +86,7 @@ export default function AdminEmailGroups() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder={t("admin.email.groups.searchPlaceholder")}
-            className="mt-1 w-full rounded-lg border border-black/[0.1] bg-white px-3 py-2 text-sm text-[var(--text)] outline-none focus:border-[#4578FC] focus:ring-1 focus:ring-[#4578FC]"
+            className="mt-1 w-full rounded-lg border border-black/[0.1] bg-white px-3 py-2 text-sm text-[var(--text)] outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)]"
             autoComplete="off"
           />
         </div>
@@ -98,7 +98,7 @@ export default function AdminEmailGroups() {
             id="audience-activity"
             value={activity}
             onChange={(e) => setActivity(e.target.value as typeof activity)}
-            className="mt-1 w-full rounded-lg border border-black/[0.1] bg-white px-3 py-2 text-sm text-[var(--text)] outline-none focus:border-[#4578FC] focus:ring-1 focus:ring-[#4578FC]"
+            className="mt-1 w-full rounded-lg border border-black/[0.1] bg-white px-3 py-2 text-sm text-[var(--text)] outline-none focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)]"
           >
             <option value="any">{t("admin.email.groups.activityAny")}</option>
             <option value="analyzed">{t("admin.email.groups.activityAnalyzed")}</option>
@@ -117,7 +117,7 @@ export default function AdminEmailGroups() {
       <div className="overflow-hidden rounded-xl border border-black/[0.08] bg-[var(--card)]">
         {loading ? (
           <div className="flex justify-center py-16" aria-busy="true">
-            <span className="h-8 w-8 animate-spin rounded-full border-2 border-[#4578FC] border-t-transparent" />
+            <span className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--accent)] border-t-transparent" />
           </div>
         ) : items.length === 0 ? (
           <p className="px-4 py-10 text-center text-sm text-[var(--text-muted)]">{t("admin.email.groups.tableEmpty")}</p>

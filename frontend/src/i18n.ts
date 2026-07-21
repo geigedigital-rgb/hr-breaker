@@ -355,6 +355,28 @@ const en = {
     mediumChancesScreening: "Moderate screening chances",
     highChancesPassing: "Good chance of passing",
     keyChanges: "Key changes",
+    keyChangesTitle: "What got better for you",
+    keyChangesSubtitle: "Not jargon — what each upgrade means when a recruiter opens your resume.",
+    keyChangesApplied: "{count} upgrades applied",
+    keyChangesImproved: "Done",
+    keyChangesSeeDetails: "See what we changed",
+    keyChangesHideDetails: "Hide details",
+    keyChangeBenefitStructureTitle: "Easier to skim in seconds",
+    keyChangeBenefitStructureWhy:
+      "Recruiters and ATS systems can find your sections faster — less chance of being skipped.",
+    keyChangeBenefitImpactTitle: "Your results sound more convincing",
+    keyChangeBenefitImpactWhy:
+      "Stronger wording and clear numbers help humans trust your experience at a glance.",
+    keyChangeBenefitSkillsTitle: "Skills match what the job asks",
+    keyChangeBenefitSkillsWhy:
+      "The tools and keywords from the posting are easier to spot — better screening odds.",
+    keyChangeBenefitSummaryTitle: "Stronger first impression",
+    keyChangeBenefitSummaryWhy:
+      "Your opening pitch now fits this role, so the first 10 seconds work harder for you.",
+    keyChangeBenefitExperienceTitle: "Experience hits the right points",
+    keyChangeBenefitExperienceWhy:
+      "Bullets are tighter and closer to what this job cares about.",
+    keyChangeBenefitDefaultWhy: "This part of your resume is clearer and better aligned with the role.",
     filterDetails: "Filter details",
     filterDetailsDesc: "Internal ATS checks: your score (left) and pass threshold (right). ✓ passed, ✗ failed.",
     done: "Done.",

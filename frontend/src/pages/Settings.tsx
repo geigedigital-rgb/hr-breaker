@@ -58,7 +58,7 @@ export default function Settings() {
   if (loading) {
     return (
       <div className="flex items-center gap-2 text-[var(--text-muted)] text-sm">
-        <span className="inline-block w-4 h-4 border-2 border-[#4578FC] border-t-transparent rounded-full animate-spin" />
+        <span className="inline-block w-4 h-4 border-2 border-[var(--accent)] border-t-transparent rounded-full animate-spin" />
         {t("settings.loading")}
       </div>
     );
@@ -66,17 +66,17 @@ export default function Settings() {
 
   return (
     <div className="space-y-6 flex flex-col h-full">
-      <h1 className="text-2xl font-bold text-[#181819] tracking-tight">{t("settings.title")}</h1>
+      <h1 className="text-2xl font-bold text-[var(--text)] tracking-tight">{t("settings.title")}</h1>
 
       <div className="flex flex-col lg:flex-row gap-8 w-full items-stretch">
-        <div className="flex-1 grid gap-6 md:grid-cols-2 content-start">
+        <div className="flex-1 grid gap-6 md:grid-cols-2 content-start min-w-0">
           {/* Account */}
-          <section className="rounded-2xl bg-[#FFFFFF] border border-[#EBEDF5] p-6 space-y-4">
-            <h2 className="text-base font-semibold text-[#181819]">{t("settings.account")}</h2>
+          <section className="rounded-2xl bg-[#FFFFFF] border border-[var(--border)] p-6 space-y-4">
+            <h2 className="text-base font-semibold text-[var(--text)]">{t("settings.account")}</h2>
           {user && user.id !== "local" ? (
             <>
               <div>
-                <p className="text-sm font-medium text-[#181819]">
+                <p className="text-sm font-medium text-[var(--text)]">
                   {user.name || user.email.split("@")[0]}
                 </p>
                 <p className="text-sm text-[var(--text-muted)] mt-0.5">{user.email}</p>
@@ -84,7 +84,7 @@ export default function Settings() {
               <button
                 type="button"
                 onClick={logout}
-                className="inline-flex items-center justify-center px-4 py-2 rounded-xl bg-[#EBEDF5] text-sm font-medium text-[#181819] hover:bg-[#E0E4EE] transition-colors"
+                className="inline-flex items-center justify-center px-4 py-2 rounded-xl bg-[#EBEDF5] text-sm font-medium text-[var(--text)] hover:bg-[#E0E4EE] transition-colors"
               >
                   {t("settings.logoutButton")}
               </button>
@@ -95,7 +95,7 @@ export default function Settings() {
                     disabled={billingPortalLoading}
                     onClick={() => void openBillingPortal()}
                     title={t("settings.cancelSubscriptionHint")}
-                    className="text-[11px] font-normal text-[#b4b8c5] hover:text-[#8b90a0] underline-offset-2 hover:underline focus:outline-none focus:ring-2 focus:ring-[#4578FC]/20 rounded px-0 py-1 disabled:opacity-60"
+                    className="text-[11px] font-normal text-[#b4b8c5] hover:text-[#8b90a0] underline-offset-2 hover:underline focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/20 rounded px-0 py-1 disabled:opacity-60"
                   >
                     {billingPortalLoading ? t("settings.openingBillingPortal") : t("settings.cancelSubscriptionLink")}
                   </button>
@@ -110,8 +110,8 @@ export default function Settings() {
         </section>
 
           {/* Resumes and data */}
-          <section className="rounded-2xl bg-[#FFFFFF] border border-[#EBEDF5] p-6 space-y-3">
-            <h2 className="text-base font-semibold text-[#181819]">{t("settings.resumesAndData")}</h2>
+          <section className="rounded-2xl bg-[#FFFFFF] border border-[var(--border)] p-6 space-y-3">
+            <h2 className="text-base font-semibold text-[var(--text)]">{t("settings.resumesAndData")}</h2>
           <p className="text-sm text-[var(--text-muted)]">
               {t("settings.resumesDataNote")}
           </p>
@@ -121,36 +121,36 @@ export default function Settings() {
         </section>
 
           {/* Preferences */}
-          <section className="rounded-2xl bg-[#FFFFFF] border border-[#EBEDF5] p-6 space-y-4">
-            <h2 className="text-base font-semibold text-[#181819]">{t("settings.preferences")}</h2>
-            <div className="space-y-3 text-sm">
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-[var(--text-muted)] flex items-center gap-2">
+          <section className="rounded-2xl bg-[#FFFFFF] border border-[var(--border)] p-6 space-y-4 min-w-0">
+            <h2 className="text-base font-semibold text-[var(--text)]">{t("settings.preferences")}</h2>
+            <div className="space-y-3 text-sm min-w-0">
+              <div className="flex items-center justify-between gap-3 min-w-0">
+                <span className="text-[var(--text-muted)] flex items-center gap-2 shrink-0">
                   <GlobeAltIcon className="w-4 h-4" />
                   {t("settings.language")}
                 </span>
                 <Listbox value={language} onChange={setLanguage}>
-                  <div className="relative mt-1 min-w-[180px]">
-                    <ListboxButton className="relative w-full min-w-[180px] cursor-pointer rounded-xl bg-[#F5F6FA] border border-[#EBEDF5] py-2 pl-3 pr-10 text-left text-sm text-[#181819] hover:bg-[#EBEDF5] transition-colors focus:outline-none focus:ring-2 focus:ring-[#4578FC]/30">
+                  <div className="relative min-w-0 w-[min(100%,9.5rem)]">
+                    <ListboxButton className="relative w-full cursor-pointer rounded-xl bg-[#F5F6FA] border border-[var(--border)] py-2 pl-3 pr-9 text-left text-sm text-[var(--text)] hover:bg-[#EBEDF5] transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/30">
                       <span className="block truncate font-medium">{language.name}</span>
                       <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
                         <ChevronDownIcon className="h-4 w-4 text-[var(--text-muted)]" aria-hidden="true" />
                       </span>
                     </ListboxButton>
-                    <ListboxOptions className="absolute z-10 mt-1 max-h-60 min-w-[180px] w-full overflow-auto rounded-xl bg-white py-1 shadow-lg border border-[#EBEDF5] ring-1 ring-black/5 focus:outline-none text-sm">
+                    <ListboxOptions className="absolute z-10 right-0 mt-1 max-h-60 w-full min-w-full overflow-auto rounded-xl bg-white py-1 shadow-lg border border-[var(--border)] ring-1 ring-black/5 focus:outline-none text-sm">
                       {LANGUAGES.map((lang) => (
                         <ListboxOption
                           key={lang.id}
-                          className="relative cursor-pointer select-none py-2 pl-10 pr-4 text-[#181819] data-[focus]:bg-[#F5F6FA] data-[focus]:text-[#4578FC] transition-colors"
+                          className="relative cursor-pointer select-none py-2 pl-10 pr-4 text-[var(--text)] data-[focus]:bg-[#F5F6FA] data-[focus]:text-[var(--accent)] transition-colors"
                           value={lang}
                         >
                           {({ selected }) => (
                             <>
-                              <span className={`block ${selected ? 'font-medium' : 'font-normal'}`}>
+                              <span className={`block truncate ${selected ? 'font-medium' : 'font-normal'}`}>
                                 {lang.name}
                               </span>
                               {selected ? (
-                                <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-[#4578FC]">
+                                <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-[var(--accent)]">
                                   <CheckIcon className="h-4 w-4" aria-hidden="true" />
                                 </span>
                               ) : null}
@@ -166,25 +166,25 @@ export default function Settings() {
           </section>
 
           {/* Notifications */}
-          <section className="rounded-2xl bg-[#FFFFFF] border border-[#EBEDF5] p-6 space-y-4">
-            <h2 className="text-base font-semibold text-[#181819]">{t("settings.notifications")}</h2>
+          <section className="rounded-2xl bg-[#FFFFFF] border border-[var(--border)] p-6 space-y-4">
+            <h2 className="text-base font-semibold text-[var(--text)]">{t("settings.notifications")}</h2>
             <div className="space-y-4">
               <label className="flex items-start gap-3 cursor-pointer">
                 <div className="flex items-center h-5">
-                  <input type="checkbox" defaultChecked className="w-4 h-4 text-[#4578FC] bg-white border-gray-300 rounded focus:ring-[#4578FC]" />
+                  <input type="checkbox" defaultChecked className="w-4 h-4 text-[var(--accent)] bg-white border-gray-300 rounded focus:ring-[var(--accent)]" />
                 </div>
                 <div className="flex flex-col">
-                  <span className="text-sm font-medium text-[#181819]">{t("settings.emailAlerts")}</span>
+                  <span className="text-sm font-medium text-[var(--text)]">{t("settings.emailAlerts")}</span>
                   <span className="text-xs text-[var(--text-muted)]">{t("settings.emailAlertsDesc")}</span>
                 </div>
               </label>
               
               <label className="flex items-start gap-3 cursor-pointer">
                 <div className="flex items-center h-5">
-                  <input type="checkbox" className="w-4 h-4 text-[#4578FC] bg-white border-gray-300 rounded focus:ring-[#4578FC]" />
+                  <input type="checkbox" className="w-4 h-4 text-[var(--accent)] bg-white border-gray-300 rounded focus:ring-[var(--accent)]" />
                 </div>
                 <div className="flex flex-col">
-                  <span className="text-sm font-medium text-[#181819]">{t("settings.marketingEmails")}</span>
+                  <span className="text-sm font-medium text-[var(--text)]">{t("settings.marketingEmails")}</span>
                   <span className="text-xs text-[var(--text-muted)]">{t("settings.marketingEmailsDesc")}</span>
                 </div>
               </label>

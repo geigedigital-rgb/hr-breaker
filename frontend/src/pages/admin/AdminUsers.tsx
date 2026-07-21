@@ -67,7 +67,7 @@ export default function AdminUsers() {
               setExtendedView(e.target.checked);
               setPage(0);
             }}
-            className="h-4 w-4 rounded border-[#CBD5E1] text-[#4578FC] focus:ring-[#4578FC]"
+            className="h-4 w-4 rounded border-[#CBD5E1] text-[var(--accent)] focus:ring-[var(--accent)]"
           />
           <span>{t("admin.users.extendedToggle")}</span>
         </label>
@@ -81,14 +81,14 @@ export default function AdminUsers() {
 
       {loading ? (
         <div className="flex flex-1 items-center justify-center py-12" aria-busy="true" aria-live="polite">
-          <span className="h-8 w-8 animate-spin rounded-full border-2 border-[#4578FC] border-t-transparent" aria-hidden />
+          <span className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--accent)] border-t-transparent" aria-hidden />
         </div>
       ) : users.length === 0 ? (
-        <p className="rounded-xl border border-[#EBEDF5] bg-[var(--card)] p-6 text-center text-sm text-[var(--text-muted)] shrink-0">
+        <p className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-6 text-center text-sm text-[var(--text-muted)] shrink-0">
           {t("admin.users.empty")}
         </p>
       ) : (
-        <div className="flex flex-col flex-1 min-h-0 rounded-xl border border-[#EBEDF5] bg-[var(--card)] shadow-sm overflow-hidden">
+        <div className="flex flex-col flex-1 min-h-0 rounded-xl border border-[var(--border)] bg-[var(--card)] shadow-sm overflow-hidden">
           <div className="flex-1 min-h-0 overflow-auto overscroll-contain">
             <table className="min-w-full divide-y divide-[#EBEDF5] text-sm" role="table" aria-label={t("admin.users.title")}>
               <thead className="sticky top-0 z-20 bg-[var(--card)] shadow-[0_1px_0_#EBEDF5]">
@@ -122,12 +122,12 @@ export default function AdminUsers() {
               </thead>
               <tbody className="divide-y divide-[#EBEDF5]">
                 {users.map((u) => (
-                  <tr key={u.id} className="hover:bg-[#F5F6FA]/50">
+                  <tr key={u.id} className="hover:bg-[var(--accent-soft)]/50">
                     <td className="px-4 py-3 align-top">
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                         <Link
                           to={`/admin/users/${u.id}`}
-                          className="font-medium text-[#4578FC] hover:underline focus:outline-none focus:ring-2 focus:ring-[#4578FC] rounded"
+                          className="font-medium text-[var(--accent)] hover:underline focus:outline-none focus:ring-2 focus:ring-[var(--accent)] rounded"
                           title={t("admin.users.openProfile")}
                         >
                           {u.email}

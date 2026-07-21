@@ -87,19 +87,19 @@ export default function Vacancies() {
   const totalPages = result ? Math.max(1, Math.ceil(result.total / pageSize)) : 0;
 
   return (
-    <div className="min-h-full bg-[#F2F3F9]">
-      <div className="max-w-3xl mx-auto p-4 lg:p-6 space-y-6">
+    <div className="min-h-full">
+      <div className="max-w-3xl mx-auto space-y-6">
         <div className="flex items-center gap-3">
           <Link
             to="/"
-            className="text-sm text-[var(--text-muted)] hover:text-[#181819] transition-colors"
+            className="text-sm text-[var(--text-muted)] hover:text-[var(--text)] transition-colors"
           >
             ← Главная
           </Link>
         </div>
 
-        <section className="rounded-2xl border border-[#EBEDF5] bg-white p-5 shadow-sm">
-          <h1 className="text-xl font-semibold text-[#181819] mb-4">Найти вакансию</h1>
+        <section className="ds-card p-5 shadow-sm">
+          <h1 className="text-xl font-semibold text-[var(--text)] mb-4">Найти вакансию</h1>
           <p className="text-sm text-[var(--text-muted)] mb-4">
             Поиск по объявлениям в Германии (Adzuna)
           </p>
@@ -111,13 +111,13 @@ export default function Vacancies() {
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
                 placeholder="Должность или ключевые слова"
-                className="flex-1 min-w-[200px] h-11 rounded-xl border border-[#EBEDF5] bg-[#FAFAFC] px-4 text-sm text-[#181819] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[#4578FC]/25 focus:border-[#4578FC]/40"
+                className="flex-1 min-w-[200px] h-11 rounded-xl border border-[var(--border)] bg-[#FAFAFC] px-4 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/25 focus:border-[var(--accent)]/40"
                 aria-label="Поиск вакансий"
               />
               <button
                 type="submit"
                 disabled={loading || !q.trim()}
-                className="inline-flex items-center gap-2 h-11 px-5 rounded-xl bg-[#4578FC] text-white text-sm font-semibold hover:bg-[#3d6ae6] disabled:opacity-50 disabled:pointer-events-none transition-colors focus:outline-none focus:ring-2 focus:ring-[#4578FC]/40 focus:ring-offset-2"
+                className="inline-flex items-center gap-2 h-11 px-5 rounded-xl bg-[var(--accent)] text-white text-sm font-semibold hover:bg-[#3d6ae6] disabled:opacity-50 disabled:pointer-events-none transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/40 focus:ring-offset-2"
               >
                 <MagnifyingGlassIcon className="w-4 h-4" />
                 Найти
@@ -128,7 +128,7 @@ export default function Vacancies() {
               <button
                 type="button"
                 onClick={() => setFiltersOpen((o) => !o)}
-                className="flex items-center gap-2 text-sm font-medium text-[var(--text-muted)] hover:text-[#181819] transition-colors"
+                className="flex items-center gap-2 text-sm font-medium text-[var(--text-muted)] hover:text-[var(--text)] transition-colors"
               >
                 {filtersOpen ? (
                   <ChevronUpIcon className="w-4 h-4" />
@@ -138,7 +138,7 @@ export default function Vacancies() {
                 Фильтры
               </button>
               {filtersOpen && (
-                <div className="mt-3 p-4 rounded-xl bg-[#FAFAFC] border border-[#EBEDF5] space-y-3">
+                <div className="mt-3 p-4 rounded-xl bg-[#FAFAFC] border border-[var(--border)] space-y-3">
                   <div>
                     <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">
                       Город / регион
@@ -148,25 +148,25 @@ export default function Vacancies() {
                       value={location}
                       onChange={(e) => setLocation(e.target.value)}
                       placeholder="Например Berlin"
-                      className="w-full max-w-xs h-9 rounded-lg border border-[#EBEDF5] bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#4578FC]/25"
+                      className="w-full max-w-xs h-9 rounded-lg border border-[var(--border)] bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/25"
                     />
                   </div>
                   <div className="flex flex-wrap gap-4">
-                    <label className="flex items-center gap-2 text-sm text-[#181819]">
+                    <label className="flex items-center gap-2 text-sm text-[var(--text)]">
                       <input
                         type="checkbox"
                         checked={fullTime === true}
                         onChange={(e) => setFullTime(e.target.checked ? true : null)}
-                        className="rounded border-[#EBEDF5] text-[#4578FC] focus:ring-[#4578FC]/30"
+                        className="rounded border-[var(--border)] text-[var(--accent)] focus:ring-[var(--accent)]/30"
                       />
                       Full-time
                     </label>
-                    <label className="flex items-center gap-2 text-sm text-[#181819]">
+                    <label className="flex items-center gap-2 text-sm text-[var(--text)]">
                       <input
                         type="checkbox"
                         checked={permanent}
                         onChange={(e) => setPermanent(e.target.checked)}
-                        className="rounded border-[#EBEDF5] text-[#4578FC] focus:ring-[#4578FC]/30"
+                        className="rounded border-[var(--border)] text-[var(--accent)] focus:ring-[var(--accent)]/30"
                       />
                       Постоянный контракт
                     </label>
@@ -181,7 +181,7 @@ export default function Vacancies() {
                       value={salaryMin}
                       onChange={(e) => setSalaryMin(e.target.value)}
                       placeholder="50000"
-                      className="w-32 h-9 rounded-lg border border-[#EBEDF5] bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#4578FC]/25"
+                      className="w-32 h-9 rounded-lg border border-[var(--border)] bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/25"
                     />
                   </div>
                 </div>
@@ -197,7 +197,7 @@ export default function Vacancies() {
                   key={query}
                   type="button"
                   onClick={() => handleBadge(query)}
-                  className="px-3 py-1.5 rounded-lg text-sm font-medium bg-[#EBEDF5] text-[#181819] hover:bg-[#E0E4EE] transition-colors focus:outline-none focus:ring-2 focus:ring-[#4578FC]/20"
+                  className="px-3 py-1.5 rounded-lg text-sm font-medium bg-[#EBEDF5] text-[var(--text)] hover:bg-[#E0E4EE] transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/20"
                 >
                   {query}
                 </button>
@@ -216,8 +216,8 @@ export default function Vacancies() {
         )}
 
         {loading && (
-          <div className="rounded-2xl border border-[#EBEDF5] bg-white p-6 flex flex-col items-center justify-center gap-3">
-            <span className="inline-block w-8 h-8 border-2 border-[#4578FC] border-t-transparent rounded-full animate-spin" aria-hidden />
+          <div className="ds-card p-6 flex flex-col items-center justify-center gap-3">
+            <span className="inline-block w-8 h-8 border-2 border-[var(--accent)] border-t-transparent rounded-full animate-spin" aria-hidden />
             <p className="text-sm text-[var(--text-muted)]">Загрузка вакансий…</p>
           </div>
         )}
@@ -228,8 +228,8 @@ export default function Vacancies() {
               Найдено: {result.total}. Страница {result.page} из {totalPages}.
             </p>
             {result.items.length === 0 ? (
-              <div className="rounded-2xl border border-[#EBEDF5] bg-white p-8 text-center">
-                <p className="text-[#181819] font-medium">По запросу ничего не найдено</p>
+              <div className="ds-card p-8 text-center">
+                <p className="text-[var(--text)] font-medium">По запросу ничего не найдено</p>
                 <p className="text-sm text-[var(--text-muted)] mt-1">Измените параметры или попробуйте другие слова</p>
               </div>
             ) : (
@@ -237,7 +237,7 @@ export default function Vacancies() {
                 {result.items.map((card) => (
                   <li
                     key={card.id}
-                    className="rounded-2xl border border-[#EBEDF5] bg-white p-4 shadow-sm hover:border-[#c8cddc] transition-colors"
+                    className="ds-card p-4 shadow-sm hover:border-[#c8cddc] transition-colors"
                   >
                     <a
                       href={card.url}
@@ -246,10 +246,10 @@ export default function Vacancies() {
                       className="group block"
                     >
                       <div className="flex items-start justify-between gap-2">
-                        <h2 className="text-base font-semibold text-[#181819] group-hover:text-[#4578FC] transition-colors line-clamp-2">
+                        <h2 className="text-base font-semibold text-[var(--text)] group-hover:text-[var(--accent)] transition-colors line-clamp-2">
                           {card.title}
                         </h2>
-                        <ArrowTopRightOnSquareIcon className="w-4 h-4 shrink-0 text-[var(--text-muted)] group-hover:text-[#4578FC]" />
+                        <ArrowTopRightOnSquareIcon className="w-4 h-4 shrink-0 text-[var(--text-muted)] group-hover:text-[var(--accent)]" />
                       </div>
                       <p className="mt-1 flex items-center gap-1.5 text-sm text-[var(--text-muted)]">
                         <BriefcaseIcon className="w-4 h-4 shrink-0" />
@@ -263,7 +263,7 @@ export default function Vacancies() {
                       )}
                       <div className="mt-2 flex flex-wrap gap-2 text-xs text-[var(--text-muted)]">
                         {card.salary_text && (
-                          <span className="font-medium text-[#181819]">{card.salary_text}</span>
+                          <span className="font-medium text-[var(--text)]">{card.salary_text}</span>
                         )}
                         {card.contract_type && (
                           <span>{card.contract_type}</span>
@@ -292,7 +292,7 @@ export default function Vacancies() {
                   type="button"
                   disabled={page <= 1}
                   onClick={() => search(q, page - 1)}
-                  className="px-4 py-2 rounded-xl border border-[#EBEDF5] bg-white text-sm font-medium text-[#181819] hover:bg-[#FAFAFC] disabled:opacity-50 disabled:pointer-events-none"
+                  className="px-4 py-2 ds-card !rounded-[var(--radius-md)] text-sm font-medium text-[var(--text)] hover:bg-[#FAFAFC] disabled:opacity-50 disabled:pointer-events-none"
                 >
                   Назад
                 </button>
@@ -303,7 +303,7 @@ export default function Vacancies() {
                   type="button"
                   disabled={page >= totalPages}
                   onClick={() => search(q, page + 1)}
-                  className="px-4 py-2 rounded-xl border border-[#EBEDF5] bg-white text-sm font-medium text-[#181819] hover:bg-[#FAFAFC] disabled:opacity-50 disabled:pointer-events-none"
+                  className="px-4 py-2 ds-card !rounded-[var(--radius-md)] text-sm font-medium text-[var(--text)] hover:bg-[#FAFAFC] disabled:opacity-50 disabled:pointer-events-none"
                 >
                   Вперёд
                 </button>

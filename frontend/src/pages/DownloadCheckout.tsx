@@ -31,16 +31,16 @@ function StepItem({
     "w-7 h-7 rounded-full border flex items-center justify-center text-xs font-semibold shrink-0 transition-colors";
   const cls =
     state === "done"
-      ? `${baseCls} border-[#4578FC] bg-[#4578FC] text-white`
+      ? `${baseCls} border-[var(--accent)] bg-[var(--accent)] text-white`
       : state === "active"
-        ? `${baseCls} border-[#4578FC] bg-[#EEF3FF] text-[#2f40df]`
+        ? `${baseCls} border-[var(--accent)] bg-[#EEF3FF] text-[var(--accent)]`
         : `${baseCls} border-[#D7DBE8] bg-white text-[#8A93AB]`;
   return (
     <div className="inline-flex items-center gap-2 min-w-0">
       <span className={cls}>
         {state === "done" ? <CheckIcon className="w-4 h-4" /> : idx}
       </span>
-      <span className={`text-xs md:text-sm truncate ${state === "todo" ? "text-[#8A93AB]" : "text-[#181819] font-medium"}`}>
+      <span className={`text-xs md:text-sm truncate ${state === "todo" ? "text-[#8A93AB]" : "text-[var(--text)] font-medium"}`}>
         {label}
       </span>
     </div>
@@ -116,7 +116,7 @@ const TRUST_EMPLOYER_LOGOS: { file: string; label: string }[] = [
 function EmployerTrustStrip() {
   return (
     <div className="w-full">
-      <p className="text-center text-[11px] font-semibold uppercase tracking-[0.1em] text-[#6B7280] mb-2 sm:mb-2.5">
+      <p className="text-center text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)] mb-2 sm:mb-2.5">
         {t("upgrade.trustEmployersTitle")}
       </p>
       <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-4 sm:gap-x-8">
@@ -223,7 +223,7 @@ export default function DownloadCheckout() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F5F8FF] text-[#181819]">
+    <div className="min-h-screen bg-[#F5F8FF] text-[var(--text)]">
       <header className="border-b border-[#E6EAF4] bg-white/85 backdrop-blur-sm sticky top-0 z-20">
         <div className="max-w-6xl mx-auto px-4 md:px-6 h-16 flex items-center justify-between gap-4">
           <Link to={returnTo} className="inline-flex items-center gap-2 shrink-0">
@@ -244,7 +244,7 @@ export default function DownloadCheckout() {
           <button
             type="button"
             onClick={() => navigate(returnTo)}
-            className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-[#8A93AB] hover:text-[#181819] hover:bg-[#F2F4FA] transition-colors"
+            className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-[#8A93AB] hover:text-[var(--text)] hover:bg-[#F2F4FA] transition-colors"
             aria-label="Close and return"
           >
             <XMarkIcon className="w-5 h-5" />
@@ -257,21 +257,21 @@ export default function DownloadCheckout() {
           <h2 className="mx-auto max-w-full text-center text-[clamp(13px,4.35vw,26px)] font-bold leading-tight tracking-tight text-[#111827] whitespace-nowrap">
             {t("upgrade.sandboxResumeOptimizedTitle")}
           </h2>
-          <div className="rounded-xl bg-white border border-[#E8ECF4] px-3 py-4 grid grid-cols-3 gap-2 text-center shadow-[0_1px_3px_rgba(15,23,42,0.04)]">
+          <div className="ds-card !rounded-[var(--radius-md)] px-3 py-4 grid grid-cols-3 gap-2 text-center shadow-[0_1px_3px_rgba(15,23,42,0.04)]">
             <div className="min-w-0 space-y-1">
               <ShieldCheckIcon className="mx-auto h-6 w-6 text-emerald-500" aria-hidden />
               <p className="text-[11px] font-semibold text-[#111827] leading-tight">{t("upgrade.sandboxBenefitAtsTitle")}</p>
-              <p className="text-[10px] text-[#6B7280] leading-tight">{t("upgrade.sandboxBenefitAtsSub")}</p>
+              <p className="text-[10px] text-[var(--text-muted)] leading-tight">{t("upgrade.sandboxBenefitAtsSub")}</p>
             </div>
             <div className="min-w-0 space-y-1 border-x border-[#E5E7EB] px-1">
               <SparklesIcon className="mx-auto h-6 w-6 text-violet-500" aria-hidden />
               <p className="text-[11px] font-semibold text-[#111827] leading-tight">{t("upgrade.sandboxBenefitInterviewsTitle")}</p>
-              <p className="text-[10px] text-[#6B7280] leading-tight">{t("upgrade.sandboxBenefitInterviewsSub")}</p>
+              <p className="text-[10px] text-[var(--text-muted)] leading-tight">{t("upgrade.sandboxBenefitInterviewsSub")}</p>
             </div>
             <div className="min-w-0 space-y-1">
               <RocketLaunchIcon className="mx-auto h-6 w-6 text-pink-500" aria-hidden />
               <p className="text-[11px] font-semibold text-[#111827] leading-tight">{t("upgrade.sandboxBenefitInstantTitle")}</p>
-              <p className="text-[10px] text-[#6B7280] leading-tight">{t("upgrade.sandboxBenefitInstantSub")}</p>
+              <p className="text-[10px] text-[var(--text-muted)] leading-tight">{t("upgrade.sandboxBenefitInstantSub")}</p>
             </div>
           </div>
         </div>
@@ -280,7 +280,7 @@ export default function DownloadCheckout() {
           <span className="block text-3xl leading-tight md:text-[2rem] md:leading-tight font-semibold tracking-tight text-[#111827]">
             {t("upgrade.checkoutPageTitleLine1")}
           </span>
-          <span className="mt-2 hidden md:block text-lg md:text-xl font-medium leading-snug tracking-tight text-[#4B5563]">
+          <span className="mt-2 hidden md:block text-lg md:text-xl font-medium leading-snug tracking-tight text-[var(--text-muted)]">
             {t("upgrade.checkoutPageTitleLine2")}
           </span>
         </h1>
@@ -306,9 +306,9 @@ export default function DownloadCheckout() {
                     <button
                       type="button"
                       onClick={() => setSelectedPlan("trial")}
-                      className={`w-full text-left rounded-xl bg-white p-4 sm:p-5 transition-shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4578FC]/35 focus-visible:ring-offset-2 ${
+                      className={`w-full text-left rounded-xl bg-white p-4 sm:p-5 transition-shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/35 focus-visible:ring-offset-2 ${
                         selectedPlan === "trial"
-                          ? "border-2 border-[#4578FC] shadow-[0_1px_3px_rgba(69,120,252,0.12)]"
+                          ? "border-2 border-[var(--accent)] shadow-[0_1px_3px_rgba(69,120,252,0.12)]"
                           : "border border-[#E5E7EB] hover:border-[#D1D5DB]"
                       }`}
                     >
@@ -316,12 +316,12 @@ export default function DownloadCheckout() {
                         <div className="flex min-w-0 items-center gap-2 sm:gap-2.5">
                           <span
                             className={`flex h-4 w-4 shrink-0 rounded-full border-2 items-center justify-center ${
-                              selectedPlan === "trial" ? "border-[#4578FC]" : "border-[#D1D5DB]"
+                              selectedPlan === "trial" ? "border-[var(--accent)]" : "border-[#D1D5DB]"
                             }`}
                             aria-hidden
                           >
                             {selectedPlan === "trial" ? (
-                              <span className="h-2 w-2 rounded-full bg-[#4578FC]" />
+                              <span className="h-2 w-2 rounded-full bg-[var(--accent)]" />
                             ) : null}
                           </span>
                           <div className="flex min-w-0 flex-wrap items-start gap-x-2 gap-y-1">
@@ -337,7 +337,7 @@ export default function DownloadCheckout() {
                         </div>
                         <div className="shrink-0 text-right">
                           <p className="flex flex-wrap items-baseline justify-end gap-2 text-2xl sm:text-3xl font-bold tracking-tight text-[#111827] tabular-nums leading-none">
-                            <span className="text-lg sm:text-xl font-semibold text-[#9CA3AF] line-through decoration-[#9CA3AF]">
+                            <span className="text-lg sm:text-xl font-semibold text-[var(--text-tertiary)] line-through decoration-[#9CA3AF]">
                               {PRICE_WAS_TRIAL}
                             </span>
                             <span>{t("upgrade.trialPrice")}</span>
@@ -348,12 +348,12 @@ export default function DownloadCheckout() {
                         <div className="flex items-start gap-2.5">
                           <span
                             className={`mt-0.5 flex h-4 w-4 shrink-0 rounded-full border-2 items-center justify-center ${
-                              selectedPlan === "trial" ? "border-[#4578FC]" : "border-[#D1D5DB]"
+                              selectedPlan === "trial" ? "border-[var(--accent)]" : "border-[#D1D5DB]"
                             }`}
                             aria-hidden
                           >
                             {selectedPlan === "trial" ? (
-                              <span className="h-2 w-2 rounded-full bg-[#4578FC]" />
+                              <span className="h-2 w-2 rounded-full bg-[var(--accent)]" />
                             ) : null}
                           </span>
                           <div className="flex min-w-0 flex-col gap-0.5">
@@ -363,7 +363,7 @@ export default function DownloadCheckout() {
                           </div>
                         </div>
                         <p className="flex flex-wrap items-baseline gap-2 text-xl lg:text-2xl font-bold tracking-tight text-[#111827] tabular-nums leading-none">
-                          <span className="text-base lg:text-lg font-semibold text-[#9CA3AF] line-through decoration-[#9CA3AF]">
+                          <span className="text-base lg:text-lg font-semibold text-[var(--text-tertiary)] line-through decoration-[#9CA3AF]">
                             {PRICE_WAS_TRIAL}
                           </span>
                           <span>{t("upgrade.trialPrice")}</span>
@@ -381,9 +381,9 @@ export default function DownloadCheckout() {
                   <button
                     type="button"
                     onClick={() => setSelectedPlan("monthly")}
-                    className={`w-full text-left rounded-xl bg-white p-4 sm:p-5 transition-shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4578FC]/25 focus-visible:ring-offset-2 ${
+                    className={`w-full text-left rounded-xl bg-white p-4 sm:p-5 transition-shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/25 focus-visible:ring-offset-2 ${
                       selectedPlan === "monthly"
-                        ? "border-2 border-[#4578FC] shadow-[0_1px_3px_rgba(69,120,252,0.12)]"
+                        ? "border-2 border-[var(--accent)] shadow-[0_1px_3px_rgba(69,120,252,0.12)]"
                         : "border border-[#E5E7EB] hover:border-[#D1D5DB]"
                     }`}
                   >
@@ -391,12 +391,12 @@ export default function DownloadCheckout() {
                       <div className="flex min-w-0 items-center gap-2.5">
                         <span
                           className={`flex h-4 w-4 shrink-0 rounded-full border-2 items-center justify-center ${
-                            selectedPlan === "monthly" ? "border-[#4578FC]" : "border-[#D1D5DB]"
+                            selectedPlan === "monthly" ? "border-[var(--accent)]" : "border-[#D1D5DB]"
                           }`}
                           aria-hidden
                         >
                           {selectedPlan === "monthly" ? (
-                            <span className="h-2 w-2 rounded-full bg-[#4578FC]" />
+                            <span className="h-2 w-2 rounded-full bg-[var(--accent)]" />
                           ) : null}
                         </span>
                         <div className="flex min-w-0 flex-col gap-0.5">
@@ -407,12 +407,12 @@ export default function DownloadCheckout() {
                       </div>
                       <div className="shrink-0 text-right">
                         <p className="flex flex-wrap items-baseline justify-end gap-2 text-2xl sm:text-3xl font-bold tracking-tight text-[#111827] tabular-nums leading-none">
-                          <span className="text-lg sm:text-xl font-semibold text-[#9CA3AF] line-through decoration-[#9CA3AF]">
+                          <span className="text-lg sm:text-xl font-semibold text-[var(--text-tertiary)] line-through decoration-[#9CA3AF]">
                             {PRICE_WAS_MONTHLY}
                           </span>
                           <span>
                             {t("upgrade.monthlyPrice")}
-                            <span className="text-base font-semibold text-[#6B7280]"> /mo</span>
+                            <span className="text-base font-semibold text-[var(--text-muted)]"> /mo</span>
                           </span>
                         </p>
                       </div>
@@ -421,12 +421,12 @@ export default function DownloadCheckout() {
                         <div className="flex items-start gap-2.5">
                           <span
                             className={`mt-0.5 flex h-4 w-4 shrink-0 rounded-full border-2 items-center justify-center ${
-                              selectedPlan === "monthly" ? "border-[#4578FC]" : "border-[#D1D5DB]"
+                              selectedPlan === "monthly" ? "border-[var(--accent)]" : "border-[#D1D5DB]"
                             }`}
                             aria-hidden
                           >
                             {selectedPlan === "monthly" ? (
-                              <span className="h-2 w-2 rounded-full bg-[#4578FC]" />
+                              <span className="h-2 w-2 rounded-full bg-[var(--accent)]" />
                             ) : null}
                           </span>
                           <div className="flex min-w-0 flex-col gap-0.5">
@@ -436,12 +436,12 @@ export default function DownloadCheckout() {
                           </div>
                         </div>
                       <p className="flex flex-wrap items-baseline gap-2 text-xl lg:text-2xl font-bold tracking-tight text-[#111827] tabular-nums leading-none">
-                        <span className="text-base lg:text-lg font-semibold text-[#9CA3AF] line-through decoration-[#9CA3AF]">
+                        <span className="text-base lg:text-lg font-semibold text-[var(--text-tertiary)] line-through decoration-[#9CA3AF]">
                           {PRICE_WAS_MONTHLY}
                         </span>
                         <span>
                           {t("upgrade.monthlyPrice")}
-                          <span className="text-sm font-semibold text-[#6B7280]"> /mo</span>
+                          <span className="text-sm font-semibold text-[var(--text-muted)]"> /mo</span>
                         </span>
                       </p>
                     </div>
@@ -510,7 +510,7 @@ export default function DownloadCheckout() {
                   </>
                 )}
               </button>
-              <p className="mt-2.5 text-center text-[11px] leading-snug text-[#6B7280] sm:text-xs sm:leading-normal">
+              <p className="mt-2.5 text-center text-[11px] leading-snug text-[var(--text-muted)] sm:text-xs sm:leading-normal">
                 {t("upgrade.sandboxCancelHint")}
               </p>
             </div>
@@ -542,7 +542,7 @@ export default function DownloadCheckout() {
               </>
             )}
           </button>
-          <p className="mt-3 text-center text-[11px] leading-snug text-[#6B7280] px-0.5">{t("upgrade.sandboxCancelHint")}</p>
+          <p className="mt-3 text-center text-[11px] leading-snug text-[var(--text-muted)] px-0.5">{t("upgrade.sandboxCancelHint")}</p>
         </div>
       </div>
 

@@ -174,7 +174,7 @@ export default function Login() {
   if (loading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
-        <span className="h-8 w-8 animate-spin rounded-full border-2 border-[#4578FC] border-t-transparent" aria-hidden />
+        <span className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--accent)] border-t-transparent" aria-hidden />
       </div>
     );
   }
@@ -184,7 +184,7 @@ export default function Login() {
   }
 
   return (
-    <div className="flex min-h-screen bg-[#F2F3F9]">
+    <div className="flex min-h-screen bg-[var(--bg-page)]">
       <style>{`
         @keyframes login-block-in {
           from { opacity: 0; transform: translateY(6px); }
@@ -197,7 +197,7 @@ export default function Login() {
       {/* Left panel: visible background + resume card with shadow + asymmetric blocks */}
       <div
         className="hidden w-[45%] min-h-screen lg:flex flex-col justify-between p-10 relative overflow-hidden"
-        style={{ background: "linear-gradient(105deg, #faf5ff 0%, #fce7f3 100%)" }}
+        style={{ background: "var(--grad-page)" }}
       >
         <div className="relative z-10 flex items-center gap-2">
           <img src="/logo-color.svg" alt="PitchCV" className="w-8 h-8 object-contain shrink-0" />
@@ -277,7 +277,7 @@ export default function Login() {
       {/* Right panel — sign-in form */}
       <div className="flex-1 flex items-center justify-center p-6 lg:p-12 bg-white">
         <div className="w-full max-w-[400px]">
-          <h1 className="text-2xl font-bold text-[#181819] tracking-tight">{t("login.title")}</h1>
+          <h1 className="text-2xl font-bold text-[var(--text)] tracking-tight">{t("login.title")}</h1>
           <p className="mt-1.5 text-sm text-[var(--text-muted)]">
             {t("login.welcome")}
           </p>
@@ -308,18 +308,18 @@ export default function Login() {
               )}
               {!pendingLoading && pendingData && (
                 <div className="mt-3 space-y-2.5">
-                  <div className="flex items-center gap-2.5 rounded-xl bg-white border border-[#EBEDF5] px-3 py-2.5">
-                    <DocumentTextIcon className="w-4 h-4 shrink-0 text-[#4578FC]" />
-                    <span className="text-xs font-medium text-[#181819] truncate" title={pendingData.resume_filename}>
+                  <div className="flex items-center gap-2.5 ds-card !rounded-[var(--radius-md)] px-3 py-2.5">
+                    <DocumentTextIcon className="w-4 h-4 shrink-0 text-[var(--accent)]" />
+                    <span className="text-xs font-medium text-[var(--text)] truncate" title={pendingData.resume_filename}>
                       {pendingData.resume_filename}
                     </span>
                   </div>
                   {!pendingData.resume_only && (
-                    <div className="flex items-center gap-2.5 rounded-xl bg-white border border-[#EBEDF5] px-3 py-2.5">
+                    <div className="flex items-center gap-2.5 ds-card !rounded-[var(--radius-md)] px-3 py-2.5">
                       <DocumentTextIcon className="w-4 h-4 shrink-0 text-[var(--text-muted)]" />
                       <div className="min-w-0 flex-1 flex flex-col items-start gap-0.5">
                         {pendingData.job_title && (
-                          <span className="text-xs font-medium text-[#181819] truncate max-w-full">{pendingData.job_title}</span>
+                          <span className="text-xs font-medium text-[var(--text)] truncate max-w-full">{pendingData.job_title}</span>
                         )}
                         <span className="text-[11px] text-[var(--text-muted)]">{t("login.jobDescription")}</span>
                       </div>
@@ -354,7 +354,7 @@ export default function Login() {
 
           <form onSubmit={handleSubmit} className="mt-6 space-y-4">
             <div>
-              <label htmlFor="login-email" className="block text-sm font-medium text-[#181819]">
+              <label htmlFor="login-email" className="block text-sm font-medium text-[var(--text)]">
                 {t("login.email")}
               </label>
               <div className="relative mt-1.5">
@@ -367,7 +367,7 @@ export default function Login() {
                   onChange={(e) => setEmail(e.target.value)}
                   onFocus={() => setShowPasswordField(true)}
                   onClick={() => setShowPasswordField(true)}
-                  className="w-full rounded-xl border border-[#EBEDF5] bg-white py-2.5 pl-10 pr-3 text-[#181819] placeholder:text-[var(--text-muted)] focus:border-[#4578FC] focus:outline-none focus:ring-2 focus:ring-[#4578FC]/30"
+                  className="w-full ds-card !rounded-[var(--radius-md)] py-2.5 pl-10 pr-3 text-[var(--text)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/30"
                   placeholder="Email"
                 />
               </div>
@@ -375,7 +375,7 @@ export default function Login() {
             {showPasswordField && (
               <>
                 <div>
-                  <label htmlFor="login-password" className="block text-sm font-medium text-[#181819]">
+                  <label htmlFor="login-password" className="block text-sm font-medium text-[var(--text)]">
                     {t("login.password")}
                   </label>
                   <div className="relative mt-1.5">
@@ -386,7 +386,7 @@ export default function Login() {
                       autoComplete={isRegister ? "new-password" : "current-password"}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="w-full rounded-xl border border-[#EBEDF5] bg-white py-2.5 pl-10 pr-3 text-[#181819] placeholder:text-[var(--text-muted)] focus:border-[#4578FC] focus:outline-none focus:ring-2 focus:ring-[#4578FC]/30"
+                      className="w-full ds-card !rounded-[var(--radius-md)] py-2.5 pl-10 pr-3 text-[var(--text)] placeholder:text-[var(--text-muted)] focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/30"
                       placeholder={t("login.password")}
                       required
                     />
@@ -400,14 +400,14 @@ export default function Login() {
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="w-full rounded-xl bg-[#4578FC] py-3 text-sm font-medium text-white transition-colors hover:bg-[#3a6ae0] disabled:opacity-60"
+                  className="w-full rounded-xl bg-[var(--accent)] py-3 text-sm font-medium text-white transition-colors hover:bg-[#3a6ae0] disabled:opacity-60"
                 >
                   {submitting ? "…" : isRegister ? t("login.register") : t("login.signIn")}
                 </button>
                 <button
                   type="button"
                   onClick={() => { setIsRegister((r) => !r); setError(null); }}
-                  className="w-full text-sm text-[var(--text-muted)] hover:text-[#181819]"
+                  className="w-full text-sm text-[var(--text-muted)] hover:text-[var(--text)]"
                 >
                   {isRegister ? t("login.haveAccount") : t("login.noAccount")}
                 </button>

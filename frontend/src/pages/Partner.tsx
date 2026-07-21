@@ -152,7 +152,7 @@ function ReferralsFilterTabs({
             onClick={() => setFilterTab(id)}
             className={`border-b-2 pb-2.5 text-[12px] font-medium transition-colors ${
               active
-                ? "border-[#4578FC] text-[#12131A]"
+                ? "border-[var(--accent)] text-[#12131A]"
                 : "border-transparent text-[#94A3B8] hover:border-slate-200 hover:text-[#64748B]"
             }`}
           >
@@ -373,7 +373,7 @@ export default function Partner() {
     return (
       <div className="flex items-center justify-center py-24" aria-busy="true" aria-live="polite">
         <span
-          className="h-9 w-9 animate-spin rounded-full border-2 border-[#4578FC] border-t-transparent"
+          className="h-9 w-9 animate-spin rounded-full border-2 border-[var(--accent)] border-t-transparent"
           aria-hidden
         />
       </div>
@@ -383,8 +383,8 @@ export default function Partner() {
   const dash = (k: string) => t(`partner.dash.${k}`);
 
   return (
-    <div className="min-h-full bg-[#F4F5F8] pb-12">
-      <div className="max-w-5xl mx-auto px-4 sm:px-5 py-6 sm:py-8 flex flex-col gap-7 sm:gap-8">
+    <div className="min-h-full pb-12">
+      <div className="max-w-5xl mx-auto flex flex-col gap-7 sm:gap-8">
         {error && (
           <div
             className="rounded-2xl border border-red-200 bg-red-50/90 px-4 py-3 text-[13px] text-red-800 shadow-sm"
@@ -454,7 +454,7 @@ export default function Partner() {
           <div className="flex flex-col gap-5 lg:flex-row lg:items-stretch lg:justify-between">
             <div className="min-w-0 flex-1 space-y-3">
               <div className="flex items-center gap-2 text-[#12131A]">
-                <PartnerHugeIcon icon={Link01Icon} size={18} className="shrink-0 text-[#4578FC]" aria-hidden />
+                <PartnerHugeIcon icon={Link01Icon} size={18} className="shrink-0 text-[var(--accent)]" aria-hidden />
                 <h2 className="text-[14px] font-semibold">{dash("referralLinkLabel")}</h2>
               </div>
               <p className="text-[12px] text-[#64748B] leading-snug">{t("partner.shareLinkHint")}</p>
@@ -467,7 +467,7 @@ export default function Partner() {
                     type="button"
                     onClick={onCopy}
                     className={`inline-flex flex-1 sm:flex-none items-center justify-center gap-1.5 rounded-xl px-4 py-2.5 text-[13px] font-semibold shadow-sm min-h-[44px] ${
-                      copied ? "bg-emerald-600 text-white" : "bg-[#4578FC] text-white hover:bg-[#3d6ae8]"
+                      copied ? "bg-emerald-600 text-white" : "bg-[var(--accent)] text-white hover:bg-[#3d6ae8]"
                     }`}
                   >
                     {copied ? (
@@ -505,7 +505,7 @@ export default function Partner() {
               </div>
             </div>
             <div className="flex shrink-0 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-[#E2E8F0] bg-[#FAFBFF] px-6 py-5 text-center lg:max-w-[220px]">
-              <PartnerHugeIcon icon={GiftIcon} size={40} className="text-[#4578FC]" />
+              <PartnerHugeIcon icon={GiftIcon} size={40} className="text-[var(--accent)]" />
               <p className="text-[12px] font-medium leading-snug text-[#475569]">{dash("earnBlurb")}</p>
             </div>
           </div>
@@ -567,7 +567,7 @@ export default function Partner() {
             <button
               type="button"
               onClick={() => setReferralsModalOpen(true)}
-              className="mx-4 mb-4 mt-4 w-[calc(100%-2rem)] rounded-xl border border-[#E2E8F0] bg-white py-2.5 text-center text-[12px] font-semibold text-[#4578FC] hover:bg-[#F8FAFC] sm:mx-5 sm:mb-5 sm:w-[calc(100%-2.5rem)]"
+              className="mx-4 mb-4 mt-4 w-[calc(100%-2rem)] rounded-xl border border-[#E2E8F0] bg-white py-2.5 text-center text-[12px] font-semibold text-[var(--accent)] hover:bg-[#F8FAFC] sm:mx-5 sm:mb-5 sm:w-[calc(100%-2.5rem)]"
             >
               {dash("referralsViewFull")}
             </button>
@@ -624,7 +624,7 @@ export default function Partner() {
             <button
               type="button"
               onClick={openLeaderboardModal}
-              className="mt-4 w-full rounded-xl border border-[#E2E8F0] bg-white py-2.5 text-center text-[12px] font-semibold text-[#4578FC] hover:bg-[#F8FAFC]"
+              className="mt-4 w-full rounded-xl border border-[#E2E8F0] bg-white py-2.5 text-center text-[12px] font-semibold text-[var(--accent)] hover:bg-[#F8FAFC]"
             >
               {dash("leaderboardViewFull")}
             </button>
@@ -678,7 +678,7 @@ export default function Partner() {
                     )}
                     {lbLoading && !lbData ? (
                       <div className="flex justify-center py-12">
-                        <span className="h-8 w-8 animate-spin rounded-full border-2 border-[#4578FC] border-t-transparent" />
+                        <span className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--accent)] border-t-transparent" />
                       </div>
                     ) : (
                       <div className="overflow-x-auto rounded-xl border border-[#EEF1F6] bg-white">
@@ -863,7 +863,7 @@ export default function Partner() {
                       </p>
                       <div className="mx-auto h-2.5 w-full max-w-[280px] overflow-hidden rounded-full bg-[#E2E8F0]">
                         <div
-                          className="h-full rounded-full bg-[#4578FC] shadow-sm transition-[width] duration-300"
+                          className="h-full rounded-full bg-[var(--accent)] shadow-sm transition-[width] duration-300"
                           style={{ width: `${progressPct}%` }}
                           role="progressbar"
                           aria-valuenow={progressPct}
@@ -934,11 +934,11 @@ export default function Partner() {
                             onClick={() => setWithdrawMethod(m.id)}
                             className={`flex items-center justify-center gap-2 rounded-xl border px-2 py-3 text-[11px] font-semibold leading-tight transition sm:text-[12px] ${
                               withdrawMethod === m.id
-                                ? "border-[#4578FC] bg-violet-50 text-[#12131A] ring-2 ring-[#4578FC]/25"
+                                ? "border-[var(--accent)] bg-violet-50 text-[#12131A] ring-2 ring-[#4578FC]/25"
                                 : "border-[#E8EAF2] bg-white text-[#475569] hover:border-slate-300"
                             }`}
                           >
-                            <PartnerHugeIcon icon={m.icon} size={22} className="text-[#4578FC]" />
+                            <PartnerHugeIcon icon={m.icon} size={22} className="text-[var(--accent)]" />
                             <span className="text-center">{m.label}</span>
                           </button>
                         ))}
@@ -953,7 +953,7 @@ export default function Partner() {
                           }),
                         )
                       }
-                      className="w-full rounded-xl bg-[#4578FC] py-3 text-[14px] font-semibold text-white shadow-sm hover:bg-[#3d6ae8]"
+                      className="w-full rounded-xl bg-[var(--accent)] py-3 text-[14px] font-semibold text-white shadow-sm hover:bg-[#3d6ae8]"
                     >
                       {dash("withdrawSubmit")}
                     </button>

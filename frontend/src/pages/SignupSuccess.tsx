@@ -30,18 +30,18 @@ export default function SignupSuccess() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#F2F3F9]">
-        <span className="h-8 w-8 animate-spin rounded-full border-2 border-[#4578FC] border-t-transparent" aria-hidden />
+      <div className="flex min-h-screen items-center justify-center bg-[var(--bg-page)]">
+        <span className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--accent)] border-t-transparent" aria-hidden />
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#F2F3F9] px-4">
-      <div className="w-full max-w-md rounded-2xl border border-[#EBEDF5] bg-white p-6 text-center shadow-sm">
+    <div className="flex min-h-screen items-center justify-center bg-[var(--bg-page)] px-4">
+      <div className="w-full max-w-md ds-card p-6 text-center shadow-sm">
         <CheckCircleIcon className="mx-auto h-10 w-10 text-emerald-600" />
-        <h1 className="mt-3 text-xl font-semibold text-[#181819]">Account created</h1>
-        <p className="mt-1 text-sm text-[#6B7280]">Registration successful. Redirecting to your workspace...</p>
+        <h1 className="mt-3 text-xl font-semibold text-[var(--text)]">Account created</h1>
+        <p className="mt-1 text-sm text-[var(--text-muted)]">Registration successful. Redirecting to your workspace...</p>
       </div>
     </div>
   );

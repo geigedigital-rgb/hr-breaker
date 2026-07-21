@@ -83,9 +83,9 @@ export default function AuthCallback() {
 
   if (error) {
     return (
-      <div className="mx-auto max-w-sm rounded-2xl border border-[#EBEDF5] bg-white p-8 text-center">
+      <div className="mx-auto max-w-sm ds-card p-8 text-center">
         <p className="text-red-600">{error}</p>
-        <a href="/login" className="mt-4 inline-block text-[#4578FC] hover:underline">
+        <a href="/login" className="mt-4 inline-block text-[var(--accent)] hover:underline">
           {t("authCallback.backToLogin")}
         </a>
       </div>
@@ -95,7 +95,7 @@ export default function AuthCallback() {
   return (
     <div className="flex min-h-[60vh] items-center justify-center">
       <div className="text-center">
-        <span className="h-8 w-8 animate-spin rounded-full border-2 border-[#4578FC] border-t-transparent" aria-hidden />
+        <span className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--accent)] border-t-transparent" aria-hidden />
         <p className="mt-3 text-sm text-[var(--text-muted)]">Signing in with Google…</p>
       </div>
     </div>

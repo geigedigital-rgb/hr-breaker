@@ -27,7 +27,7 @@ export default function AdminApp() {
       </header>
 
       <section
-        className="rounded-xl border border-[#EBEDF5] bg-[var(--card)] p-5 shadow-sm"
+        className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-sm"
         aria-labelledby="admin-app-status"
       >
         <h3 id="admin-app-status" className="text-sm font-semibold text-[var(--text)]">
@@ -41,7 +41,7 @@ export default function AdminApp() {
             href={`${apiBase}/health`}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 rounded-lg border border-[#EBEDF5] bg-[#F5F6FA] px-3 py-2 text-sm font-medium text-[var(--text)] hover:bg-[#EBEDF5] transition-colors"
+            className="inline-flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[#F5F6FA] px-3 py-2 text-sm font-medium text-[var(--text)] hover:bg-[#EBEDF5] transition-colors"
           >
             {t("admin.app.openHealth")}
           </a>
@@ -50,7 +50,7 @@ export default function AdminApp() {
 
       {config && (
         <section
-          className="rounded-xl border border-[#EBEDF5] bg-[var(--card)] p-5 shadow-sm"
+          className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-sm"
           aria-labelledby="admin-app-summary"
         >
           <h3 id="admin-app-summary" className="text-sm font-semibold text-[var(--text)]">

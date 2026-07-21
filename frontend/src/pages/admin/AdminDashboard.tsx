@@ -38,7 +38,7 @@ export default function AdminDashboard() {
   if (!stats) {
     return (
       <div className="flex items-center justify-center py-12" aria-busy="true" aria-live="polite">
-        <span className="h-8 w-8 animate-spin rounded-full border-2 border-[#4578FC] border-t-transparent" aria-hidden />
+        <span className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--accent)] border-t-transparent" aria-hidden />
       </div>
     );
   }
@@ -59,7 +59,7 @@ export default function AdminDashboard() {
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4" role="list">
         <article
-          className="rounded-xl border border-[#EBEDF5] bg-[var(--card)] p-5 shadow-sm transition-shadow hover:shadow-md"
+          className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-sm transition-shadow hover:shadow-md"
           role="listitem"
         >
           <p className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
@@ -72,7 +72,7 @@ export default function AdminDashboard() {
         </article>
 
         <article
-          className="rounded-xl border border-[#EBEDF5] bg-[var(--card)] p-5 shadow-sm transition-shadow hover:shadow-md"
+          className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-sm transition-shadow hover:shadow-md"
           role="listitem"
         >
           <p className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
@@ -85,7 +85,7 @@ export default function AdminDashboard() {
         </article>
 
         <article
-          className="rounded-xl border border-[#EBEDF5] bg-[var(--card)] p-5 shadow-sm transition-shadow hover:shadow-md"
+          className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-sm transition-shadow hover:shadow-md"
           role="listitem"
         >
           <p className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">

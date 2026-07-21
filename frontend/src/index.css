@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* Plus Jakarta Sans loaded in index.html — used by .ds-sandbox only */
+/* Plus Jakarta Sans loaded in index.html — app-wide via body */
 :root {
   /* Surfaces */
   --bg-page: #f2f3f9;
@@ -108,11 +108,11 @@ body {
   min-height: 100vh;
   background: var(--bg-page);
   color: var(--text);
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: "Plus Jakarta Sans", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
-/* —— Design-system utilities (Visual Sandbox first; reusable app-wide) —— */
+/* —— Design-system utilities (portable app-wide) —— */
 
 .ds-sandbox {
   font-family: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
@@ -412,6 +412,22 @@ body {
   .ds-sandbox-main {
     padding: 1.75rem 2rem 2.5rem;
   }
+}
+
+/*
+ * Short pages after header removal: optically center in the main column.
+ * When content is taller than the viewport, margins collapse and it stays top-aligned (no clipping).
+ */
+.ds-page-stage {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.ds-page-stage-body {
+  width: 100%;
+  margin-block: auto;
+  /* Slightly above geometric center — feels more natural in the user’s focus band */
+  padding-bottom: min(3.5rem, 6vh);
 }
 
 .ds-sandbox-aside-muted {

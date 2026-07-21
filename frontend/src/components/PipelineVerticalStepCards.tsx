@@ -22,7 +22,7 @@ function LoadingDots() {
       {[0, 1, 2].map((i) => (
         <span
           key={i}
-          className="h-1.5 w-1.5 rounded-full bg-[#4578FC] animate-pulse"
+          className="h-1.5 w-1.5 rounded-full bg-[var(--accent)] animate-pulse"
           style={{ animationDelay: `${i * 160}ms` }}
         />
       ))}
@@ -59,22 +59,22 @@ export function PipelineVerticalStepCards({ labels, subtitles, completedSteps, i
           return (
             <li
               key={`step-${i}`}
-              className={`flex items-stretch gap-3 rounded-2xl border px-3.5 py-3.5 text-left transition-[border-color,box-shadow,background-color] duration-300 sm:gap-4 sm:px-4 sm:py-4 ${
+              className={`flex items-stretch gap-3 ds-card px-3.5 py-3.5 text-left transition-[border-color,box-shadow,background-color] duration-300 sm:gap-4 sm:px-4 sm:py-4 ${
                 active
-                  ? "border-[#4578FC]/70 bg-white shadow-[0_4px_20px_-8px_rgba(69,120,252,0.35)]"
+                  ? "!border-[var(--accent)]/50 !shadow-[var(--shadow-md)]"
                   : done
-                    ? "border-[#E8ECF4] bg-white/90"
-                    : "border-[#EEF1F7] bg-[#fafbfc]/90"
+                    ? ""
+                    : "opacity-90"
               }`}
               aria-current={active ? "step" : undefined}
             >
               <div
                 className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full sm:h-12 sm:w-12 ${
                   done
-                    ? "bg-emerald-50 text-emerald-600"
+                    ? "ds-icon-well ds-icon-well--success !h-11 !w-11 sm:!h-12 sm:!w-12 text-[var(--success)]"
                     : active
-                      ? "bg-[#EEF3FF] text-[#4578FC]"
-                      : "bg-[#F1F4F9] text-[#94a3b8]"
+                      ? "ds-icon-well ds-icon-well--accent !h-11 !w-11 sm:!h-12 sm:!w-12 text-[var(--accent)]"
+                      : "bg-[var(--bg-elevated)] text-[var(--text-tertiary)]"
                 }`}
                 aria-hidden
               >
@@ -83,26 +83,26 @@ export function PipelineVerticalStepCards({ labels, subtitles, completedSteps, i
               <div className="min-w-0 flex-1 py-0.5">
                 <p
                   className={`text-[14px] sm:text-[15px] font-semibold leading-snug ${
-                    active ? "text-[#0f172a]" : done ? "text-[#334155]" : "text-[#64748b]"
+                    active ? "text-[var(--text)]" : done ? "text-[var(--text-muted)]" : "text-[var(--text-tertiary)]"
                   }`}
                 >
                   {labels[i]}
                 </p>
                 {sub ? (
-                  <p className={`mt-0.5 text-[12px] sm:text-[13px] leading-snug ${done ? "text-[#64748b]" : "text-[#94a3b8]"}`}>
+                  <p className={`mt-0.5 text-[12px] sm:text-[13px] leading-snug ${done ? "text-[var(--text-muted)]" : "text-[var(--text-tertiary)]"}`}>
                     {sub}
                   </p>
                 ) : null}
               </div>
               <div className="flex w-9 shrink-0 flex-col items-center justify-center self-center sm:w-10">
                 {done ? (
-                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500 text-white shadow-sm">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--success)] text-white">
                     <CheckIcon className="h-4 w-4" strokeWidth={2.5} aria-hidden />
                   </span>
                 ) : active ? (
                   <LoadingDots />
                 ) : (
-                  <span className="h-8 w-8 rounded-full border border-[#E2E8F0] bg-white" aria-hidden />
+                  <span className="h-8 w-8 rounded-full border border-[var(--border)] bg-white" aria-hidden />
                 )}
               </div>
             </li>

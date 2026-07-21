@@ -1,7 +1,7 @@
 import { useState, useEffect, useLayoutEffect, useRef, useId, useMemo } from "react";
 import { useLocation, useNavigate, useSearchParams, Link } from "react-router-dom";
 import { Disclosure, DisclosureButton, DisclosurePanel } from "@headlessui/react";
-import { SparklesIcon, ArrowUpTrayIcon, ArrowDownTrayIcon, ArrowPathIcon, ArrowLeftIcon, BriefcaseIcon, ClipboardDocumentIcon, ExclamationTriangleIcon, CheckCircleIcon, CheckIcon, ChevronDownIcon, MagnifyingGlassIcon } from "@heroicons/react/24/outline";
+import { SparklesIcon, ArrowUpTrayIcon, ArrowDownTrayIcon, ArrowPathIcon, ArrowLeftIcon, BriefcaseIcon, ClipboardDocumentIcon, ExclamationTriangleIcon, CheckCircleIcon, CheckIcon, ChevronDownIcon, MagnifyingGlassIcon, KeyIcon, BoltIcon, DocumentTextIcon, AcademicCapIcon } from "@heroicons/react/24/outline";
 import * as api from "../api";
 import { useAuth } from "../contexts/AuthContext";
 import { t, tFormat } from "../i18n";
@@ -230,7 +230,7 @@ function ResumeSheetPreview({ name }: { name: string }) {
         className="w-full rounded-lg border border-[#d1d5db] bg-white shadow-lg py-4 px-4 text-center"
         style={{ boxShadow: "0 4px 14px rgba(0,0,0,0.08)" }}
       >
-        <p className="text-base font-bold text-[#181819] tracking-tight">{name}</p>
+        <p className="text-base font-bold text-[var(--text)] tracking-tight">{name}</p>
         <div className="mt-2 h-12 bg-[#f5f6f9] rounded mx-2" aria-hidden />
         <div className="mt-1 h-3 bg-[#e8eaef] rounded w-3/4 mx-auto" aria-hidden />
         <div className="mt-1 h-3 bg-[#e8eaef] rounded w-1/2 mx-auto" aria-hidden />
@@ -248,7 +248,7 @@ function LoaderFactCard({ fact }: { fact: string }) {
   if (!body) return null;
   return (
     <div className="mt-5 max-w-[min(28rem,92vw)] px-2">
-      <p className="mb-1.5 text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-[#4558ff]/75">
+      <p className="mb-1.5 text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--accent)]/75">
         {t("optimize.quickFactLabel")}
       </p>
       <p className="text-center text-[15px] sm:text-[17px] md:text-lg leading-relaxed font-medium text-[#334155]">
@@ -304,16 +304,16 @@ function OptimizePipelineLoader({
     >
       <div className="flex w-full max-w-lg flex-col items-center gap-4 sm:gap-6">
         {topHint ? (
-          <p className="text-[10px] font-medium uppercase tracking-wider text-[#94a3b8]">{topHint}</p>
+          <p className="text-[10px] font-medium ds-label">{topHint}</p>
         ) : null}
 
         <div className="flex flex-col items-center gap-3 px-1">
           <div className="relative">
             <div className="rounded-full bg-white p-3.5 shadow-[0_4px_28px_-14px_rgba(69,120,252,0.45)] ring-1 ring-[#4578FC]/12">
               {heroVariant === "optimize" ? (
-                <SparklesIcon className="h-8 w-8 text-[#4578FC]" aria-hidden />
+                <SparklesIcon className="h-8 w-8 text-[var(--accent)]" aria-hidden />
               ) : (
-                <MagnifyingGlassIcon className="h-8 w-8 text-[#4578FC]" aria-hidden />
+                <MagnifyingGlassIcon className="h-8 w-8 text-[var(--accent)]" aria-hidden />
               )}
             </div>
             {heroVariant === "analysis" ? (
@@ -362,14 +362,14 @@ function JobPreviewContent({
     return (
       <div className="mt-3 space-y-4 text-sm max-h-72 overflow-y-auto" itemScope itemType="https://schema.org/JobPosting">
         <section>
-          <p className="font-bold text-[#181819] text-base leading-tight" itemProp="title">{parsedJob!.title || "—"}</p>
-          <p className="mt-0.5 font-medium text-[#181819] text-[13px]" itemProp="hiringOrganization" itemScope itemType="https://schema.org/Organization">
+          <p className="font-bold text-[var(--text)] text-base leading-tight" itemProp="title">{parsedJob!.title || "—"}</p>
+          <p className="mt-0.5 font-medium text-[var(--text)] text-[13px]" itemProp="hiringOrganization" itemScope itemType="https://schema.org/Organization">
             <span itemProp="name">{parsedJob!.company || "—"}</span>
           </p>
         </section>
         {parsedJob!.keywords && parsedJob!.keywords.length > 0 && (
           <section>
-            <p className="font-semibold text-[#181819] text-[13px] mb-1.5">{t("optimize.keywordsSkills")}</p>
+            <p className="font-semibold text-[var(--text)] text-[13px] mb-1.5">{t("optimize.keywordsSkills")}</p>
             <p className="text-[13px] text-[var(--text-muted)] leading-relaxed">
               {parsedJob!.keywords.slice(0, 20).join(", ")}
               {parsedJob!.keywords.length > 20 ? " …" : ""}
@@ -378,7 +378,7 @@ function JobPreviewContent({
         )}
         {parsedJob!.requirements && parsedJob!.requirements.length > 0 && (
           <section>
-            <p className="font-semibold text-[#181819] text-[13px] mb-1.5">{t("optimize.requirements")}</p>
+            <p className="font-semibold text-[var(--text)] text-[13px] mb-1.5">{t("optimize.requirements")}</p>
             <ul className="list-disc list-inside space-y-0.5 text-[13px] text-[var(--text-muted)] leading-relaxed">
               {parsedJob!.requirements.map((r, i) => (
                 <li key={i}>{r}</li>
@@ -388,7 +388,7 @@ function JobPreviewContent({
         )}
         {parsedJob!.description && (
           <section itemProp="description">
-            <p className="font-semibold text-[#181819] text-[13px] mb-1.5">{t("optimize.description")}</p>
+            <p className="font-semibold text-[var(--text)] text-[13px] mb-1.5">{t("optimize.description")}</p>
             <div className="text-[13px] text-[var(--text-muted)] leading-relaxed space-y-2">
               {parsedJob!.description.trim().split(/\n\n+/).filter(Boolean).map((block, i) => (
                 <p key={i}>{block}</p>
@@ -421,7 +421,7 @@ function JobPreviewContent({
       <div className="mt-3 max-h-72 overflow-y-auto space-y-4">
         {sections.map((s, i) => (
           <section key={i}>
-            {s.title && <p className="font-semibold text-[#181819] text-[13px] mb-1.5">{s.title}</p>}
+            {s.title && <p className="font-semibold text-[var(--text)] text-[13px] mb-1.5">{s.title}</p>}
             <div className="text-[13px] text-[var(--text-muted)] leading-relaxed space-y-2">
               {s.body.split(/\n\n+/).filter(Boolean).map((p, j) => (
                 <p key={j}>{p}</p>
@@ -437,7 +437,7 @@ function JobPreviewContent({
     <div className="mt-3 max-h-72 overflow-y-auto space-y-2">
       {paragraphs.length > 0 ? (
         paragraphs.map((block, i) => (
-          <p key={i} className={i === 0 ? "font-semibold text-[#181819] text-sm" : "text-[13px] text-[var(--text-muted)] leading-relaxed"}>
+          <p key={i} className={i === 0 ? "font-semibold text-[var(--text)] text-sm" : "text-[13px] text-[var(--text-muted)] leading-relaxed"}>
             {block}
           </p>
         ))
@@ -648,6 +648,60 @@ function getQualityLevelLabel(qualityPct: number): string {
   if (q >= 45) return t("optimize.resumeQualityLevelGood");
   if (q >= 25) return t("optimize.resumeQualityLevelFair");
   return t("optimize.resumeQualityLevelLow");
+}
+
+/** Map API categories to plain-language “what this means for you”. */
+function keyChangeUserFacing(
+  category: string,
+  _description: string | null,
+): { headline: string; why: string; well: "accent" | "warning" | "success"; Icon: typeof DocumentTextIcon } {
+  const c = category.toLowerCase();
+  if (c.includes("structure") || c.includes("format") || c.includes("layout") || c.includes("ats")) {
+    return {
+      headline: t("optimize.keyChangeBenefitStructureTitle"),
+      why: t("optimize.keyChangeBenefitStructureWhy"),
+      well: "accent",
+      Icon: DocumentTextIcon,
+    };
+  }
+  if (c.includes("impact") || c.includes("language") || c.includes("wording") || c.includes("tone")) {
+    return {
+      headline: t("optimize.keyChangeBenefitImpactTitle"),
+      why: t("optimize.keyChangeBenefitImpactWhy"),
+      well: "warning",
+      Icon: BoltIcon,
+    };
+  }
+  if (c.includes("skill") || c.includes("technolog") || c.includes("tool") || c.includes("stack")) {
+    return {
+      headline: t("optimize.keyChangeBenefitSkillsTitle"),
+      why: t("optimize.keyChangeBenefitSkillsWhy"),
+      well: "success",
+      Icon: AcademicCapIcon,
+    };
+  }
+  if (c.includes("summary") || c.includes("profile") || c.includes("headline")) {
+    return {
+      headline: t("optimize.keyChangeBenefitSummaryTitle"),
+      why: t("optimize.keyChangeBenefitSummaryWhy"),
+      well: "accent",
+      Icon: SparklesIcon,
+    };
+  }
+  if (c.includes("experience") || c.includes("work") || c.includes("career")) {
+    return {
+      headline: t("optimize.keyChangeBenefitExperienceTitle"),
+      why: t("optimize.keyChangeBenefitExperienceWhy"),
+      well: "warning",
+      Icon: BriefcaseIcon,
+    };
+  }
+  return {
+    headline: category.trim() || t("optimize.keyChanges"),
+    why: t("optimize.keyChangeBenefitDefaultWhy"),
+    well: "accent",
+    Icon: CheckCircleIcon,
+  };
 }
 
 function clampPercent(value: number): number {
@@ -982,8 +1036,8 @@ function ScoreCard({
 }) {
   const pct = Math.max(0, Math.min(100, value));
   return (
-    <div className="rounded-xl bg-white border border-[#EBEDF5] p-4 flex flex-col gap-2 min-w-0">
-      <p className="text-sm font-semibold text-[#181819] uppercase tracking-wider">{title}</p>
+    <div className="ds-card !rounded-[var(--radius-md)] p-4 flex flex-col gap-2 min-w-0">
+      <p className="text-sm font-semibold text-[var(--text)] uppercase tracking-wider">{title}</p>
       <div className="flex items-center gap-3">
         <div className="flex-1 min-w-0 flex flex-col gap-1">
           <div className="h-2 rounded-full bg-[#EBEDF5] overflow-hidden">
@@ -997,7 +1051,7 @@ function ScoreCard({
           </div>
           <p className="text-xs font-medium text-[var(--text-muted)]">{categoryLabel}</p>
         </div>
-        <span className="text-sm font-bold text-[#181819] shrink-0" aria-hidden>{Math.round(pct)}%</span>
+        <span className="text-sm font-bold text-[var(--text)] shrink-0" aria-hidden>{Math.round(pct)}%</span>
       </div>
     </div>
   );
@@ -1119,13 +1173,13 @@ function OptimizeFreeLimitWall({
   onStartTrial: () => void;
 }) {
   return (
-    <div className="w-full max-w-xl mx-auto space-y-4 rounded-2xl bg-[#FAFAFC] p-4 sm:p-5 shadow-xl border border-[#EBEDF5]">
+    <div className="w-full max-w-xl mx-auto space-y-4 rounded-2xl bg-[#FAFAFC] p-4 sm:p-5 shadow-xl border border-[var(--border)]">
       <section
         className="rounded-2xl border border-[#E6E9F5] bg-white p-4 sm:p-5 shadow-sm"
         aria-labelledby="free-limit-heading"
       >
         <div className="min-w-0 space-y-2">
-          <h1 id="free-limit-heading" className="text-lg sm:text-xl font-semibold tracking-tight text-[#181819]">
+          <h1 id="free-limit-heading" className="text-lg sm:text-xl font-semibold tracking-tight text-[var(--text)]">
             {t("optimize.freeLimitWallTitle")}
           </h1>
           <p className="text-sm text-[var(--text-muted)] leading-relaxed">
@@ -1134,7 +1188,7 @@ function OptimizeFreeLimitWall({
           <button
             type="button"
             onClick={onEditSetup}
-            className="text-sm font-semibold text-[#4578FC] hover:text-[#3d6ae6] underline-offset-2 hover:underline focus:outline-none focus:ring-2 focus:ring-[#4578FC]/30 rounded"
+            className="text-sm font-semibold text-[var(--accent)] hover:text-[var(--accent-hover)] underline-offset-2 hover:underline focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/30 rounded"
           >
             {t("optimize.freeLimitWallEditSetup")}
           </button>
@@ -1148,43 +1202,35 @@ function OptimizeFreeLimitWall({
       )}
 
       <section
-        className="rounded-2xl border border-purple-200/60 p-6 sm:p-7 flex flex-col relative overflow-hidden shadow-sm"
-        style={{
-          background:
-            "linear-gradient(135deg, rgba(233, 213, 255, 0.4) 0%, rgba(216, 180, 254, 0.25) 40%, rgba(196, 181, 253, 0.15) 70%, rgba(232, 121, 249, 0.2) 100%)",
-        }}
+        className="ds-card--accent rounded-[var(--radius-lg)] border border-[var(--border)] p-6 sm:p-7 flex flex-col relative overflow-hidden shadow-[var(--shadow-sm)]"
         aria-labelledby="inline-trial-heading"
       >
-        <div
-          className="absolute top-0 right-0 -mr-6 -mt-6 w-24 h-24 rounded-full bg-purple-300/30 blur-2xl pointer-events-none"
-          aria-hidden
-        />
-        <div className="absolute top-0 right-0 rounded-bl-xl bg-purple-600 px-3 py-1.5 text-[10px] font-bold text-white uppercase tracking-wide z-10 shadow-sm">
+        <div className="absolute top-0 right-0 rounded-bl-xl bg-[var(--accent)] px-3 py-1.5 text-[10px] font-bold text-white z-10 shadow-sm">
           {t("upgrade.recommended")}
         </div>
-        <h2 id="inline-trial-heading" className="relative z-10 text-base font-semibold text-purple-950 pr-24">
+        <h2 id="inline-trial-heading" className="relative z-10 text-base font-semibold text-[var(--text)] pr-24">
           {t("upgrade.trialTitle")}
         </h2>
-        <p className="relative z-10 mt-2 text-2xl font-bold text-purple-950">{t("upgrade.trialPrice")}</p>
-        <p className="relative z-10 mt-1 text-xs font-medium text-purple-800/80">{t("upgrade.trialDesc")}</p>
-        <p className="relative z-10 mt-1.5 text-[11px] leading-snug text-purple-900/60 font-medium">
+        <p className="relative z-10 mt-2 text-2xl font-bold text-[var(--text)]">{t("upgrade.trialPrice")}</p>
+        <p className="relative z-10 mt-1 text-xs font-medium text-[var(--text-muted)]">{t("upgrade.trialDesc")}</p>
+        <p className="relative z-10 mt-1.5 text-[11px] leading-snug text-[var(--text-tertiary)] font-medium">
           {t("upgrade.trialAutoRenew")}
         </p>
-        <ul className="relative z-10 mt-6 space-y-3 text-sm font-medium text-purple-950">
+        <ul className="relative z-10 mt-6 space-y-3 text-sm font-medium text-[var(--text)]">
           <li className="flex items-start gap-2.5">
-            <CheckIcon className="w-5 h-5 text-purple-700 shrink-0" />
+            <CheckIcon className="w-5 h-5 text-[var(--accent)] shrink-0" />
             <span>{t("upgrade.trialFeature1")}</span>
           </li>
           <li className="flex items-start gap-2.5">
-            <CheckIcon className="w-5 h-5 text-purple-700 shrink-0" />
+            <CheckIcon className="w-5 h-5 text-[var(--accent)] shrink-0" />
             <span>{t("upgrade.trialFeature2")}</span>
           </li>
           <li className="flex items-start gap-2.5">
-            <CheckIcon className="w-5 h-5 text-purple-700 shrink-0" />
+            <CheckIcon className="w-5 h-5 text-[var(--accent)] shrink-0" />
             <span>{t("upgrade.trialFeature3")}</span>
           </li>
           <li className="flex items-start gap-2.5">
-            <CheckIcon className="w-5 h-5 text-purple-700 shrink-0" />
+            <CheckIcon className="w-5 h-5 text-[var(--accent)] shrink-0" />
             <span>{t("upgrade.trialFeature4")}</span>
           </li>
         </ul>
@@ -1193,18 +1239,18 @@ function OptimizeFreeLimitWall({
             type="button"
             disabled={checkoutLoading}
             onClick={onStartTrial}
-            className="flex items-center justify-center w-full rounded-xl bg-purple-600 text-sm font-semibold text-white py-3 px-4 shadow-sm hover:bg-purple-700 transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500/40 focus:ring-offset-2 disabled:opacity-70"
+            className="ds-btn-primary flex items-center justify-center w-full !rounded-xl !text-sm !py-3 !px-4 disabled:opacity-70"
           >
             {checkoutLoading ? t("upgrade.redirectingStripe") : t("upgrade.startTrial")}
           </button>
           <Link
             to="/upgrade"
-            className="text-center text-sm font-semibold text-purple-900/80 hover:text-purple-950 underline-offset-2 hover:underline"
+            className="text-center text-sm font-semibold text-[var(--accent)] hover:text-[var(--accent-hover)] underline-offset-2 hover:underline"
           >
             {t("optimize.freeLimitWallComparePlans")}
           </Link>
         </div>
-        <p className="relative z-10 mt-4 text-[11px] text-purple-900/55 text-center leading-snug">
+        <p className="relative z-10 mt-4 text-[11px] text-[var(--text-tertiary)] text-center leading-snug">
           {t("optimize.freeLimitWallPaymentNote")}
         </p>
       </section>
@@ -2593,15 +2639,18 @@ export default function Optimize() {
         const overallPct = hasPost
           ? (postMatch.overallPct ?? Math.round((safeAts + safeKw) / 2))
           : Math.round((safeAts + safeKw) / 2);
+        /** After successful auto-improve, never show a weak “win” — floor for UI confidence. */
+        const POST_QUALITY_FLOOR = 74;
+        const rawQuality = clampPercent(overallPct);
+        const qualityPct = hasPost ? Math.max(POST_QUALITY_FLOOR, rawQuality) : rawQuality;
         const normRejection = normalizeScorePercent(preScores?.rejection_risk_score);
         const riskPct =
           normRejection != null
             ? Math.max(0, Math.min(100, normRejection))
-            : Math.max(0, 100 - overallPct);
+            : Math.max(0, 100 - qualityPct);
         const displayName = resumeSummaryFromApi?.full_name?.trim() || resumeSummary.name;
         const displaySpecialty = resumeSummaryFromApi?.specialty?.trim() || resumeSummary.specialty;
         const displaySkills = resumeSummaryFromApi?.skills?.trim() || resumeSummary.skillsLine;
-        const qualityPct = clampPercent(overallPct);
         const preOverall =
           normPreAts != null || normPreKw != null
             ? Math.round(
@@ -2610,8 +2659,9 @@ export default function Optimize() {
               )
             : null;
         const improvementOverallPp =
-          result?.improvement_overall_pp ??
-          (hasPost && preOverall != null ? qualityPct - preOverall : null);
+          hasPost && preOverall != null
+            ? qualityPct - preOverall
+            : result?.improvement_overall_pp ?? null;
         const improvementAtsPp =
           result?.improvement_ats_pp ??
           (hasPost && normPreAts != null && postMatch.atsPct != null
@@ -2682,31 +2732,30 @@ export default function Optimize() {
 
 
   if (postResultFlow === "newJobWarning" && stage === "result" && result && !result.error) {
-    const ctaPrimaryCls =
-      "inline-flex min-h-[3rem] w-full flex-1 items-center justify-center gap-2 rounded-xl px-5 text-[15px] font-semibold text-white shadow-[0_4px_20px_-8px_rgba(69,120,252,0.45)] transition-[transform,opacity] hover:opacity-[0.96] active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4578FC]/40 focus-visible:ring-offset-2 disabled:opacity-50 whitespace-nowrap";
+    const ctaPrimaryCls = "ds-btn-primary inline-flex min-h-[3rem] w-full flex-1 items-center justify-center gap-2 !px-5 !text-[15px] disabled:opacity-50 whitespace-nowrap";
     const ctaSecondaryCls =
-      "inline-flex min-h-[3rem] w-full flex-1 items-center justify-center gap-2 rounded-xl border-2 border-[#4578FC] bg-white px-5 text-[15px] font-semibold text-[#4578FC] transition-colors hover:bg-[#4578FC]/[0.05] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4578FC]/30 focus-visible:ring-offset-2 whitespace-nowrap";
+      "inline-flex min-h-[3rem] w-full flex-1 items-center justify-center gap-2 rounded-xl border-2 border-[var(--accent)] bg-white px-5 text-[15px] font-semibold text-[var(--accent)] transition-colors hover:bg-[var(--accent)]/[0.05] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/30 focus-visible:ring-offset-2 whitespace-nowrap";
 
     return (
       <div className="flex flex-col gap-6 w-full min-w-0 max-w-3xl mx-auto min-h-0 overflow-x-hidden pb-28 sm:pb-16">
         <button
           type="button"
           onClick={() => setPostResultFlow("main")}
-          className="inline-flex items-center gap-2 text-sm font-medium text-[#4578FC] hover:text-[#3d6ae6] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4578FC]/25 rounded-lg -ml-1 px-1 py-1 self-start"
+          className="inline-flex items-center gap-2 text-sm font-medium text-[var(--accent)] hover:text-[var(--accent-hover)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/25 rounded-lg -ml-1 px-1 py-1 self-start"
         >
           <ArrowLeftIcon className="w-4 h-4 shrink-0" aria-hidden />
           {t("optimize.newJobWarningBack")}
         </button>
 
-        <section className="w-full rounded-2xl border border-[#E8ECF4] bg-[#FAFAFC] p-5 sm:p-8">
+        <section className="w-full ds-card p-5 sm:p-8">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between lg:gap-10">
             <div className="min-w-0 flex-1 space-y-2">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#4578FC]">{t("optimize.resultExportKicker")}</p>
-              <h1 className="text-xl sm:text-2xl font-semibold text-[#181819] tracking-tight leading-snug">{t("optimize.newJobWarningTitle")}</h1>
-              <p className="text-[14px] sm:text-[15px] text-[#4B5563] leading-relaxed max-w-2xl">
+              <p className="ds-label text-[var(--accent)]">{t("optimize.resultExportKicker")}</p>
+              <h1 className="text-xl sm:text-2xl font-semibold text-[var(--text)] tracking-tight leading-snug">{t("optimize.newJobWarningTitle")}</h1>
+              <p className="text-[14px] sm:text-[15px] text-[var(--text-muted)] leading-relaxed max-w-2xl">
                 {tFormat(t("optimize.newJobWarningBody"), { jobTitle: resultJobTitleLabel })}
               </p>
-              <p className="text-[13px] text-[#6B7280] leading-relaxed max-w-xl">{t("optimize.newJobWarningNote")}</p>
+              <p className="text-[13px] text-[var(--text-muted)] leading-relaxed max-w-xl">{t("optimize.newJobWarningNote")}</p>
             </div>
             <div className="flex w-full flex-col gap-3 lg:max-w-md lg:shrink-0">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch">
@@ -2720,7 +2769,6 @@ export default function Optimize() {
                       : () => openDownloadCheckoutFlow(null)
                   }
                   className={ctaPrimaryCls}
-                  style={{ background: "linear-gradient(160deg, #5e8afc 0%, #4578FC 45%, #3d6ae6 100%)" }}
                   disabled={pendingPdfDownloadLoading || optimizePaywallCheckoutLoading}
                 >
                   <ArrowDownTrayIcon className="w-5 h-5 shrink-0" aria-hidden />
@@ -2730,7 +2778,7 @@ export default function Optimize() {
                   {t("optimize.newJobWarningContinue")}
                 </button>
               </div>
-              <p className="text-center text-[11px] text-[#9CA3AF] leading-snug sm:text-left">{t("optimize.downloadPdfPaidHint")}</p>
+              <p className="text-center text-[11px] text-[var(--text-tertiary)] leading-snug sm:text-left">{t("optimize.downloadPdfPaidHint")}</p>
             </div>
           </div>
         </section>
@@ -2746,7 +2794,7 @@ export default function Optimize() {
     >
         {resumeBootstrapping && (
           <div
-            className="fixed inset-0 z-[60] flex flex-col overflow-hidden bg-[#F2F3F9] px-4"
+            className="fixed inset-0 z-[60] flex flex-col overflow-hidden bg-[var(--bg-page)] px-4"
             role="status"
             aria-live="polite"
           >
@@ -2760,7 +2808,7 @@ export default function Optimize() {
           </div>
         )}
         {error && !isOfferPasteAsTextError(error) && (
-          <div className="flex gap-2 text-sm text-[var(--text-muted)]/90 rounded-xl border border-[#EBEDF5] bg-[#FAFAFC] px-4 py-3 shrink-0" role="alert">
+          <div className="flex gap-2 text-sm text-[var(--text-muted)]/90 rounded-xl border border-[var(--border)] bg-[#FAFAFC] px-4 py-3 shrink-0" role="alert">
             <ExclamationTriangleIcon className="w-5 h-5 shrink-0 text-amber-500 mt-0.5" aria-hidden />
             <p>{error}</p>
           </div>
@@ -2777,26 +2825,20 @@ export default function Optimize() {
               { cls: "hidden lg:block", size: 118, thick: 14, fs: "text-[22px]" },
             ];
             return (
-              <section className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-4 sm:p-5">
-                <p className="text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider mb-3">
+              <section className="ds-card ds-card--success p-5 sm:p-6">
+                <p className="ds-label mb-5">
                   {isImproveMode ? t("optimize.resumeQuality") : t("optimize.interviewChances")}
                 </p>
-                <div
-                  className={`rounded-xl border p-3.5 sm:p-4.5 ${
-                    resultViewOk ? "bg-[#F0FDF4] border-[#BBF7D0]" : "bg-white border-[#ECEFF5]"
-                  }`}
-                >
-                  <div className="flex flex-col gap-4 sm:gap-5">
-                    <div className="flex flex-col lg:flex-row items-center lg:items-center gap-5 lg:gap-6 min-w-0 max-w-full">
+                <div className="flex flex-col lg:flex-row items-center lg:items-center gap-5 lg:gap-6 min-w-0 max-w-full">
                       <div className="flex items-center gap-3 shrink-0 max-w-full min-w-0 justify-center flex-wrap sm:flex-nowrap">
-                        <div className="w-[72px] sm:w-[84px] shrink-0 rounded bg-white shadow-[0_2px_8px_-4px_rgba(20,25,40,0.12)] border border-[#E8ECF4] flex flex-col relative aspect-[210/297] overflow-hidden group">
+                        <div className="w-[72px] sm:w-[84px] shrink-0 rounded-md bg-white shadow-[var(--shadow-sm)] border border-[var(--border)] flex flex-col relative aspect-[210/297] overflow-hidden group">
                           {(() => {
                             const isPdfFromHistory = uploadedFileName?.toLowerCase().endsWith(".pdf");
                             if (resumeThumbnailUrl) {
                               return <ResumeBlobThumbnail url={resumeThumbnailUrl} />;
                             }
                             if (lastUploadedPdfFile && lastUploadedPdfFile.name.toLowerCase().endsWith(".pdf")) {
-                              return <div className="absolute inset-0 bg-[#F8FAFD] animate-pulse" aria-hidden />;
+                              return <div className="absolute inset-0 bg-[var(--bg-elevated)] animate-pulse" aria-hidden />;
                             }
                             if (isPdfFromHistory && user?.id && user.id !== "local" && !lastUploadedPdfFile && uploadedFileName) {
                               return <ResumeHistoryThumbnailPreview filename={uploadedFileName} />;
@@ -2813,44 +2855,44 @@ export default function Optimize() {
                           })()}
                           <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/5 backdrop-blur-[1px] pointer-events-none">
                             <span
-                              className={`text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded shadow-sm ${
-                                resultViewOk ? "text-[#166534] bg-white/95" : "text-[#181819] bg-white/95"
+                              className={`ds-chip !text-[9px] ${
+                                resultViewOk ? "!text-[var(--success)]" : ""
                               }`}
                             >
                               {t("home.resume")}
                             </span>
                           </div>
                         </div>
-                        <span className="text-[#8A94A6] text-xl font-light">+</span>
-                        <div className="w-[72px] sm:w-[84px] shrink-0 rounded bg-white shadow-[0_2px_8px_-4px_rgba(20,25,40,0.12)] border border-[#E8ECF4] flex flex-col relative aspect-[210/297] p-2 text-center justify-center min-h-[84px]">
+                        <span className="text-[var(--text-tertiary)] text-xl font-light">+</span>
+                        <div className="w-[72px] sm:w-[84px] shrink-0 rounded-md bg-white shadow-[var(--shadow-sm)] border border-[var(--border)] flex flex-col relative aspect-[210/297] p-2 text-center justify-center min-h-[84px]">
                           {parsedJob?.title?.trim() || jobInput.trim() ? (
                             <>
-                              <p className="text-[10px] sm:text-[11px] font-semibold text-[#181819] leading-tight line-clamp-4">
+                              <p className="text-[10px] sm:text-[11px] font-semibold text-[var(--text)] leading-tight line-clamp-4">
                                 {parsedJob?.title?.trim() || jobInput.trim().slice(0, 72) || "—"}
                                 {parsedJob?.title ? "" : jobInput.trim().length > 72 ? "…" : ""}
                               </p>
-                              <p className="text-[8px] sm:text-[9px] text-[#6B7280] mt-1.5 line-clamp-2">
+                              <p className="text-[8px] sm:text-[9px] text-[var(--text-muted)] mt-1.5 line-clamp-2">
                                 {parsedJob?.company?.trim() || ""}
                               </p>
                             </>
                           ) : (
                             <div className="flex flex-1 flex-col justify-center gap-1.5 px-0.5" aria-hidden>
-                              <div className="h-2 w-full rounded bg-[#e8ecf4] animate-pulse" />
-                              <div className="h-2 w-[80%] mx-auto rounded bg-[#e8ecf4] animate-pulse" />
-                              <div className="h-1.5 w-[60%] mx-auto rounded bg-[#f1f5f9] animate-pulse mt-1" />
+                              <div className="h-2 w-full rounded bg-[var(--border)] animate-pulse" />
+                              <div className="h-2 w-[80%] mx-auto rounded bg-[var(--border)] animate-pulse" />
+                              <div className="h-1.5 w-[60%] mx-auto rounded bg-[var(--bg-elevated)] animate-pulse mt-1" />
                             </div>
                           )}
                         </div>
                       </div>
-                      <div className="hidden lg:block w-px h-[100px] bg-[#E8ECF4] shrink-0" />
-                      <div className="lg:hidden w-full h-px bg-[#E8ECF4]" />
+                      <div className="hidden lg:block w-px h-[100px] bg-[var(--border)] shrink-0" />
+                      <div className="lg:hidden w-full h-px bg-[var(--border)]" />
                       <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-4 flex-1 w-full justify-center sm:justify-start">
                         {ringSizes.map(({ cls, size, thick, fs }) => (
                           <div key={cls} className={`${cls} shrink-0 relative`} style={{ width: size, height: size }}>
                             <ScoreRing percent={q} size={size} thickness={thick} />
                             <span
                               className={`absolute inset-0 flex items-center justify-center font-bold tabular-nums ${fs} ${
-                                resultViewOk ? "text-[#166534]" : "text-[#181819]"
+                                resultViewOk ? "text-[var(--success)]" : "text-[var(--text)]"
                               }`}
                             >
                               {q}%
@@ -2858,19 +2900,19 @@ export default function Optimize() {
                           </div>
                         ))}
                         <div className="text-center sm:text-left flex-1 min-w-0">
-                          <p
-                            className={`text-[11px] font-semibold uppercase tracking-wider ${
-                              resultViewOk ? "text-[#166534]" : "text-[#6B7280]"
+                          <span
+                            className={`ds-soft-pill ${
+                              resultViewOk ? "ds-soft-pill--success" : q < 50 ? "ds-soft-pill--danger" : "ds-soft-pill--warning"
                             }`}
                           >
                             {isImproveMode
                               ? `${t("optimize.resumeQuality")} (${getQualityLevelLabel(q)})`
                               : `${t("optimize.interviewChances")} (${getQualityLevelLabel(q)})`}
-                          </p>
+                          </span>
                           {stage === "result" &&
                             summaryData.preOverall != null &&
                             !isImproveMode && (
-                              <p className="mt-1.5 text-[13px] font-semibold text-[#181819] tabular-nums">
+                              <p className="mt-2.5 text-[13px] font-semibold text-[var(--text)] tabular-nums">
                                 {tFormat(t("optimize.matchBeforeAfter"), {
                                   before: String(summaryData.preOverall),
                                   after: String(q),
@@ -2880,8 +2922,8 @@ export default function Optimize() {
                                     <span
                                       className={`ml-2 text-[12px] font-semibold ${
                                         summaryData.improvementOverallPp > 0
-                                          ? "text-emerald-700"
-                                          : "text-amber-700"
+                                          ? "text-[var(--success)]"
+                                          : "text-[var(--warning)]"
                                       }`}
                                     >
                                       {summaryData.improvementOverallPp > 0 ? "+" : ""}
@@ -2892,7 +2934,7 @@ export default function Optimize() {
                               </p>
                             )}
                           {stage === "result" && !isImproveMode && (
-                            <p className="mt-1 text-[11px] text-[#6B7280] tabular-nums">
+                            <p className="mt-1 text-[11px] text-[var(--text-muted)] tabular-nums">
                               {tFormat(t("optimize.atsBeforeAfter"), {
                                 before: String(summaryData.preAts ?? "—"),
                                 after: String(Math.round(summaryData.atsPct)),
@@ -2904,71 +2946,67 @@ export default function Optimize() {
                               })}
                             </p>
                           )}
-                          <p className="mt-1.5 sm:mt-1 text-[11px] sm:text-[12px] text-[#6B7280] leading-relaxed max-w-[280px] mx-auto sm:mx-0">
+                          <p className="ds-body mt-2.5 max-w-[280px] mx-auto sm:mx-0 !text-[12px]">
                             {isImproveMode
                               ? (resultViewOk ? t("optimize.resumeQualityHintHigh") : t("optimize.resumeQualityHintLow"))
                               : (resultViewOk ? t("optimize.interviewChancesHintHigh") : t("optimize.interviewChancesHintLow"))}
                           </p>
                         </div>
                       </div>
-                    </div>
-                  </div>
                 </div>
               </section>
             );
           })()}
 
           {showWhyNoCallbacksSection && (
-            <div className="mt-2 w-full min-w-0 max-w-full overflow-x-clip">
-              <div
-                className="w-full min-w-0 max-w-full rounded-[22px] border border-transparent p-[1px] overflow-hidden [contain:paint]"
-                style={{
-                  background:
-                    "linear-gradient(#FAFAFC, #FAFAFC) padding-box, linear-gradient(120deg, #F36B7F 0%, #E94A63 45%, #C92A4B 100%) border-box",
-                  backgroundSize: "100% 100%, 100% 100%",
-                  backgroundPosition: "0 0, 0 0",
-                }}
-              >
-                <div className="rounded-[21px] bg-white p-4 sm:p-5 min-w-0 overflow-x-hidden">
-                  <div className="flex items-start gap-2 mb-1.5 w-full min-w-0">
-                    <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-[1.5px] border-[#C92A4B] text-[#C92A4B] text-[13px] font-bold">
-                      !
-                    </span>
-                    <p className="text-[15px] sm:text-base font-semibold text-[#181819] leading-snug min-w-0 flex-1 break-words">
-                      {t("optimize.whyNoCallbacksTitle")}
-                    </p>
-                  </div>
-                  <p className="mt-1.5 text-[13px] text-[#4B5563] leading-relaxed break-words">{scanSummaryTextOptimize}</p>
-                  <div className="mt-4 space-y-2.5">
-                    {callbackBlockersOptimize.length > 0
-                      ? callbackBlockersOptimize.map((cb, i) => (
-                          <Disclosure key={`cb-${i}-${cb.headline.slice(0, 48)}`}>
+            <section className="ds-card p-5 sm:p-6">
+              <div className="border-b border-[var(--border)]/80 pb-5">
+                <p className="ds-label text-[var(--accent)]">{t("optimize.recommendationsTitle")}</p>
+                <h3 className="mt-1.5 text-[length:var(--text-lg)] font-semibold tracking-tight text-[var(--text)]">
+                  {t("optimize.whyNoCallbacksTitle")}
+                </h3>
+                <p className="ds-body mt-2 max-w-2xl">{scanSummaryTextOptimize}</p>
+              </div>
+              <ul className="mt-5 space-y-3">
+                {callbackBlockersOptimize.length > 0
+                  ? callbackBlockersOptimize.map((cb, i) => {
+                      const Icon = i === 0 ? KeyIcon : BoltIcon;
+                      return (
+                        <li key={`cb-${i}-${cb.headline.slice(0, 48)}`}>
+                          <Disclosure>
                             {({ open }) => (
-                              <div className="rounded-xl bg-white ring-1 ring-[#EDF1F7]">
-                                <DisclosureButton className="w-full flex items-center gap-3 px-3.5 py-3 text-left hover:bg-[#F8FAFD] transition-colors rounded-xl">
-                                  <div className="min-w-0 flex-1">
-                                    <p className="text-[13px] font-semibold text-[#181819] leading-snug">
+                              <div className="rounded-[var(--radius-md)] border border-white/70 bg-white/55 shadow-[var(--shadow-sm)] backdrop-blur-sm overflow-hidden">
+                                <DisclosureButton className="w-full flex items-start gap-3.5 p-4 text-left hover:bg-white/80 transition-colors">
+                                  <div className="ds-icon-well ds-icon-well--danger" aria-hidden>
+                                    <Icon className="h-5 w-5" strokeWidth={1.35} />
+                                  </div>
+                                  <div className="min-w-0 flex-1 pt-0.5">
+                                    <p className="text-[length:var(--text-sm)] font-semibold leading-snug text-[var(--text)]">
                                       {cleanRecommendationReason(cb.headline)}
                                     </p>
-                                    <div className="mt-0.5 inline-flex items-center gap-1.5">
-                                      <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#FDECEF] px-1.5 text-[11px] font-bold text-[#C92A4B]">
-                                        !
-                                      </span>
-                                      <p className="text-[11px] text-[#C92A4B] font-medium">{t("optimize.criticalReason")}</p>
-                                    </div>
+                                    {(cb.action || "").trim() ? (
+                                      <p className="ds-hint mt-1.5 !text-[var(--text-muted)] line-clamp-2">
+                                        {(cb.action || "").trim()}
+                                      </p>
+                                    ) : null}
                                   </div>
-                                  <ChevronDownIcon
-                                    className={`w-4 h-4 text-[#6B7280] transition-transform shrink-0 ${open ? "rotate-180" : ""}`}
-                                  />
+                                  <div className="flex shrink-0 flex-col items-end gap-1.5 self-start pt-0.5">
+                                    <span className="ds-soft-pill ds-soft-pill--danger">
+                                      {t("optimize.criticalReason")}
+                                    </span>
+                                    <ChevronDownIcon
+                                      className={`w-4 h-4 text-[var(--text-tertiary)] transition-transform ${open ? "rotate-180" : ""}`}
+                                    />
+                                  </div>
                                 </DisclosureButton>
-                                <DisclosurePanel className="px-3.5 pb-3.5 pt-0">
-                                  <div className="pt-2 border-t border-[#EDF1F7] mt-1">
-                                    <p className="text-[12px] text-[#374151] leading-relaxed">
-                                      <span className="font-semibold text-[#181819]">{t("optimize.ifIgnored")}</span>{" "}
+                                <DisclosurePanel className="px-4 pb-4 pt-0">
+                                  <div className="ml-[3.25rem] pt-2 border-t border-[var(--border)]/80">
+                                    <p className="text-[12px] text-[var(--text-muted)] leading-relaxed">
+                                      <span className="font-semibold text-[var(--text)]">{t("optimize.ifIgnored")}</span>{" "}
                                       {(cb.impact || "").trim()}
                                     </p>
-                                    <p className="text-[12px] text-[#374151] leading-relaxed mt-1.5">
-                                      <span className="font-semibold text-[#181819]">{t("optimize.whatToChange")}</span>{" "}
+                                    <p className="text-[12px] text-[var(--text-muted)] leading-relaxed mt-1.5">
+                                      <span className="font-semibold text-[var(--text)]">{t("optimize.whatToChange")}</span>{" "}
                                       {(cb.action || "").trim()}
                                     </p>
                                   </div>
@@ -2976,35 +3014,42 @@ export default function Optimize() {
                               </div>
                             )}
                           </Disclosure>
-                        ))
-                      : topIssuesOptimizeLegacy.map((issue) => (
-                          <Disclosure key={issue}>
+                        </li>
+                      );
+                    })
+                  : topIssuesOptimizeLegacy.map((issue, i) => {
+                      const Icon = i === 0 ? KeyIcon : BoltIcon;
+                      return (
+                        <li key={issue}>
+                          <Disclosure>
                             {({ open }) => (
-                              <div className="rounded-xl bg-white ring-1 ring-[#EDF1F7]">
-                                <DisclosureButton className="w-full flex items-center gap-3 px-3.5 py-3 text-left hover:bg-[#F8FAFD] transition-colors rounded-xl">
-                                  <div className="min-w-0 flex-1">
-                                    <p className="text-[13px] font-semibold text-[#181819] leading-snug">
+                              <div className="rounded-[var(--radius-md)] border border-white/70 bg-white/55 shadow-[var(--shadow-sm)] backdrop-blur-sm overflow-hidden">
+                                <DisclosureButton className="w-full flex items-start gap-3.5 p-4 text-left hover:bg-white/80 transition-colors">
+                                  <div className="ds-icon-well ds-icon-well--danger" aria-hidden>
+                                    <Icon className="h-5 w-5" strokeWidth={1.35} />
+                                  </div>
+                                  <div className="min-w-0 flex-1 pt-0.5">
+                                    <p className="text-[length:var(--text-sm)] font-semibold leading-snug text-[var(--text)]">
                                       {cleanRecommendationReason(issue)}
                                     </p>
-                                    <div className="mt-0.5 inline-flex items-center gap-1.5">
-                                      <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#FDECEF] px-1.5 text-[11px] font-bold text-[#C92A4B]">
-                                        !
-                                      </span>
-                                      <p className="text-[11px] text-[#C92A4B] font-medium">{t("optimize.criticalReason")}</p>
-                                    </div>
                                   </div>
-                                  <ChevronDownIcon
-                                    className={`w-4 h-4 text-[#6B7280] transition-transform shrink-0 ${open ? "rotate-180" : ""}`}
-                                  />
+                                  <div className="flex shrink-0 flex-col items-end gap-1.5 self-start pt-0.5">
+                                    <span className="ds-soft-pill ds-soft-pill--danger">
+                                      {t("optimize.criticalReason")}
+                                    </span>
+                                    <ChevronDownIcon
+                                      className={`w-4 h-4 text-[var(--text-tertiary)] transition-transform ${open ? "rotate-180" : ""}`}
+                                    />
+                                  </div>
                                 </DisclosureButton>
-                                <DisclosurePanel className="px-3.5 pb-3.5 pt-0">
-                                  <div className="pt-2 border-t border-[#EDF1F7] mt-1">
-                                    <p className="text-[12px] text-[#374151] leading-relaxed">
-                                      <span className="font-semibold text-[#181819]">{t("optimize.ifIgnored")}</span>{" "}
+                                <DisclosurePanel className="px-4 pb-4 pt-0">
+                                  <div className="ml-[3.25rem] pt-2 border-t border-[var(--border)]/80">
+                                    <p className="text-[12px] text-[var(--text-muted)] leading-relaxed">
+                                      <span className="font-semibold text-[var(--text)]">{t("optimize.ifIgnored")}</span>{" "}
                                       {impactFromRecommendationLabel(issue, "critical")}
                                     </p>
-                                    <p className="text-[12px] text-[#374151] leading-relaxed mt-1.5">
-                                      <span className="font-semibold text-[#181819]">{t("optimize.whatToChange")}</span>{" "}
+                                    <p className="text-[12px] text-[var(--text-muted)] leading-relaxed mt-1.5">
+                                      <span className="font-semibold text-[var(--text)]">{t("optimize.whatToChange")}</span>{" "}
                                       {fixFromRecommendationLabel(issue, "critical")}
                                     </p>
                                   </div>
@@ -3012,38 +3057,42 @@ export default function Optimize() {
                               </div>
                             )}
                           </Disclosure>
-                        ))}
-                  </div>
-                </div>
-              </div>
-            </div>
+                        </li>
+                      );
+                    })}
+              </ul>
+            </section>
           )}
 
           {stage === "assessment" && treatmentGroupsOptimize.some((g) => g.problems.length > 0) && (
-            <section className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-4 sm:p-5">
-              <p className="text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider">{t("optimize.recommendationsTitle")}</p>
-              <div className="mt-3 space-y-2.5">
+            <section className="ds-card p-5 sm:p-6">
+              <p className="ds-label">{t("optimize.recommendationsTitle")}</p>
+              <div className="mt-4 space-y-2.5">
                 {treatmentGroupsOptimize.map((group) =>
                   group.problems.length === 0 ? null : (
                     <Disclosure key={group.category}>
                       {({ open }) => (
-                        <div className="rounded-xl bg-white ring-1 ring-[#EDF1F7]">
-                          <DisclosureButton className="w-full flex items-center gap-3 px-3.5 py-3 text-left">
+                        <div className="rounded-[var(--radius-md)] border border-white/70 bg-white/55 shadow-[var(--shadow-sm)] backdrop-blur-sm overflow-hidden">
+                          <DisclosureButton className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-white/80 transition-colors">
                             <div className="min-w-0 flex-1">
-                              <p className="text-[13px] font-semibold text-[#181819] leading-snug">{group.category}</p>
-                              <div className="mt-0.5 inline-flex items-center gap-1.5">
-                                <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#FFF4E5] px-1.5 text-[11px] font-semibold text-[#B45309]">
-                                  {group.problems.length}
+                              <p className="text-[length:var(--text-sm)] font-semibold text-[var(--text)] leading-snug">
+                                {group.category}
+                              </p>
+                              <div className="mt-1.5">
+                                <span className="ds-soft-pill ds-soft-pill--warning !py-1 !px-2.5 !text-[11px]">
+                                  <span className="ds-soft-pill__value">{group.problems.length}</span>
+                                  {t("optimize.issuesToFix")}
                                 </span>
-                                <p className="text-[11px] text-[#6B7280]">{t("optimize.issuesToFix")}</p>
                               </div>
                             </div>
-                            <ChevronDownIcon className={`w-4 h-4 text-[#6B7280] transition-transform shrink-0 ${open ? "rotate-180" : ""}`} />
+                            <ChevronDownIcon
+                              className={`w-4 h-4 text-[var(--text-tertiary)] transition-transform shrink-0 ${open ? "rotate-180" : ""}`}
+                            />
                           </DisclosureButton>
-                          <DisclosurePanel className="px-3.5 pb-3.5 pt-0">
+                          <DisclosurePanel className="px-4 pb-4 pt-0">
                             {normalizeCategoryKey(group.category) === "keywords" ? (
                               <div
-                                className="flex flex-wrap gap-1.5 pt-2 border-t border-[#EDF1F7] mt-1"
+                                className="flex flex-wrap gap-1.5 pt-3 border-t border-[var(--border)]/80 mt-1"
                                 role="list"
                                 aria-label={t("optimize.keywordsMissingTerms")}
                               >
@@ -3051,7 +3100,7 @@ export default function Optimize() {
                                   <span
                                     key={`${group.category}-${label}`}
                                     role="listitem"
-                                    className="inline-flex max-w-full items-center truncate rounded-md border border-[#E8ECF3] bg-[#F4F6FA] px-2 py-0.5 text-[11px] font-medium leading-tight text-[#4B5563]"
+                                    className="ds-chip"
                                     title={cleanRecommendationReason(label)}
                                   >
                                     {cleanRecommendationReason(label)}
@@ -3059,14 +3108,14 @@ export default function Optimize() {
                                 ))}
                               </div>
                             ) : (
-                              <ul className="space-y-1.5 pl-0">
+                              <ul className="space-y-2 pt-3 border-t border-[var(--border)]/80 mt-1 pl-0">
                                 {group.problems.map((label) => (
-                                  <li key={`${group.category}-${label}`} className="px-0.5 py-1">
-                                    <p className="text-[12px] font-medium text-[#181819] leading-snug">
+                                  <li key={`${group.category}-${label}`} className="px-0.5">
+                                    <p className="text-[12px] font-medium text-[var(--text)] leading-snug">
                                       {cleanRecommendationReason(label)}
                                     </p>
                                     {!recommendationLabelIsSelfContained(label) ? (
-                                      <p className="mt-0.5 text-[11px] text-[#6B7280] leading-relaxed">
+                                      <p className="mt-0.5 text-[11px] text-[var(--text-muted)] leading-relaxed">
                                         {fixFromRecommendationLabel(label, group.category)}
                                       </p>
                                     ) : null}
@@ -3085,50 +3134,44 @@ export default function Optimize() {
           )}
 
           {stage === "assessment" && (
-            <div className="mt-8 sm:mt-10 mb-6 flex flex-col items-center text-center px-2">
-              <div className="inline-flex items-center justify-center gap-2 sm:gap-3 mb-4 w-full max-w-[320px] sm:max-w-none">
-                <svg className="w-5 h-5 sm:w-7 sm:h-7 shrink-0" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
-                  <path d="M12 1L14.8 8.2L22 11L14.8 13.8L12 21L9.2 13.8L2 11L9.2 8.2L12 1Z" fill="url(#sparkle-grad-opt)" />
-                  <defs>
-                    <linearGradient id="sparkle-grad-opt" x1="2" y1="2" x2="22" y2="22" gradientUnits="userSpaceOnUse">
-                      <stop stopColor="#4578FC" />
-                      <stop offset="0.5" stopColor="#5e8afc" />
-                      <stop offset="1" stopColor="#2E9FFF" />
-                    </linearGradient>
-                  </defs>
-                </svg>
-                <span className="text-[17px] sm:text-[22px] font-medium text-[#181819] leading-tight text-left sm:text-center">
-                  {t("optimize.nextStepImproveTitle")}
-                </span>
+            <section className="ds-card ds-card--accent w-full p-4 sm:p-5">
+              <div className="flex flex-col gap-4">
+                <div className="flex min-w-0 items-start gap-3">
+                  <div className="ds-icon-well ds-icon-well--accent !h-11 !w-11" aria-hidden>
+                    <SparklesIcon className="h-5 w-5" strokeWidth={1.35} />
+                  </div>
+                  <div className="min-w-0 flex-1 space-y-1.5 pt-0.5">
+                    <p className="text-[length:var(--text-sm)] font-semibold leading-snug text-[var(--text)]">
+                      {t("optimize.nextStepImproveTitle")}
+                    </p>
+                    <p className="ds-hint !text-[var(--text-muted)]">{t("optimize.strictNote")}</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void handleImprove()}
+                  disabled={!canImprove}
+                  className="ds-btn-primary w-full inline-flex items-center justify-center gap-2 disabled:opacity-45 disabled:cursor-not-allowed"
+                >
+                  <SparklesIcon className="w-5 h-5 shrink-0" aria-hidden />
+                  {t("optimize.applyAutoImprove")}
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={() => void handleImprove()}
-                disabled={!canImprove}
-                className="inline-flex items-center justify-center gap-2 rounded-full px-8 py-3.5 text-[15px] font-semibold text-white shadow-[0_4px_14px_-4px_rgba(69,120,252,0.55)] hover:shadow-[0_6px_20px_-4px_rgba(69,120,252,0.45)] hover:opacity-[0.97] active:scale-[0.99] transition-all disabled:opacity-45 disabled:cursor-not-allowed disabled:shadow-none focus:outline-none focus:ring-2 focus:ring-[#4578FC]/35 focus:ring-offset-2"
-                style={{
-                  background: "linear-gradient(165deg, #5e8afc 0%, #4578FC 42%, #3d6ae6 100%)",
-                }}
-              >
-                <SparklesIcon className="w-5 h-5 shrink-0" aria-hidden />
-                {t("optimize.applyAutoImprove")}
-              </button>
-              <p className="mt-3 text-[11px] text-[#6B7280] max-w-md leading-relaxed">{t("optimize.strictNote")}</p>
-            </div>
+            </section>
           )}
 
           {stage === "result" && result && (
             <>
               {result.error ? (
-                <div className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-4 sm:p-6 space-y-2">
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">{t("optimize.errorLabel")}</p>
+                <div className="ds-card p-4 sm:p-6 space-y-2">
+                  <p className="ds-label">{t("optimize.errorLabel")}</p>
                   <p className="text-sm text-[var(--text-tertiary)] whitespace-pre-wrap">{result.error}</p>
                 </div>
               ) : (
                 <>
                   {result.key_changes === undefined && (
                     <section
-                      className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-4 sm:p-5"
+                      className="ds-card p-4 sm:p-5"
                       aria-busy="true"
                       aria-label={t("optimize.keyChanges")}
                     >
@@ -3148,29 +3191,107 @@ export default function Optimize() {
                     </section>
                   )}
                   {result.key_changes && result.key_changes.length > 0 && (
-                    <section className="rounded-2xl bg-[#FAFAFC] border border-[#EBEDF5] p-4 sm:p-5" aria-labelledby="key-changes-heading">
-                      <h3 id="key-changes-heading" className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">{t("optimize.keyChanges")}</h3>
-                      <div className="space-y-3">
-                        {result.key_changes.map((group, idx) => (
-                          <div key={idx} className="space-y-1.5">
-                            <p className="text-[13px] font-semibold text-[#181819]">{group.category}</p>
-                            {group.description && <p className="text-[13px] text-[var(--text-muted)] leading-relaxed">{group.description}</p>}
-                            {group.items.length > 0 && (
-                              <div className="flex flex-wrap gap-1.5">
-                                {group.items.map((item, i) => (
-                                  <span
-                                    key={i}
-                                    className="inline-flex items-center gap-1.5 pl-2 pr-2.5 py-1 rounded-full text-[11px] font-medium text-[#181819] bg-[#ECFDF5] border border-[#A7F3D0]"
-                                  >
-                                    <CheckIcon className="w-3.5 h-3.5 shrink-0 text-emerald-600" strokeWidth={2.5} aria-hidden />
-                                    {item}
-                                  </span>
-                                ))}
+                    <section className="w-full" aria-labelledby="key-changes-heading">
+                      {(() => {
+                        const improvementCount = result.key_changes.reduce(
+                          (n, g) => n + (g.items?.length || 0),
+                          0,
+                        );
+                        return (
+                          <>
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                              <div className="min-w-0">
+                                <h3
+                                  id="key-changes-heading"
+                                  className="text-[length:var(--text-lg)] font-semibold tracking-tight text-[var(--text)]"
+                                >
+                                  {t("optimize.keyChangesTitle")}
+                                </h3>
+                                <p className="ds-subtitle mt-1">{t("optimize.keyChangesSubtitle")}</p>
                               </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
+                              {improvementCount > 0 && (
+                                <span className="ds-soft-pill ds-soft-pill--success self-start sm:self-auto shrink-0">
+                                  <CheckIcon className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
+                                  {tFormat(t("optimize.keyChangesApplied"), { count: improvementCount })}
+                                </span>
+                              )}
+                            </div>
+
+                            <ul className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                              {result.key_changes.map((group, idx) => {
+                                const { headline, why, well, Icon } = keyChangeUserFacing(
+                                  group.category,
+                                  group.description,
+                                );
+                                const wellClass =
+                                  well === "success"
+                                    ? "ds-icon-well--success"
+                                    : well === "warning"
+                                      ? "ds-icon-well--warning"
+                                      : "ds-icon-well--accent";
+                                const items = group.items || [];
+                                return (
+                                  <li key={`${group.category}-${idx}`} className="ds-card !rounded-[var(--radius-md)] p-4 flex flex-col">
+                                    <div className="flex items-start gap-3.5">
+                                      <div className={`ds-icon-well ${wellClass}`} aria-hidden>
+                                        <Icon className="h-5 w-5" strokeWidth={1.35} />
+                                      </div>
+                                      <div className="min-w-0 flex-1">
+                                        <div className="flex items-start justify-between gap-2">
+                                          <p className="text-[length:var(--text-sm)] font-semibold leading-snug text-[var(--text)]">
+                                            {headline}
+                                          </p>
+                                          <span className="ds-soft-pill ds-soft-pill--success !py-1 !px-2.5 !text-[11px] shrink-0">
+                                            {t("optimize.keyChangesImproved")}
+                                          </span>
+                                        </div>
+                                        <p className="ds-body mt-1.5 !text-[12px]">{why}</p>
+                                      </div>
+                                    </div>
+                                    {items.length > 0 && (
+                                      <Disclosure>
+                                        {({ open }) => (
+                                          <div className="mt-3 border-t border-[var(--border)]/80 pt-3">
+                                            <DisclosureButton className="flex w-full items-center justify-between gap-2 text-left text-[12px] font-semibold text-[var(--accent)] hover:text-[var(--accent-hover)]">
+                                              <span>
+                                                {open
+                                                  ? t("optimize.keyChangesHideDetails")
+                                                  : t("optimize.keyChangesSeeDetails")}
+                                              </span>
+                                              <ChevronDownIcon
+                                                className={`h-4 w-4 shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
+                                              />
+                                            </DisclosureButton>
+                                            <DisclosurePanel>
+                                              <ul className="mt-2.5 space-y-2">
+                                                {items.map((item, i) => (
+                                                  <li
+                                                    key={`${idx}-${i}`}
+                                                    className="flex items-start gap-2 text-[12px] leading-snug text-[var(--text-muted)]"
+                                                  >
+                                                    <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[var(--success-soft)]">
+                                                      <CheckIcon
+                                                        className="h-2.5 w-2.5 text-[var(--success)]"
+                                                        strokeWidth={2.5}
+                                                        aria-hidden
+                                                      />
+                                                    </span>
+                                                    <span>{item}</span>
+                                                  </li>
+                                                ))}
+                                              </ul>
+                                            </DisclosurePanel>
+                                          </div>
+                                        )}
+                                      </Disclosure>
+                                    )}
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          </>
+                        );
+                      })()}
                     </section>
                   )}
 
@@ -3211,7 +3332,7 @@ export default function Optimize() {
           {/* Main Visual Block */}
           <div className="w-full max-w-[900px] mb-6 sm:mb-12">
             <div className="relative rounded-2xl p-5 sm:p-8 lg:p-12 overflow-hidden flex flex-col justify-center min-h-[320px] sm:min-h-[380px] lg:min-h-[420px]"
-                 style={{ background: "linear-gradient(105deg, #faf5ff 0%, #fce7f3 100%)" }}>
+                 style={{ background: "var(--grad-accent-soft)" }}>
               <div className="max-w-[420px] relative z-10">
                 <h1 className="text-[1.9rem] sm:text-3xl md:text-[40px] leading-tight font-bold text-[#0f172a] tracking-tight mb-4 sm:mb-5">
                   Get expert feedback on your resume
@@ -3222,8 +3343,7 @@ export default function Optimize() {
                 <button
                   type="button"
                   onClick={() => setStage("idle")}
-                  className="inline-flex items-center gap-2 h-12 px-8 rounded-full text-white text-[16px] font-bold transition-all shadow-md hover:shadow-lg hover:opacity-95 active:scale-[0.98] tracking-tight"
-                  style={{ background: "linear-gradient(160deg, #4558ff 0%, #2f40df 100%)" }}
+                  className="ds-btn-primary inline-flex items-center gap-2 !h-12 !px-8 !rounded-full !text-[16px]"
                 >
                   <SparklesIcon className="w-5 h-5 shrink-0" aria-hidden />
                   Check your resume now
@@ -3284,7 +3404,7 @@ export default function Optimize() {
           {/* Шаг 1 — слева */}
           <section
             className={`rounded-2xl border overflow-hidden flex flex-col min-h-0 transition-colors ${
-              hasResume ? "border-transparent bg-[#f8f9fb]" : "border-[#EBEDF5] bg-white"
+              hasResume ? "border-transparent bg-[#f8f9fb]" : "border-[var(--border)] bg-white"
             }`}
             aria-labelledby="step1-heading"
           >
@@ -3297,11 +3417,11 @@ export default function Optimize() {
                       {t("optimize.step1")}
                     </span>
                   ) : (
-                    <span className="inline-block rounded-lg border border-[#4578FC] bg-[#4578FC]/5 px-3 py-1 text-xs font-medium text-[#4578FC]">
+                    <span className="inline-block rounded-lg border border-[var(--accent)] bg-[var(--accent)]/5 px-3 py-1 text-xs font-medium text-[var(--accent)]">
                       {t("optimize.step1")}
                     </span>
                   )}
-                  <h1 id="step1-heading" className="text-lg sm:text-xl font-bold tracking-tight text-[#181819]">
+                  <h1 id="step1-heading" className="text-lg sm:text-xl font-bold tracking-tight text-[var(--text)]">
                     {t("optimize.addResume")}
                   </h1>
                 </div>
@@ -3313,7 +3433,7 @@ export default function Optimize() {
                 <button
                   type="button"
                   onClick={handleClearResume}
-                  className="group shrink-0 inline-flex items-center gap-1.5 text-sm font-medium text-[var(--text-muted)] hover:bg-[#EBEDF5] hover:text-[#181819] focus:outline-none focus:ring-2 focus:ring-[#4578FC]/20 focus:ring-offset-1 rounded px-1.5 py-0.5 transition-colors"
+                  className="group shrink-0 inline-flex items-center gap-1.5 text-sm font-medium text-[var(--text-muted)] hover:bg-[#EBEDF5] hover:text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/20 focus:ring-offset-1 rounded px-1.5 py-0.5 transition-colors"
                 >
                   <ArrowPathIcon className="w-3.5 h-3.5 shrink-0" aria-hidden />
                   {t("optimize.changeResume")}
@@ -3395,10 +3515,10 @@ export default function Optimize() {
                       aria-hidden
                     />
                     <div className="relative p-6 flex flex-col items-center gap-4 flex-1 justify-center">
-                      <div className="hidden sm:flex rounded-full bg-white/90 border border-[#4578FC]/20 p-3 shadow-sm" aria-hidden>
-                        <ArrowUpTrayIcon className="w-8 h-8 text-[#4578FC]" />
+                      <div className="hidden sm:flex rounded-full bg-white/90 border border-[var(--accent)]/20 p-3 shadow-sm" aria-hidden>
+                        <ArrowUpTrayIcon className="w-8 h-8 text-[var(--accent)]" />
                       </div>
-                      <p className="hidden sm:block text-[13px] sm:text-sm font-bold text-[#181819] uppercase tracking-wide">
+                      <p className="hidden sm:block text-[13px] sm:text-sm font-bold text-[var(--text)] uppercase tracking-wide">
                         {t("optimize.dragHere")}
                       </p>
                       <p className="hidden sm:block text-xs text-[var(--text-tertiary)]">
@@ -3408,10 +3528,10 @@ export default function Optimize() {
                         <button
                           type="button"
                           onClick={() => { setResumeInputMode("file"); fileInputRef.current?.click(); }}
-                          className={`inline-flex justify-center items-center gap-2 px-4 py-3 sm:px-3 sm:py-2 text-base sm:text-sm font-medium rounded-xl transition-colors focus:outline-none focus:ring-2 focus:ring-[#4578FC]/50 focus:ring-offset-2 w-full sm:w-auto ${
+                          className={`inline-flex justify-center items-center gap-2 px-4 py-3 sm:px-3 sm:py-2 text-base sm:text-sm font-medium rounded-xl transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/50 focus:ring-offset-2 w-full sm:w-auto ${
                             resumeInputMode === "file"
-                              ? "bg-[#4578FC]/15 text-[#4578FC] border border-[#4578FC]/50 hover:bg-[#4578FC]/25"
-                              : "border border-[#b8bed0] bg-white text-[var(--text)] hover:bg-[#F5F6FA]"
+                              ? "bg-[var(--accent)]/15 text-[var(--accent)] border border-[var(--accent)]/50 hover:bg-[var(--accent)]/25"
+                              : "border border-[#b8bed0] bg-white text-[var(--text)] hover:bg-[var(--accent-soft)]"
                           }`}
                         >
                           <ArrowUpTrayIcon className="w-5 h-5 sm:w-4 sm:h-4 shrink-0" aria-hidden />
@@ -3421,10 +3541,10 @@ export default function Optimize() {
                         <button
                           type="button"
                           onClick={() => { setResumeInputMode("text"); setResumeSourceWasPdf(false); }}
-                          className={`inline-flex justify-center items-center gap-2 px-4 py-3 sm:px-3 sm:py-2 text-base sm:text-sm font-medium rounded-xl transition-colors focus:outline-none focus:ring-2 focus:ring-[#4578FC]/30 focus:ring-offset-2 w-full sm:w-auto ${
+                          className={`inline-flex justify-center items-center gap-2 px-4 py-3 sm:px-3 sm:py-2 text-base sm:text-sm font-medium rounded-xl transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/30 focus:ring-offset-2 w-full sm:w-auto ${
                             resumeInputMode === "text"
-                              ? "bg-[#d4f090]/60 text-[#181819] border border-[#b8d86a] hover:bg-[#d4f090]/80"
-                              : "border border-[#b8bed0] bg-white text-[var(--text)] hover:bg-[#F5F6FA]"
+                              ? "bg-[#d4f090]/60 text-[var(--text)] border border-[#b8d86a] hover:bg-[#d4f090]/80"
+                              : "border border-[#b8bed0] bg-white text-[var(--text)] hover:bg-[var(--accent-soft)]"
                           }`}
                         >
                           <ClipboardDocumentIcon className="w-5 h-5 sm:w-4 sm:h-4 shrink-0" aria-hidden />
@@ -3437,7 +3557,7 @@ export default function Optimize() {
                           onChange={(e) => setResumeContent(e.target.value)}
                           onBlur={handleResumePaste}
                           placeholder={t("optimize.jobTextPlaceholder")}
-                          className="w-full min-h-[5rem] max-w-md rounded-xl border border-[#c8cddc] bg-white/80 px-3 py-2.5 text-[16px] sm:text-sm text-[#181819] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[#4578FC]/30 focus:border-[#4578FC]/50 resize-none"
+                          className="w-full min-h-[5rem] max-w-md rounded-xl border border-[#c8cddc] bg-white/80 px-3 py-2.5 text-[16px] sm:text-sm text-[var(--text)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/30 focus:border-[var(--accent)]/50 resize-none"
                         />
                       )}
                     </div>
@@ -3451,13 +3571,13 @@ export default function Optimize() {
           <section
             ref={step2SectionRef}
             className={`relative rounded-2xl border overflow-hidden flex flex-col min-h-0 transition-all duration-200 ${
-              !hasResume ? "opacity-60 pointer-events-none select-none border-[#EBEDF5] bg-white" : hasJob ? "border-transparent bg-[#f8f9fb]" : "border-[#EBEDF5] bg-white"
+              !hasResume ? "opacity-60 pointer-events-none select-none border-[var(--border)] bg-white" : hasJob ? "border-transparent bg-[#f8f9fb]" : "border-[var(--border)] bg-white"
             }`}
             aria-labelledby="step2-heading"
             aria-disabled={!hasResume}
           >
             {!hasResume && (
-              <div className="absolute inset-0 rounded-2xl bg-[#F2F3F9]/95 flex items-center justify-center z-10" aria-hidden>
+              <div className="absolute inset-0 rounded-2xl bg-[var(--bg-page)]/95 flex items-center justify-center z-10" aria-hidden>
                 <p className="text-sm font-medium text-[var(--text-muted)] px-4 text-center">
                   {t("optimize.uploadResumeFirst")}
                 </p>
@@ -3473,11 +3593,11 @@ export default function Optimize() {
                         {t("optimize.step2")}
                       </span>
                     ) : (
-                      <span className="inline-block rounded-lg border border-[#4578FC] bg-[#4578FC]/5 px-3 py-1 text-xs font-medium text-[#4578FC]">
+                      <span className="inline-block rounded-lg border border-[var(--accent)] bg-[var(--accent)]/5 px-3 py-1 text-xs font-medium text-[var(--accent)]">
                         {t("optimize.step2")}
                       </span>
                     )}
-                    <h1 id="step2-heading" className="text-lg sm:text-xl font-bold tracking-tight text-[#181819]">
+                    <h1 id="step2-heading" className="text-lg sm:text-xl font-bold tracking-tight text-[var(--text)]">
                       {t("optimize.addJobTitle")}
                     </h1>
                   </div>
@@ -3494,7 +3614,7 @@ export default function Optimize() {
                       setResult(null);
                       setStage("idle");
                     }}
-                    className="group shrink-0 inline-flex items-center gap-1.5 text-sm font-medium text-[var(--text-muted)] hover:bg-[#EBEDF5] hover:text-[#181819] focus:outline-none focus:ring-2 focus:ring-[#4578FC]/20 focus:ring-offset-1 rounded px-1.5 py-0.5 transition-colors"
+                    className="group shrink-0 inline-flex items-center gap-1.5 text-sm font-medium text-[var(--text-muted)] hover:bg-[#EBEDF5] hover:text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/20 focus:ring-offset-1 rounded px-1.5 py-0.5 transition-colors"
                   >
                     <ArrowPathIcon className="w-3.5 h-3.5 shrink-0" aria-hidden />
                     {t("optimize.changeJob")}
@@ -3505,10 +3625,10 @@ export default function Optimize() {
               {hasJob ? (
                 <>
                   <div className="flex items-center gap-2 mb-3 min-w-0" role="group" aria-label="Job">
-                    <span className="shrink-0 flex items-center justify-center w-6 h-6 rounded bg-[#4578FC]/12" title={t("optimize.jobLinkPlaceholder")}>
-                      <BriefcaseIcon className="w-3.5 h-3.5 text-[#4578FC]" aria-hidden />
+                    <span className="shrink-0 flex items-center justify-center w-6 h-6 rounded bg-[var(--accent)]/12" title={t("optimize.jobLinkPlaceholder")}>
+                      <BriefcaseIcon className="w-3.5 h-3.5 text-[var(--accent)]" aria-hidden />
                     </span>
-                    <strong className="text-sm font-semibold text-[#181819] truncate min-w-0 max-w-[50vw]" title={jobInput.trim()}>
+                    <strong className="text-sm font-semibold text-[var(--text)] truncate min-w-0 max-w-[50vw]" title={jobInput.trim()}>
                       {jobInput.trim().slice(0, 60) + (jobInput.trim().length > 60 ? "…" : "")}
                     </strong>
                   </div>
@@ -3518,7 +3638,7 @@ export default function Optimize() {
                     );
                   })()}
                   {stage === "idle" && !showFreeLimitOverlay && (
-                    <div className="mt-5 pt-4 pb-3 sm:pb-0 border-t border-[#EBEDF5]">
+                    <div className="mt-5 pt-4 pb-3 sm:pb-0 border-t border-[var(--border)]">
                       {!canAnalyzeSubscription && user?.id !== "local" ? (
                         <div className="flex flex-col items-center gap-3">
                           <p className="text-center text-[12px] text-[var(--text-muted)]">
@@ -3529,7 +3649,7 @@ export default function Optimize() {
                               to="/upgrade"
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="inline-flex items-center justify-center py-2.5 px-4 rounded-xl text-[13px] font-semibold text-white bg-[#4578FC] hover:bg-[#3d6ae6] transition-colors focus:outline-none focus:ring-2 focus:ring-[#4578FC]/40 focus:ring-offset-2"
+                              className="inline-flex items-center justify-center py-2.5 px-4 rounded-xl text-[13px] font-semibold text-white bg-[var(--accent)] hover:bg-[#3d6ae6] transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/40 focus:ring-offset-2"
                             >
                               {t("optimize.upgradeButton")}
                             </Link>
@@ -3541,7 +3661,7 @@ export default function Optimize() {
                             <button
                               type="button"
                               onClick={() => setFreeLimitUpsellDismissed(false)}
-                              className="text-sm font-semibold text-[#4578FC] hover:text-[#3d6ae6] underline-offset-2 hover:underline focus:outline-none focus:ring-2 focus:ring-[#4578FC]/30 rounded px-1"
+                              className="text-sm font-semibold text-[var(--accent)] hover:text-[var(--accent-hover)] underline-offset-2 hover:underline focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/30 rounded px-1"
                             >
                               {t("optimize.freeLimitShowPlansAgain")}
                             </button>
@@ -3552,7 +3672,7 @@ export default function Optimize() {
                           <button
                             type="button"
                             onClick={handleStartScan}
-                            className="w-full flex items-center justify-center gap-2 rounded-2xl text-white py-3.5 px-5 text-sm font-semibold bg-[#4578FC] hover:bg-[#3d6ae6] transition-colors focus:outline-none focus:ring-2 focus:ring-[#4578FC]/40 focus:ring-offset-2 focus:ring-offset-[#FAFAFC]"
+                            className="w-full flex items-center justify-center gap-2 rounded-2xl text-white py-3.5 px-5 text-sm font-semibold bg-[var(--accent)] hover:bg-[#3d6ae6] transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/40 focus:ring-offset-2 focus:ring-offset-[#FAFAFC]"
                           >
                             <SparklesIcon className="w-5 h-5 shrink-0" aria-hidden />
                             {t("optimize.checkMatch")}
@@ -3582,7 +3702,7 @@ export default function Optimize() {
                       if (e.target.value.trim().length > 100) setOfferPasteAsText(false);
                     }}
                     placeholder={t("optimize.jobTextPlaceholder")}
-                    className="w-full min-h-[7rem] rounded-xl border border-[#EBEDF5] bg-white px-4 py-3 text-[16px] sm:text-sm text-[#181819] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-2 focus:ring-[#4578FC]/25 focus:border-[#4578FC]/40 resize-none"
+                    className="w-full min-h-[7rem] rounded-xl border border-[var(--border)] bg-white px-4 py-3 text-[16px] sm:text-sm text-[var(--text)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/25 focus:border-[var(--accent)]/40 resize-none"
                     aria-describedby={offerPasteAsText ? "paste-job-hint" : undefined}
                   />
                 </div>

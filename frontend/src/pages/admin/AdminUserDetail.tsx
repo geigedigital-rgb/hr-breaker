@@ -100,7 +100,7 @@ export default function AdminUserDetail() {
   if (loading && !detail) {
     return (
       <div className="flex flex-1 items-center justify-center py-16">
-        <span className="h-8 w-8 animate-spin rounded-full border-2 border-[#4578FC] border-t-transparent" aria-hidden />
+        <span className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--accent)] border-t-transparent" aria-hidden />
       </div>
     );
   }
@@ -108,7 +108,7 @@ export default function AdminUserDetail() {
   if (error && !detail) {
     return (
       <div className="max-w-2xl space-y-4">
-        <Link to="/admin/users" className="text-sm text-[#4578FC] hover:underline">
+        <Link to="/admin/users" className="text-sm text-[var(--accent)] hover:underline">
           ← {t("admin.userDetail.backToList")}
         </Link>
         <section className="rounded-xl border border-red-200 bg-red-50/80 p-4">
@@ -126,7 +126,7 @@ export default function AdminUserDetail() {
   return (
     <div className="flex flex-col min-h-0 w-full max-w-4xl mx-auto gap-4 pb-8">
       <div className="shrink-0 flex flex-wrap items-center gap-3">
-        <Link to="/admin/users" className="text-sm text-[#4578FC] hover:underline font-medium">
+        <Link to="/admin/users" className="text-sm text-[var(--accent)] hover:underline font-medium">
           ← {t("admin.userDetail.backToList")}
         </Link>
         <h2 className="text-xl font-bold text-[var(--text)]">{detail.email}</h2>
@@ -145,7 +145,7 @@ export default function AdminUserDetail() {
       ) : null}
 
       <div className="grid gap-4 md:grid-cols-2 shrink-0">
-        <section className="rounded-xl border border-[#EBEDF5] bg-[var(--card)] p-4 shadow-sm">
+        <section className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-sm">
           <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-2">
             {t("admin.userDetail.whereStopped")}
           </h3>
@@ -162,7 +162,7 @@ export default function AdminUserDetail() {
           </ul>
         </section>
 
-        <section className="rounded-xl border border-[#EBEDF5] bg-[var(--card)] p-4 shadow-sm">
+        <section className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-sm">
           <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-2">
             {t("admin.userDetail.account")}
           </h3>
@@ -194,7 +194,7 @@ export default function AdminUserDetail() {
       </div>
 
       {detail.referral ? (
-        <section className="rounded-xl border border-[#EBEDF5] bg-[var(--card)] p-4 shadow-sm shrink-0">
+        <section className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-sm shrink-0">
           <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-2">
             {t("admin.userDetail.referral")}
           </h3>
@@ -219,7 +219,7 @@ export default function AdminUserDetail() {
         </section>
       ) : null}
 
-      <section className="rounded-xl border border-[#EBEDF5] bg-[var(--card)] p-4 shadow-sm shrink-0">
+      <section className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-sm shrink-0">
         <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-3">
           {t("admin.userDetail.subscription")}
         </h3>
@@ -253,7 +253,7 @@ export default function AdminUserDetail() {
                 })
               )
             }
-            className="rounded-lg border border-[#EBEDF5] bg-white px-3 py-1.5 text-xs font-medium hover:bg-[#F5F6FA] disabled:opacity-50"
+            className="rounded-lg border border-[var(--border)] bg-white px-3 py-1.5 text-xs font-medium hover:bg-[var(--accent-soft)] disabled:opacity-50"
           >
             {t("admin.userDetail.presetFree")}
           </button>
@@ -269,7 +269,7 @@ export default function AdminUserDetail() {
                 })
               )
             }
-            className="rounded-lg border border-[#EBEDF5] bg-white px-3 py-1.5 text-xs font-medium hover:bg-[#F5F6FA] disabled:opacity-50"
+            className="rounded-lg border border-[var(--border)] bg-white px-3 py-1.5 text-xs font-medium hover:bg-[var(--accent-soft)] disabled:opacity-50"
           >
             {t("admin.userDetail.presetTrial7")}
           </button>
@@ -285,14 +285,14 @@ export default function AdminUserDetail() {
                 })
               )
             }
-            className="rounded-lg border border-[#EBEDF5] bg-white px-3 py-1.5 text-xs font-medium hover:bg-[#F5F6FA] disabled:opacity-50"
+            className="rounded-lg border border-[var(--border)] bg-white px-3 py-1.5 text-xs font-medium hover:bg-[var(--accent-soft)] disabled:opacity-50"
           >
             {t("admin.userDetail.presetMonthly30")}
           </button>
         </div>
       </section>
 
-      <section className="rounded-xl border border-[#EBEDF5] bg-[var(--card)] p-4 shadow-sm shrink-0">
+      <section className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-sm shrink-0">
         <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-3">
           {t("admin.userDetail.actions")}
         </h3>
@@ -306,7 +306,7 @@ export default function AdminUserDetail() {
                 onChange={(ev) =>
                   run("block", () => patchAdminUserBlocked(userId, ev.target.checked))
                 }
-                className="h-4 w-4 rounded border-[#CBD5E1] text-[#4578FC]"
+                className="h-4 w-4 rounded border-[#CBD5E1] text-[var(--accent)]"
               />
               <span>{t("admin.userDetail.blockAccount")}</span>
             </label>
@@ -325,7 +325,7 @@ export default function AdminUserDetail() {
               {t("admin.userDetail.deleteAccount")}
             </button>
           </div>
-          <div className="rounded-lg border border-[#EBEDF5] bg-[#F8FAFC] p-3 space-y-2">
+          <div className="rounded-lg border border-[var(--border)] bg-[#F8FAFC] p-3 space-y-2">
             <p className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
               {t("admin.users.partnerAccess")}
             </p>
@@ -337,7 +337,7 @@ export default function AdminUserDetail() {
                   checked={partnerDraft}
                   disabled={!!busy}
                   onChange={(ev) => setPartnerDraft(ev.target.checked)}
-                  className="h-4 w-4 rounded border-[#CBD5E1] text-[#4578FC]"
+                  className="h-4 w-4 rounded border-[#CBD5E1] text-[var(--accent)]"
                 />
                 <span>{t("admin.userDetail.partnerAccessEnable")}</span>
               </label>
@@ -347,7 +347,7 @@ export default function AdminUserDetail() {
                 onClick={() =>
                   run("partner-save", () => patchAdminUserPartnerAccess(userId, partnerDraft))
                 }
-                className="rounded-lg border border-[#4578FC] bg-[#4578FC] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#3d6ae8] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-[#4578FC]"
+                className="rounded-lg border border-[var(--accent)] bg-[var(--accent)] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#3d6ae8] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-[var(--accent)]"
               >
                 {t("admin.userDetail.savePartnerAccess")}
               </button>
@@ -356,7 +356,7 @@ export default function AdminUserDetail() {
         </div>
       </section>
 
-      <section className="rounded-xl border border-[#EBEDF5] bg-[var(--card)] shadow-sm">
+      <section className="rounded-xl border border-[var(--border)] bg-[var(--card)] shadow-sm">
         <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] px-4 pt-4">
           {t("admin.userDetail.journeyLog")}
         </h3>
@@ -369,7 +369,7 @@ export default function AdminUserDetail() {
           </p>
         ) : null}
         <div className="p-4 pt-2">
-          <ul className="space-y-3 text-sm border-l-2 border-[#EBEDF5] ml-2 pl-4">
+          <ul className="space-y-3 text-sm border-l-2 border-[var(--border)] ml-2 pl-4">
             {detail.journey.map((j, i) => {
               const auditMetaParts: string[] = [];
               if (j.kind === "audit") {
@@ -388,7 +388,7 @@ export default function AdminUserDetail() {
                   : j.title;
               return (
                 <li key={`${j.kind}-${j.at}-${i}`} className="relative">
-                  <span className="absolute -left-[1.15rem] top-1.5 h-2 w-2 rounded-full bg-[#4578FC]" aria-hidden />
+                  <span className="absolute -left-[1.15rem] top-1.5 h-2 w-2 rounded-full bg-[var(--accent)]" aria-hidden />
                   <p className="text-xs text-[var(--text-tertiary)] tabular-nums">
                     {j.at ? new Date(j.at).toLocaleString() : "—"}
                   </p>
@@ -414,7 +414,7 @@ export default function AdminUserDetail() {
                             setJourneyFileError(e instanceof Error ? e.message : t("admin.activity.openError")),
                           );
                         }}
-                        className="inline-flex items-center gap-1 rounded-lg border border-[#E8ECF4] bg-white px-2.5 py-1.5 text-xs font-medium text-[#4578FC] hover:bg-[#F5F8FF]"
+                        className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-white px-2.5 py-1.5 text-xs font-medium text-[var(--accent)] hover:bg-[#F5F8FF]"
                       >
                         <ArrowTopRightOnSquareIcon className="h-4 w-4 shrink-0" aria-hidden />
                         {t("admin.activity.openPdf")}
@@ -428,7 +428,7 @@ export default function AdminUserDetail() {
                               setJourneyFileError(e instanceof Error ? e.message : t("admin.activity.openError")),
                             );
                           }}
-                          className="inline-flex items-center gap-1 rounded-lg border border-[#E8ECF4] bg-white px-2.5 py-1.5 text-xs font-medium text-[var(--text-muted)] hover:bg-[#F5F6FA]"
+                          className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-white px-2.5 py-1.5 text-xs font-medium text-[var(--text-muted)] hover:bg-[var(--accent-soft)]"
                         >
                           <DocumentTextIcon className="h-4 w-4 shrink-0" aria-hidden />
                           {t("admin.activity.downloadSource")}
@@ -443,7 +443,7 @@ export default function AdminUserDetail() {
         </div>
       </section>
 
-      <section className="rounded-xl border border-[#EBEDF5] bg-[var(--card)] shadow-sm shrink-0">
+      <section className="rounded-xl border border-[var(--border)] bg-[var(--card)] shadow-sm shrink-0">
         <div className="px-4 pt-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
@@ -464,7 +464,7 @@ export default function AdminUserDetail() {
                   setAccessError(null);
                 }
               }}
-              className="h-4 w-4 rounded border-[#CBD5E1] text-[#4578FC] focus:ring-[#4578FC]"
+              className="h-4 w-4 rounded border-[#CBD5E1] text-[var(--accent)] focus:ring-[var(--accent)]"
             />
             <span>{t("admin.userDetail.accessLogToggle")}</span>
           </label>
@@ -477,12 +477,12 @@ export default function AdminUserDetail() {
               </p>
             ) : accessLoading ? (
               <div className="flex justify-center py-8" aria-busy="true">
-                <span className="h-7 w-7 animate-spin rounded-full border-2 border-[#4578FC] border-t-transparent" />
+                <span className="h-7 w-7 animate-spin rounded-full border-2 border-[var(--accent)] border-t-transparent" />
               </div>
             ) : accessItems.length === 0 ? (
               <p className="text-sm text-[var(--text-muted)]">{t("admin.userDetail.accessLogEmpty")}</p>
             ) : (
-              <div className="overflow-x-auto border border-[#EBEDF5] rounded-lg">
+              <div className="overflow-x-auto border border-[var(--border)] rounded-lg">
                 <table className="min-w-full text-xs">
                   <thead className="bg-[#F5F6FA] text-[var(--text-muted)]">
                     <tr>
