@@ -871,11 +871,23 @@ function normalizeCategoryKey(category: string): string {
   if (c.includes("keyword")) return "keywords";
   if (c.includes("requirement")) return "requirements";
   if (c.includes("structure")) return "structure";
+  if (c.includes("writing") || c.includes("wording") || c.includes("phrase")) return "writing";
+  if (c.includes("impact") || c.includes("result")) return "impact";
   if (c.includes("skill")) return "skills";
   if (c.includes("experience")) return "experience";
   if (c.includes("portfolio")) return "portfolio";
   if (c.includes("ats") || c.includes("match")) return "ats";
   return "general";
+}
+
+function localizeRecCategory(category: string): string {
+  const key = normalizeCategoryKey(category);
+  if (key === "keywords") return t("optimize.recCategoryKeywords");
+  if (key === "requirements") return t("optimize.recCategoryRequirements");
+  if (key === "structure") return t("optimize.recCategoryStructure");
+  if (key === "writing") return t("optimize.recCategoryWriting");
+  if (key === "impact") return t("optimize.recCategoryImpact");
+  return category.trim() || t("optimize.recommendationsTitle");
 }
 
 function fallbackLabelsByCategory(categoryKey: string, scorePct: number | null): string[] {
@@ -894,6 +906,12 @@ function fallbackLabelsByCategory(categoryKey: string, scorePct: number | null):
       if (low) return ["Use clear section headings", "Shorten long paragraphs into bullets", "Move strongest impact points to top"];
       if (mid) return ["Improve section flow and ordering", "Keep bullets concise and specific"];
       return ["Keep current section clarity", "Preserve readable layout and hierarchy"];
+    case "writing":
+      if (low) return ["Replace weak verbs with action verbs", "Cut filler phrases in summary and bullets"];
+      return ["Keep wording concise and concrete"];
+    case "impact":
+      if (low) return ["Add one metric to strongest project bullets", "Turn task lists into outcome statements"];
+      return ["Keep results visible in top experience bullets"];
     case "skills":
       if (low) return ["Highlight core technical skills first", "Tie skills to real project outcomes"];
       return ["Keep skills prioritized by relevance", "Support skills with practical examples"];
@@ -918,6 +936,13 @@ function isPositiveRecommendationLabel(label: string): boolean {
   const positivePrefixes = ["ok", "clear", "match", "maintain", "keep", "preserve", "well-structured", "aligned"];
   return positivePrefixes.some((prefix) => normalized.startsWith(prefix));
 }
+
+type RecGroup = {
+  category: string;
+  categoryKey: string;
+  labels: string[];
+  tips: api.RecommendationTip[];
+};
 
 function buildScanResultParagraphs(params: {
   aiTips?: string | null;
@@ -966,7 +991,7 @@ function groupRecommendations(
     ats: number | null;
     keywords: number | null;
   }
-): { category: string; labels: string[] }[] {
+): RecGroup[] {
   if (!items || items.length === 0) return [];
   const overall = (() => {
     const values = [scores.ats, scores.keywords].filter((v): v is number => v != null);
@@ -978,26 +1003,37 @@ function groupRecommendations(
     if (categoryKey === "ats") return scores.ats ?? overall;
     if (categoryKey === "keywords") return scores.keywords ?? overall;
     if (categoryKey === "requirements") return scores.keywords ?? scores.ats ?? overall;
-    if (categoryKey === "structure") return scores.ats ?? overall;
+    if (categoryKey === "structure" || categoryKey === "writing" || categoryKey === "impact") {
+      return scores.ats ?? overall;
+    }
     return overall;
   };
 
-  const groups = new Map<string, string[]>();
+  const groups = new Map<string, { labels: string[]; tips: api.RecommendationTip[] }>();
   for (const rec of items) {
     const category = (rec.category || "").trim() || "General";
-    if (!groups.has(category)) groups.set(category, []);
+    if (!groups.has(category)) groups.set(category, { labels: [], tips: [] });
     const existing = groups.get(category)!;
     for (const raw of rec.labels || []) {
       const label = (raw || "").trim();
       if (!label) continue;
-      if (!existing.includes(label)) existing.push(label);
+      if (!existing.labels.includes(label)) existing.labels.push(label);
+    }
+    for (const tip of rec.tips || []) {
+      const title = (tip?.title || "").trim();
+      const dos = (tip?.do || "").trim();
+      if (!title || !dos) continue;
+      if (!existing.tips.some((t) => t.title === title && t.do === dos)) {
+        existing.tips.push({ title, do: dos });
+      }
     }
   }
-  return Array.from(groups.entries()).map(([category, labels]) => {
+
+  return Array.from(groups.entries()).map(([category, bucket]) => {
     const categoryKey = normalizeCategoryKey(category);
     const categoryScore = pickScoreForCategory(categoryKey);
     const allowOk = categoryScore == null || categoryScore >= 75;
-    const cleaned = labels.filter((label) => {
+    const cleaned = bucket.labels.filter((label) => {
       const normalized = label.trim().toLowerCase();
       if (!allowOk && (normalized === "ok" || normalized === t("optimize.filterOk").toLowerCase())) {
         return false;
@@ -1008,17 +1044,18 @@ function groupRecommendations(
     const fallback = fallbackLabelsByCategory(categoryKey, categoryScore);
     const maxLabels = categoryKey === "keywords" ? 16 : 5;
     const limited = cleaned.slice(0, maxLabels);
-    // Do not force a fixed amount of issues.
-    // If model/backend provided concrete items, keep their natural count.
-    // Keywords: backend sends missing terms as chips — do not inject generic instructional fallback text.
-    if (limited.length === 0 && categoryKey !== "keywords") {
+    const tips = bucket.tips.slice(0, 2);
+
+    // Tip cards from API — do not inject generic fallback labels.
+    // Keywords: chips only; never invent instructional text when empty.
+    if (tips.length === 0 && limited.length === 0 && categoryKey !== "keywords") {
       for (const fb of fallback) {
         if (limited.length >= 1) break;
         if (!limited.some((x) => x.toLowerCase() === fb.toLowerCase())) limited.push(fb);
       }
     }
 
-    return { category, labels: limited };
+    return { category, categoryKey, labels: limited, tips };
   });
 }
 
@@ -2707,15 +2744,25 @@ export default function Optimize() {
       })
     : [];
 
-  const treatmentGroupsOptimize = recommendationGroups.map((group) => ({
-    category: group.category,
-    problems: group.labels.filter((label) => !isPositiveRecommendationLabel(label)),
-  }));
+  const treatmentGroupsOptimize = recommendationGroups
+    .map((group) => {
+      const problems = group.labels.filter((label) => !isPositiveRecommendationLabel(label));
+      return {
+        category: group.category,
+        categoryKey: group.categoryKey,
+        tips: group.tips,
+        problems,
+        hasContent: group.tips.length > 0 || problems.length > 0,
+      };
+    })
+    .filter((g) => g.hasContent);
   const problemLabelsSorted = recommendationGroups
     .flatMap((g) =>
-      normalizeCategoryKey(g.category) === "keywords"
+      g.categoryKey === "keywords"
         ? []
-        : g.labels.filter((l) => !isPositiveRecommendationLabel(l)),
+        : g.tips.length > 0
+          ? g.tips.map((tip) => tip.title)
+          : g.labels.filter((l) => !isPositiveRecommendationLabel(l)),
     )
     .sort((a, b) => recommendationPriorityScore(b) - recommendationPriorityScore(a));
   const callbackBlockersOptimize = (preScores?.callback_blockers || [])
@@ -2723,7 +2770,9 @@ export default function Optimize() {
     .slice(0, 2);
   const topIssuesOptimizeLegacy = problemLabelsSorted.slice(0, 2);
   const showWhyNoCallbacksSection =
-    stage === "assessment" && (callbackBlockersOptimize.length > 0 || topIssuesOptimizeLegacy.length > 0);
+    stage === "assessment" &&
+    !isImproveMode &&
+    (callbackBlockersOptimize.length > 0 || topIssuesOptimizeLegacy.length > 0);
   const scanSummaryTextOptimize =
     scanResultParagraphs.length > 0 ? scanResultParagraphs.join(" ") : t("optimize.lowScoreNeedsImprovement");
 
@@ -3070,71 +3119,75 @@ export default function Optimize() {
             </section>
           )}
 
-          {stage === "assessment" && treatmentGroupsOptimize.some((g) => g.problems.length > 0) && (
+          {stage === "assessment" && treatmentGroupsOptimize.length > 0 && (
             <section className="ds-card p-5 sm:p-6">
-              <p className="ds-label">{t("optimize.recommendationsTitle")}</p>
-              <div className="mt-4 space-y-2.5">
-                {treatmentGroupsOptimize.map((group) =>
-                  group.problems.length === 0 ? null : (
-                    <Disclosure key={group.category}>
-                      {({ open }) => (
-                        <div className="rounded-[var(--radius-md)] border border-white/70 bg-white/55 shadow-[var(--shadow-sm)] backdrop-blur-sm overflow-hidden">
-                          <DisclosureButton className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-white/80 transition-colors">
-                            <div className="min-w-0 flex-1">
-                              <p className="text-[length:var(--text-sm)] font-semibold text-[var(--text)] leading-snug">
-                                {group.category}
+              <p className="ds-label text-[var(--accent)]">
+                {isImproveMode ? t("optimize.recommendationsTitleImprove") : t("optimize.recommendationsTitleTailor")}
+              </p>
+              <h3 className="mt-1.5 text-[length:var(--text-lg)] font-semibold tracking-tight text-[var(--text)]">
+                {isImproveMode ? t("optimize.recommendationsHeadingImprove") : t("optimize.recommendationsHeadingTailor")}
+              </h3>
+              <p className="ds-body mt-2 max-w-2xl">
+                {isImproveMode ? t("optimize.recommendationsSubImprove") : t("optimize.recommendationsSubTailor")}
+              </p>
+              <div className="mt-5 space-y-5">
+                {treatmentGroupsOptimize.map((group) => (
+                  <div key={group.category}>
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">
+                      {localizeRecCategory(group.category)}
+                    </p>
+                    {group.categoryKey === "keywords" ? (
+                      <div
+                        className="mt-2.5 flex flex-wrap gap-1.5"
+                        role="list"
+                        aria-label={t("optimize.keywordsMissingTerms")}
+                      >
+                        {group.problems.map((label) => (
+                          <span
+                            key={`${group.category}-${label}`}
+                            role="listitem"
+                            className="ds-chip"
+                            title={cleanRecommendationReason(label)}
+                          >
+                            {cleanRecommendationReason(label)}
+                          </span>
+                        ))}
+                      </div>
+                    ) : group.tips.length > 0 ? (
+                      <ul className="mt-2.5 space-y-2">
+                        {group.tips.map((tip) => (
+                          <li
+                            key={`${group.category}-${tip.title}`}
+                            className="rounded-[var(--radius-md)] border border-white/70 bg-white/55 px-3.5 py-3 shadow-[var(--shadow-sm)] backdrop-blur-sm"
+                          >
+                            <p className="text-[length:var(--text-sm)] font-semibold leading-snug text-[var(--text)]">
+                              {tip.title}
+                            </p>
+                            <p className="mt-1 text-[12px] leading-relaxed text-[var(--text-muted)]">{tip.do}</p>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <ul className="mt-2.5 space-y-2">
+                        {group.problems.slice(0, 2).map((label) => (
+                          <li
+                            key={`${group.category}-${label}`}
+                            className="rounded-[var(--radius-md)] border border-white/70 bg-white/55 px-3.5 py-3 shadow-[var(--shadow-sm)] backdrop-blur-sm"
+                          >
+                            <p className="text-[length:var(--text-sm)] font-semibold leading-snug text-[var(--text)]">
+                              {cleanRecommendationReason(label)}
+                            </p>
+                            {!recommendationLabelIsSelfContained(label) ? (
+                              <p className="mt-1 text-[12px] leading-relaxed text-[var(--text-muted)]">
+                                {fixFromRecommendationLabel(label, group.category)}
                               </p>
-                              <div className="mt-1.5">
-                                <span className="ds-soft-pill ds-soft-pill--warning !py-1 !px-2.5 !text-[11px]">
-                                  <span className="ds-soft-pill__value">{group.problems.length}</span>
-                                  {t("optimize.issuesToFix")}
-                                </span>
-                              </div>
-                            </div>
-                            <ChevronDownIcon
-                              className={`w-4 h-4 text-[var(--text-tertiary)] transition-transform shrink-0 ${open ? "rotate-180" : ""}`}
-                            />
-                          </DisclosureButton>
-                          <DisclosurePanel className="px-4 pb-4 pt-0">
-                            {normalizeCategoryKey(group.category) === "keywords" ? (
-                              <div
-                                className="flex flex-wrap gap-1.5 pt-3 border-t border-[var(--border)]/80 mt-1"
-                                role="list"
-                                aria-label={t("optimize.keywordsMissingTerms")}
-                              >
-                                {group.problems.map((label) => (
-                                  <span
-                                    key={`${group.category}-${label}`}
-                                    role="listitem"
-                                    className="ds-chip"
-                                    title={cleanRecommendationReason(label)}
-                                  >
-                                    {cleanRecommendationReason(label)}
-                                  </span>
-                                ))}
-                              </div>
-                            ) : (
-                              <ul className="space-y-2 pt-3 border-t border-[var(--border)]/80 mt-1 pl-0">
-                                {group.problems.map((label) => (
-                                  <li key={`${group.category}-${label}`} className="px-0.5">
-                                    <p className="text-[12px] font-medium text-[var(--text)] leading-snug">
-                                      {cleanRecommendationReason(label)}
-                                    </p>
-                                    {!recommendationLabelIsSelfContained(label) ? (
-                                      <p className="mt-0.5 text-[11px] text-[var(--text-muted)] leading-relaxed">
-                                        {fixFromRecommendationLabel(label, group.category)}
-                                      </p>
-                                    ) : null}
-                                  </li>
-                                ))}
-                              </ul>
-                            )}
-                          </DisclosurePanel>
-                        </div>
-                      )}
-                    </Disclosure>
-                  ),
-                )}
+                            ) : null}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                ))}
               </div>
             </section>
           )}

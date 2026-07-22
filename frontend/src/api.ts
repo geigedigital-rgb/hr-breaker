@@ -332,9 +332,17 @@ export async function parseJob(params: { url?: string; text?: string }): Promise
   return data;
 }
 
+export type RecommendationTip = {
+  title: string;
+  do: string;
+};
+
 export type RecommendationItem = {
   category: string;
-  labels: string[];
+  /** Keyword chips (tailor-to-job mode) */
+  labels?: string[];
+  /** Short tip cards: Writing / Structure / Impact / Requirements */
+  tips?: RecommendationTip[];
 };
 
 export type CallbackBlockerOut = {

@@ -539,9 +539,17 @@ class AnalyzeRequest(BaseModel):
     session_template_id: str | None = Field(None, max_length=200)
 
 
+class RecommendationTipOut(BaseModel):
+    """Short scannable tip card."""
+
+    title: str
+    do: str
+
+
 class RecommendationItem(BaseModel):
     category: str
-    labels: list[str]
+    labels: list[str] = Field(default_factory=list)  # keyword chips (tailor mode)
+    tips: list[RecommendationTipOut] = Field(default_factory=list)  # Writing/Structure/Impact/Requirements
 
 
 class CallbackBlockerOut(BaseModel):
@@ -2720,6 +2728,7 @@ async def api_landing_analyze(
         job_keywords=job.keywords or [],
         requirements=job.requirements or [],
         has_requirements=bool(job.requirements),
+        improve_mode=False,
     )
     callback_heads = _critical_headlines_from_insights(insights)
     callback_out = [
@@ -3250,6 +3259,19 @@ def _critical_headlines_from_insights(insights: AnalysisInsights) -> list[str]:
     return [b.headline for b in insights.callback_blockers if (b.headline or "").strip()]
 
 
+def _tips_out(tips: list | None, *, max_n: int = 2) -> list[RecommendationTipOut]:
+    out: list[RecommendationTipOut] = []
+    for tip in tips or []:
+        title = " ".join(getattr(tip, "title", "").strip().split())
+        do = " ".join(getattr(tip, "do", "").strip().split())
+        if not title or not do:
+            continue
+        out.append(RecommendationTipOut(title=title[:72], do=do[:160]))
+        if len(out) >= max_n:
+            break
+    return out
+
+
 def _recommendations_from_insights(
     insights: AnalysisInsights,
     *,
@@ -3260,8 +3282,42 @@ def _recommendations_from_insights(
     job_keywords: list[str],
     requirements: list[str],
     has_requirements: bool,
+    improve_mode: bool = False,
 ) -> list[RecommendationItem]:
-    """Structure/Requirements: prefer LLM lines; Keywords: concrete missing terms (TF-IDF), not LLM prose."""
+    """Improve: Writing/Structure/Impact tip cards. Tailor: Keywords chips + Structure/Requirements tips."""
+    if improve_mode:
+        items: list[RecommendationItem] = []
+        writing = _tips_out(getattr(insights, "tips_writing", None))
+        structure = _tips_out(getattr(insights, "tips_structure", None))
+        impact = _tips_out(getattr(insights, "tips_impact", None))
+        if not writing and not structure and not impact:
+            # Soft fallbacks if the model returns empty tip lists
+            structure = [
+                RecommendationTipOut(
+                    title="Clear section headings",
+                    do="Use standard names (Summary, Experience, Skills) and keep a consistent order.",
+                )
+            ]
+            writing = [
+                RecommendationTipOut(
+                    title="Stronger action verbs",
+                    do="Start each bullet with a concrete verb (Built, Led, Reduced) instead of duties.",
+                )
+            ]
+            impact = [
+                RecommendationTipOut(
+                    title="Add one metric",
+                    do="Put a number (%, $, time, scope) into your two strongest project bullets.",
+                )
+            ]
+        if writing:
+            items.append(RecommendationItem(category="Writing", tips=writing))
+        if structure:
+            items.append(RecommendationItem(category="Structure", tips=structure))
+        if impact:
+            items.append(RecommendationItem(category="Impact", tips=impact))
+        return items
+
     issues = _critical_headlines_from_insights(insights)
     fallback = _build_recommendations(
         ats_score=ats_score,
@@ -3298,18 +3354,28 @@ def _recommendations_from_insights(
             ["Mirror exact vacancy terminology", "Add role-specific hard skills"],
         )
 
-    def labels_for(llm_list: list[str], fb_key: str) -> list[str]:
-        if llm_list:
-            return llm_list[:3]
-        return by_cat.get(fb_key, ["OK"])
+    structure_tips = _tips_out(getattr(insights, "tips_structure", None))
+    req_tips = _tips_out(getattr(insights, "tips_requirements", None))
+    # Fallback: convert legacy string labels into tip cards if LLM returned nothing
+    if not structure_tips:
+        for label in by_cat.get("Structure", [])[:2]:
+            if label and label.upper() != "OK":
+                structure_tips.append(
+                    RecommendationTipOut(title=label[:72], do="Tighten layout into clear ATS-friendly sections and bullets.")
+                )
+    if not req_tips:
+        for label in by_cat.get("Requirements", [])[:2]:
+            if label and label.upper() != "OK":
+                req_tips.append(
+                    RecommendationTipOut(title=label[:72], do="Add truthful proof in skills and one experience bullet.")
+                )
 
-    return [
-        RecommendationItem(category="Keywords", labels=keyword_labels()),
-        RecommendationItem(category="Structure", labels=labels_for(insights.improvement_structure, "Structure")),
-        RecommendationItem(
-            category="Requirements", labels=labels_for(insights.improvement_requirements, "Requirements")
-        ),
-    ]
+    items = [RecommendationItem(category="Keywords", labels=keyword_labels())]
+    if structure_tips:
+        items.append(RecommendationItem(category="Structure", tips=structure_tips))
+    if req_tips:
+        items.append(RecommendationItem(category="Requirements", tips=req_tips))
+    return items
 
 
 def _normalize_rejection_risk(
@@ -3495,7 +3561,13 @@ async def api_analyze(req: AnalyzeRequest, user: dict | None = Depends(get_optio
     # Run ATS and breakdown (Skills/Experience/Portfolio) in parallel
     ats_score, insights = await asyncio.gather(
         score_resume_vs_job(resume_stripped, job, audit_user_id=audit_uid),
-        get_analysis_insights(resume_stripped, job, output_language=out_lang, audit_user_id=audit_uid),
+        get_analysis_insights(
+            resume_stripped,
+            job,
+            output_language=out_lang,
+            audit_user_id=audit_uid,
+            improve_mode=bool(req.improve_mode),
+        ),
     )
     alog(
         "parallel_llm",
@@ -3504,6 +3576,7 @@ async def api_analyze(req: AnalyzeRequest, user: dict | None = Depends(get_optio
             "ats_score": ats_score,
             "rejection_risk_model": insights.rejection_risk_score,
             "callback_blockers_n": len(insights.callback_blockers),
+            "improve_mode": bool(req.improve_mode),
         },
     )
     recommendations = _recommendations_from_insights(
@@ -3515,6 +3588,7 @@ async def api_analyze(req: AnalyzeRequest, user: dict | None = Depends(get_optio
         job_keywords=job.keywords or [],
         requirements=job.requirements or [],
         has_requirements=bool(job.requirements),
+        improve_mode=bool(req.improve_mode),
     )
     callback_heads = _critical_headlines_from_insights(insights)
     callback_out = [
