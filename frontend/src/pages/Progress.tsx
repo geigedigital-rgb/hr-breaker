@@ -89,7 +89,7 @@ export default function Progress() {
   if (!readiness) {
     return (
       <div className="p-6 max-w-2xl mx-auto">
-        <p className="text-[var(--text-muted)] text-sm">Progress is available in your account. Sign in or sign up.</p>
+        <p className="text-[var(--text-muted)] text-sm">{tStr("progress.signInRequired")}</p>
         <button
           type="button"
           onClick={() => navigate("/settings")}
@@ -131,12 +131,12 @@ export default function Progress() {
                   type="button"
                   onClick={() => setInfoOpen(true)}
                   className="p-1 rounded-full text-[var(--text-muted)] hover:bg-[#EBEDF5] hover:text-[var(--text)] transition-colors"
-                  aria-label="How points are earned"
+                  aria-label={tStr("progress.howPointsEarned")}
                 >
                   <InformationCircleIcon className="w-5 h-5" />
                 </button>
               </div>
-              <p className="text-sm font-medium text-[var(--text-muted)] mt-0.5">Market Readiness Score</p>
+              <p className="text-sm font-medium text-[var(--text-muted)] mt-0.5">{tStr("progress.marketReadinessScore")}</p>
               <Link
                 to={nextStep.to}
                 className="mt-6 inline-flex items-center justify-center gap-2 rounded-2xl py-3.5 px-6 text-sm font-semibold text-white shadow-lg shadow-[#6d28d9]/30 transition-all hover:shadow-xl hover:shadow-[#6d28d9]/35 hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-[#a78bfa] focus:ring-offset-2"

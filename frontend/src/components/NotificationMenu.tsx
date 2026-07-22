@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Popover, Portal, Transition } from "@headlessui/react";
 import { BellIcon } from "@heroicons/react/24/outline";
 import { useAuth } from "../contexts/AuthContext";
+import { t, tFormat } from "../i18n";
 
 type AppNotification = {
   id: string;
@@ -76,9 +77,9 @@ export function NotificationMenu({ variant = "default" }: NotificationMenuProps)
 
     generated.push({
       id: "welcome",
-      title: "Welcome to PitchCV!",
-      message: "You have 10 ATS scans and 10 optimizations each month on Free. Add a resume and job to see your match score.",
-      actionText: "Get started",
+      title: t("notifications.welcomeTitle"),
+      message: t("notifications.welcomeMessage"),
+      actionText: t("notifications.welcomeAction"),
       actionUrl: "/optimize",
       type: "info",
       date: new Date(Date.now() - 1000 * 60 * 60 * 24),
@@ -88,9 +89,9 @@ export function NotificationMenu({ variant = "default" }: NotificationMenuProps)
     if (user.subscription?.plan === "free" && (user.subscription?.free_analyses_count ?? 0) >= 10) {
       generated.push({
         id: "first_analysis_upsell",
-        title: "Great start!",
-        message: "You've successfully analyzed your resume. Keep going! Let's optimize it so recruiters can't miss you.",
-        actionText: "Unlock AI Optimization",
+        title: t("notifications.upsellTitle"),
+        message: t("notifications.upsellMessage"),
+        actionText: t("notifications.upsellAction"),
         actionUrl: "/upgrade",
         type: "upsell",
         date: new Date(Date.now() - 1000 * 60 * 60),
@@ -104,8 +105,8 @@ export function NotificationMenu({ variant = "default" }: NotificationMenuProps)
       if (daysLeft <= 3 && daysLeft > 0) {
         generated.push({
           id: "trial_ending",
-          title: "Trial ending soon",
-          message: `Your trial ends in ${daysLeft} days. Make sure to download all your optimized resumes!`,
+          title: t("notifications.trialTitle"),
+          message: tFormat(t("notifications.trialMessage"), { days: daysLeft }),
           type: "warning",
           date: new Date(),
           read: readIds.includes("trial_ending"),
@@ -147,7 +148,7 @@ export function NotificationMenu({ variant = "default" }: NotificationMenuProps)
   const panelBody = (
     <>
       <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border)] bg-[var(--bg-subtle)]/50">
-        <h3 className="text-sm font-bold text-[var(--text)]">Notifications</h3>
+        <h3 className="text-sm font-bold text-[var(--text)]">{t("notifications.title")}</h3>
         {notifications.length > 0 && (
           <button
             type="button"
@@ -157,7 +158,7 @@ export function NotificationMenu({ variant = "default" }: NotificationMenuProps)
             }}
             className="text-[11px] font-medium text-[var(--text-muted)] hover:text-[var(--text)] transition-colors"
           >
-            Clear all
+            {t("notifications.clearAll")}
           </button>
         )}
       </div>
@@ -168,8 +169,8 @@ export function NotificationMenu({ variant = "default" }: NotificationMenuProps)
             <div className="w-12 h-12 rounded-full bg-[var(--accent-soft)] flex items-center justify-center mb-3">
               <BellIcon className="w-6 h-6 text-[var(--text-muted)]" />
             </div>
-            <p className="text-sm font-medium text-[var(--text)] mb-1">No notifications</p>
-            <p className="text-xs text-[var(--text-muted)]">You're all caught up!</p>
+            <p className="text-sm font-medium text-[var(--text)] mb-1">{t("notifications.emptyTitle")}</p>
+            <p className="text-xs text-[var(--text-muted)]">{t("notifications.emptySub")}</p>
           </div>
         ) : (
           <div className="p-2 space-y-1">
@@ -182,7 +183,7 @@ export function NotificationMenu({ variant = "default" }: NotificationMenuProps)
                   type="button"
                   onClick={(e) => dismissNotification(n.id, e)}
                   className="absolute top-2.5 right-2.5 p-1 rounded-lg text-[var(--text-muted)] opacity-0 group-hover:opacity-100 hover:bg-[var(--accent-soft)] hover:text-[var(--text)] transition-all"
-                  title="Dismiss"
+                  title={t("notifications.dismiss")}
                 >
                   <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
                     <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />

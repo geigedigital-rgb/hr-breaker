@@ -4,36 +4,52 @@ import { SparklesIcon, GlobeAltIcon, ChevronDownIcon, CheckIcon, LockClosedIcon 
 import { Listbox, ListboxButton, ListboxOption, ListboxOptions } from "@headlessui/react";
 import * as api from "../api";
 import { useAuth } from "../contexts/AuthContext";
-import { t } from "../i18n";
+import { useLocale } from "../contexts/LocaleContext";
+import { t, type OutputLanguage, type UiLocale } from "../i18n";
 
-const LANGUAGES = [
-  { id: "en", name: "English" },
-  { id: "ru", name: "Русский" }
+const APP_LANGUAGES: { id: UiLocale; nameKey: string }[] = [
+  { id: "en", nameKey: "settings.languageEn" },
+  { id: "es", nameKey: "settings.languageEs" },
 ];
 
-function getInitialLanguage() {
-  const stored = typeof window !== "undefined" ? window.localStorage.getItem("app_output_language") : null;
-  return LANGUAGES.find((l) => l.id === stored) ?? LANGUAGES[0];
-}
+const AI_LANGUAGES: { id: OutputLanguage; nameKey: string }[] = [
+  { id: "en", nameKey: "settings.languageEn" },
+  { id: "es", nameKey: "settings.languageEs" },
+  { id: "ru", nameKey: "settings.languageRu" },
+];
 
 export default function Settings() {
   const { user, loading: authLoading, logout } = useAuth();
+  const { locale, setLocale } = useLocale();
   const [settings, setSettings] = useState<api.SettingsResponse | null>(null);
-  const [language, setLanguage] = useState(getInitialLanguage);
+  const [aiLanguage, setAiLanguage] = useState<OutputLanguage>(() => api.getOutputLanguage());
   const [billingPortalLoading, setBillingPortalLoading] = useState(false);
 
+  const appLanguage = APP_LANGUAGES.find((l) => l.id === locale) ?? APP_LANGUAGES[0];
+  const aiLanguageOpt = AI_LANGUAGES.find((l) => l.id === aiLanguage) ?? AI_LANGUAGES[0];
+
   useEffect(() => {
-    api.setOutputLanguage(language.id as "en" | "ru");
-  }, [language]);
+    api.setOutputLanguage(aiLanguage);
+  }, [aiLanguage]);
 
   useEffect(() => {
     api
       .getSettings()
       .then(setSettings)
-      .catch(() => {}); // silently fail settings fetch since we only care about user settings now
+      .catch(() => {});
   }, []);
 
   const loading = authLoading && !user && !settings;
+
+  function onAppLanguageChange(next: (typeof APP_LANGUAGES)[number]) {
+    const prev = locale;
+    setLocale(next.id);
+    if (next.id === "es" && aiLanguage === "en") {
+      setAiLanguage("es");
+    } else if (next.id === "en" && prev === "es" && aiLanguage === "es") {
+      setAiLanguage("en");
+    }
+  }
 
   const canOpenBillingPortal =
     !!user &&
@@ -123,44 +139,89 @@ export default function Settings() {
           {/* Preferences */}
           <section className="rounded-2xl bg-[#FFFFFF] border border-[var(--border)] p-6 space-y-4 min-w-0">
             <h2 className="text-base font-semibold text-[var(--text)]">{t("settings.preferences")}</h2>
-            <div className="space-y-3 text-sm min-w-0">
-              <div className="flex items-center justify-between gap-3 min-w-0">
-                <span className="text-[var(--text-muted)] flex items-center gap-2 shrink-0">
-                  <GlobeAltIcon className="w-4 h-4" />
-                  {t("settings.language")}
-                </span>
-                <Listbox value={language} onChange={setLanguage}>
-                  <div className="relative min-w-0 w-[min(100%,9.5rem)]">
-                    <ListboxButton className="relative w-full cursor-pointer rounded-xl bg-[#F5F6FA] border border-[var(--border)] py-2 pl-3 pr-9 text-left text-sm text-[var(--text)] hover:bg-[#EBEDF5] transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/30">
-                      <span className="block truncate font-medium">{language.name}</span>
-                      <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
-                        <ChevronDownIcon className="h-4 w-4 text-[var(--text-muted)]" aria-hidden="true" />
-                      </span>
-                    </ListboxButton>
-                    <ListboxOptions className="absolute z-10 right-0 mt-1 max-h-60 w-full min-w-full overflow-auto rounded-xl bg-white py-1 shadow-lg border border-[var(--border)] ring-1 ring-black/5 focus:outline-none text-sm">
-                      {LANGUAGES.map((lang) => (
-                        <ListboxOption
-                          key={lang.id}
-                          className="relative cursor-pointer select-none py-2 pl-10 pr-4 text-[var(--text)] data-[focus]:bg-[#F5F6FA] data-[focus]:text-[var(--accent)] transition-colors"
-                          value={lang}
-                        >
-                          {({ selected }) => (
-                            <>
-                              <span className={`block truncate ${selected ? 'font-medium' : 'font-normal'}`}>
-                                {lang.name}
-                              </span>
-                              {selected ? (
-                                <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-[var(--accent)]">
-                                  <CheckIcon className="h-4 w-4" aria-hidden="true" />
+            <div className="space-y-4 text-sm min-w-0">
+              <div className="space-y-1.5 min-w-0">
+                <div className="flex items-center justify-between gap-3 min-w-0">
+                  <span className="text-[var(--text-muted)] flex items-center gap-2 shrink-0">
+                    <GlobeAltIcon className="w-4 h-4" />
+                    {t("settings.appLanguage")}
+                  </span>
+                  <Listbox value={appLanguage} onChange={onAppLanguageChange}>
+                    <div className="relative min-w-0 w-[min(100%,9.5rem)]">
+                      <ListboxButton className="relative w-full cursor-pointer rounded-xl bg-[#F5F6FA] border border-[var(--border)] py-2 pl-3 pr-9 text-left text-sm text-[var(--text)] hover:bg-[#EBEDF5] transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/30">
+                        <span className="block truncate font-medium">{t(appLanguage.nameKey)}</span>
+                        <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
+                          <ChevronDownIcon className="h-4 w-4 text-[var(--text-muted)]" aria-hidden="true" />
+                        </span>
+                      </ListboxButton>
+                      <ListboxOptions className="absolute z-10 right-0 mt-1 max-h-60 w-full min-w-full overflow-auto rounded-xl bg-white py-1 shadow-lg border border-[var(--border)] ring-1 ring-black/5 focus:outline-none text-sm">
+                        {APP_LANGUAGES.map((lang) => (
+                          <ListboxOption
+                            key={lang.id}
+                            className="relative cursor-pointer select-none py-2 pl-10 pr-4 text-[var(--text)] data-[focus]:bg-[#F5F6FA] data-[focus]:text-[var(--accent)] transition-colors"
+                            value={lang}
+                          >
+                            {({ selected }) => (
+                              <>
+                                <span className={`block truncate ${selected ? "font-medium" : "font-normal"}`}>
+                                  {t(lang.nameKey)}
                                 </span>
-                              ) : null}
-                            </>
-                          )}
-                        </ListboxOption>
-                      ))}
-                    </ListboxOptions>
-                  </div>
-                </Listbox>
+                                {selected ? (
+                                  <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-[var(--accent)]">
+                                    <CheckIcon className="h-4 w-4" aria-hidden="true" />
+                                  </span>
+                                ) : null}
+                              </>
+                            )}
+                          </ListboxOption>
+                        ))}
+                      </ListboxOptions>
+                    </div>
+                  </Listbox>
+                </div>
+                <p className="text-[11px] text-[var(--text-tertiary)] pl-6">{t("settings.appLanguageHint")}</p>
+              </div>
+
+              <div className="space-y-1.5 min-w-0">
+                <div className="flex items-center justify-between gap-3 min-w-0">
+                  <span className="text-[var(--text-muted)] flex items-center gap-2 shrink-0">
+                    <GlobeAltIcon className="w-4 h-4" />
+                    {t("settings.aiLanguage")}
+                  </span>
+                  <Listbox value={aiLanguageOpt} onChange={(opt) => setAiLanguage(opt.id)}>
+                    <div className="relative min-w-0 w-[min(100%,9.5rem)]">
+                      <ListboxButton className="relative w-full cursor-pointer rounded-xl bg-[#F5F6FA] border border-[var(--border)] py-2 pl-3 pr-9 text-left text-sm text-[var(--text)] hover:bg-[#EBEDF5] transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/30">
+                        <span className="block truncate font-medium">{t(aiLanguageOpt.nameKey)}</span>
+                        <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
+                          <ChevronDownIcon className="h-4 w-4 text-[var(--text-muted)]" aria-hidden="true" />
+                        </span>
+                      </ListboxButton>
+                      <ListboxOptions className="absolute z-10 right-0 mt-1 max-h-60 w-full min-w-full overflow-auto rounded-xl bg-white py-1 shadow-lg border border-[var(--border)] ring-1 ring-black/5 focus:outline-none text-sm">
+                        {AI_LANGUAGES.map((lang) => (
+                          <ListboxOption
+                            key={lang.id}
+                            className="relative cursor-pointer select-none py-2 pl-10 pr-4 text-[var(--text)] data-[focus]:bg-[#F5F6FA] data-[focus]:text-[var(--accent)] transition-colors"
+                            value={lang}
+                          >
+                            {({ selected }) => (
+                              <>
+                                <span className={`block truncate ${selected ? "font-medium" : "font-normal"}`}>
+                                  {t(lang.nameKey)}
+                                </span>
+                                {selected ? (
+                                  <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-[var(--accent)]">
+                                    <CheckIcon className="h-4 w-4" aria-hidden="true" />
+                                  </span>
+                                ) : null}
+                              </>
+                            )}
+                          </ListboxOption>
+                        ))}
+                      </ListboxOptions>
+                    </div>
+                  </Listbox>
+                </div>
+                <p className="text-[11px] text-[var(--text-tertiary)] pl-6">{t("settings.aiLanguageHint")}</p>
               </div>
             </div>
           </section>

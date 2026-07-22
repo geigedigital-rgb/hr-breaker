@@ -375,14 +375,17 @@ export type AnalyzeResponse = {
 
 const OUTPUT_LANGUAGE_KEY = "app_output_language";
 
+export type OutputLanguage = "en" | "es" | "ru";
+
 /** Preferred language for LLM output (resume text, tips). Default "en". */
-export function getOutputLanguage(): string {
+export function getOutputLanguage(): OutputLanguage {
   if (typeof window === "undefined") return "en";
   const stored = window.localStorage.getItem(OUTPUT_LANGUAGE_KEY);
-  return stored === "ru" ? "ru" : "en";
+  if (stored === "ru" || stored === "es" || stored === "en") return stored;
+  return "en";
 }
 
-export function setOutputLanguage(lang: "en" | "ru"): void {
+export function setOutputLanguage(lang: OutputLanguage): void {
   window.localStorage.setItem(OUTPUT_LANGUAGE_KEY, lang);
 }
 
