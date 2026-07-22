@@ -1971,12 +1971,14 @@ export default function Optimize() {
           setJobInput("");
           setParsedJob(null);
           setOfferPasteAsText(true);
+          // Paste-as-text is only for job-tailor scrape failures — leave improve mode alone.
+          if (isImproveMode) setIsImproveMode(false);
         }
       })
       .finally(() => {
         if (analyzeMountedRef.current) setIsAnalyzing(false);
       });
-  }, [stage, hasResume, hasJob, jobMode, jobInput, resumeContent, result, refreshUser, selectedTemplateId]);
+  }, [stage, hasResume, hasJob, jobMode, jobInput, resumeContent, result, refreshUser, selectedTemplateId, isImproveMode]);
 
   // PDF thumbnail on assessment when user is not logged in (no register-upload path).
   useEffect(() => {
@@ -3630,7 +3632,11 @@ export default function Optimize() {
           <section
             ref={step2SectionRef}
             className={`relative rounded-2xl border overflow-hidden flex flex-col min-h-0 transition-all duration-200 ${
-              !hasResume ? "opacity-60 pointer-events-none select-none border-[var(--border)] bg-white" : hasJob ? "border-transparent bg-[#f8f9fb]" : "border-[var(--border)] bg-white"
+              !hasResume
+                ? "opacity-60 pointer-events-none select-none border-[var(--border)] bg-white"
+                : isImproveMode || hasJob
+                  ? "border-transparent bg-[#f8f9fb]"
+                  : "border-[var(--border)] bg-white"
             }`}
             aria-labelledby="step2-heading"
             aria-disabled={!hasResume}
@@ -3646,7 +3652,7 @@ export default function Optimize() {
               <div className="p-4 sm:p-6 pb-4 flex items-start justify-between gap-3 sm:gap-4">
                 <div>
                   <div className="flex items-center gap-2 flex-wrap justify-start">
-                    {hasJob ? (
+                    {isImproveMode || hasJob ? (
                       <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 text-emerald-600 px-3 py-1 text-xs font-medium border border-emerald-200">
                         <CheckCircleIcon className="w-4 h-4 shrink-0" aria-hidden />
                         {t("optimize.step2")}
@@ -3657,14 +3663,14 @@ export default function Optimize() {
                       </span>
                     )}
                     <h1 id="step2-heading" className="text-lg sm:text-xl font-bold tracking-tight text-[var(--text)]">
-                      {t("optimize.addJobTitle")}
+                      {isImproveMode ? t("optimize.improveModeStep2Title") : t("optimize.addJobTitle")}
                     </h1>
                   </div>
                   <p className="text-sm text-[var(--text-tertiary)] mt-1 text-left">
-                    {t("optimize.addJobSub")}
+                    {isImproveMode ? t("optimize.improveModeStep2Sub") : t("optimize.addJobSub")}
                   </p>
                 </div>
-                {hasJob && (
+                {!isImproveMode && hasJob && (
                   <button
                     type="button"
                     onClick={() => {
@@ -3681,7 +3687,43 @@ export default function Optimize() {
                 )}
               </div>
               <div className="px-4 sm:px-6 pb-4 sm:pb-6 flex-1 min-h-0 flex flex-col">
-              {hasJob ? (
+              {isImproveMode ? (
+                <div className="mt-auto pt-2">
+                  {stage === "idle" && !showFreeLimitOverlay && (
+                    <div className="pt-4 pb-3 sm:pb-0 border-t border-[var(--border)]">
+                      {!canAnalyzeSubscription && user?.id !== "local" ? (
+                        <div className="flex flex-col items-center gap-3">
+                          <p className="text-center text-[12px] text-[var(--text-muted)]">
+                            {t("optimize.freeLimitReached")}
+                          </p>
+                          <Link
+                            to="/upgrade"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center justify-center py-2.5 px-4 rounded-xl text-[13px] font-semibold text-white bg-[var(--accent)] hover:bg-[#3d6ae6] transition-colors"
+                          >
+                            {t("optimize.upgradeButton")}
+                          </Link>
+                        </div>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            onClick={handleStartScan}
+                            className="w-full flex items-center justify-center gap-2 rounded-2xl text-white py-3.5 px-5 text-sm font-semibold bg-[var(--accent)] hover:bg-[#3d6ae6] transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/40 focus:ring-offset-2"
+                          >
+                            <SparklesIcon className="w-5 h-5 shrink-0" aria-hidden />
+                            {t("optimize.improveModeRetryScan")}
+                          </button>
+                          <p className="mt-2 text-center text-[11px] text-[var(--text-tertiary)]">
+                            {t("optimize.improveModeNoJobNeeded")}
+                          </p>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : hasJob ? (
                 <>
                   <div className="flex items-center gap-2 mb-3 min-w-0" role="group" aria-label="Job">
                     <span className="shrink-0 flex items-center justify-center w-6 h-6 rounded bg-[var(--accent)]/12" title={t("optimize.jobLinkPlaceholder")}>
