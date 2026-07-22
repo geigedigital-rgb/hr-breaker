@@ -1,7 +1,7 @@
 import { useState, useEffect, useLayoutEffect, useRef, useId, useMemo } from "react";
 import { useLocation, useNavigate, useSearchParams, Link } from "react-router-dom";
 import { Disclosure, DisclosureButton, DisclosurePanel } from "@headlessui/react";
-import { SparklesIcon, ArrowUpTrayIcon, ArrowDownTrayIcon, ArrowPathIcon, ArrowLeftIcon, BriefcaseIcon, ClipboardDocumentIcon, ExclamationTriangleIcon, CheckCircleIcon, CheckIcon, ChevronDownIcon, MagnifyingGlassIcon, KeyIcon, BoltIcon, DocumentTextIcon, AcademicCapIcon } from "@heroicons/react/24/outline";
+import { SparklesIcon, ArrowUpTrayIcon, ArrowDownTrayIcon, ArrowPathIcon, ArrowLeftIcon, ArrowRightIcon, BriefcaseIcon, ClipboardDocumentIcon, ExclamationTriangleIcon, CheckCircleIcon, CheckIcon, ChevronDownIcon, MagnifyingGlassIcon, KeyIcon, BoltIcon, DocumentTextIcon, AcademicCapIcon, PencilSquareIcon } from "@heroicons/react/24/outline";
 import * as api from "../api";
 import { useAuth } from "../contexts/AuthContext";
 import { t, tFormat } from "../i18n";
@@ -880,16 +880,6 @@ function normalizeCategoryKey(category: string): string {
   return "general";
 }
 
-function localizeRecCategory(category: string): string {
-  const key = normalizeCategoryKey(category);
-  if (key === "keywords") return t("optimize.recCategoryKeywords");
-  if (key === "requirements") return t("optimize.recCategoryRequirements");
-  if (key === "structure") return t("optimize.recCategoryStructure");
-  if (key === "writing") return t("optimize.recCategoryWriting");
-  if (key === "impact") return t("optimize.recCategoryImpact");
-  return category.trim() || t("optimize.recommendationsTitle");
-}
-
 function fallbackLabelsByCategory(categoryKey: string, scorePct: number | null): string[] {
   const low = scorePct != null && scorePct < 60;
   const mid = scorePct != null && scorePct >= 60 && scorePct < 75;
@@ -936,6 +926,40 @@ function isPositiveRecommendationLabel(label: string): boolean {
   const positivePrefixes = ["ok", "clear", "match", "maintain", "keep", "preserve", "well-structured", "aligned"];
   return positivePrefixes.some((prefix) => normalized.startsWith(prefix));
 }
+
+function splitTipTitle(title: string): { from: string; to: string } | null {
+  const parts = (title || "")
+    .split(/\s*(?:→|->|—|–)\s*/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  if (parts.length < 2) return null;
+  return { from: parts[0], to: parts.slice(1).join(" · ") };
+}
+
+function TipTitleRow({ title }: { title: string }) {
+  const split = splitTipTitle(title);
+  if (!split) {
+    return <p className="text-[13px] font-semibold leading-snug text-[var(--text)]">{title}</p>;
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+      <span className="inline-flex max-w-full sm:max-w-[48%] truncate rounded-md border border-[var(--border)]/90 bg-white/70 px-2 py-0.5 text-[12px] font-medium text-[var(--text)]">
+        {split.from}
+      </span>
+      <span
+        className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--accent)]/10 text-[var(--accent)]"
+        aria-hidden
+      >
+        <ArrowRightIcon className="h-3 w-3" strokeWidth={2} />
+      </span>
+      <span className="inline-flex max-w-full sm:max-w-[48%] truncate rounded-md border border-[var(--accent)]/25 bg-[var(--accent)]/[0.08] px-2 py-0.5 text-[12px] font-semibold text-[var(--accent)]">
+        {split.to}
+      </span>
+    </div>
+  );
+}
+
+const TIPS_PREVIEW_COUNT = 3;
 
 type RecGroup = {
   category: string;
@@ -1441,6 +1465,7 @@ export default function Optimize() {
   const [bootstrapPipelineCompleted, setBootstrapPipelineCompleted] = useState(0);
   /** When true, user came from /improve → "Improve my resume" mode (no job required). */
   const [isImproveMode, setIsImproveMode] = useState(false);
+  const [tipsExpanded, setTipsExpanded] = useState(false);
   const pipelineAnalysisLabels = useMemo(
     () =>
       [1, 2, 3, 4, 5].map((i) =>
@@ -1945,6 +1970,7 @@ export default function Optimize() {
       .then((data) => {
         if (!analyzeMountedRef.current) return;
         setPreScores(data);
+        setTipsExpanded(false);
         if (data.job) setParsedJob(data.job);
         const rt = (data.resume_session_token || "").trim();
         if (rt) {
@@ -3122,75 +3148,130 @@ export default function Optimize() {
           )}
 
           {stage === "assessment" && treatmentGroupsOptimize.length > 0 && (
-            <section className="ds-card p-5 sm:p-6">
-              <p className="ds-label text-[var(--accent)]">
-                {isImproveMode ? t("optimize.recommendationsTitleImprove") : t("optimize.recommendationsTitleTailor")}
-              </p>
-              <h3 className="mt-1.5 text-[length:var(--text-lg)] font-semibold tracking-tight text-[var(--text)]">
-                {isImproveMode ? t("optimize.recommendationsHeadingImprove") : t("optimize.recommendationsHeadingTailor")}
-              </h3>
-              <p className="ds-body mt-2 max-w-2xl">
-                {isImproveMode ? t("optimize.recommendationsSubImprove") : t("optimize.recommendationsSubTailor")}
-              </p>
-              <div className="mt-5 space-y-5">
-                {treatmentGroupsOptimize.map((group) => (
-                  <div key={group.category}>
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">
-                      {localizeRecCategory(group.category)}
-                    </p>
-                    {group.categoryKey === "keywords" ? (
-                      <div
-                        className="mt-2.5 flex flex-wrap gap-1.5"
-                        role="list"
-                        aria-label={t("optimize.keywordsMissingTerms")}
-                      >
-                        {group.problems.map((label) => (
-                          <span
-                            key={`${group.category}-${label}`}
-                            role="listitem"
-                            className="ds-chip"
-                            title={cleanRecommendationReason(label)}
-                          >
-                            {cleanRecommendationReason(label)}
-                          </span>
-                        ))}
-                      </div>
-                    ) : group.tips.length > 0 ? (
-                      <ul className="mt-2.5 space-y-2">
-                        {group.tips.map((tip) => (
-                          <li
-                            key={`${group.category}-${tip.title}`}
-                            className="rounded-[var(--radius-md)] border border-white/70 bg-white/55 px-3.5 py-3 shadow-[var(--shadow-sm)] backdrop-blur-sm"
-                          >
-                            <p className="text-[length:var(--text-sm)] font-semibold leading-snug text-[var(--text)]">
-                              {tip.title}
-                            </p>
-                            <p className="mt-1 text-[12px] leading-relaxed text-[var(--text-muted)]">{tip.do}</p>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <ul className="mt-2.5 space-y-2">
-                        {group.problems.slice(0, 2).map((label) => (
-                          <li
-                            key={`${group.category}-${label}`}
-                            className="rounded-[var(--radius-md)] border border-white/70 bg-white/55 px-3.5 py-3 shadow-[var(--shadow-sm)] backdrop-blur-sm"
-                          >
-                            <p className="text-[length:var(--text-sm)] font-semibold leading-snug text-[var(--text)]">
+            <section className="ds-card p-4 sm:p-5">
+              <div className="min-w-0">
+                <p className="ds-label text-[var(--accent)]">
+                  {isImproveMode ? t("optimize.recommendationsTitleImprove") : t("optimize.recommendationsTitleTailor")}
+                </p>
+                <h3 className="mt-0.5 text-[length:var(--text-base)] font-semibold tracking-tight text-[var(--text)]">
+                  {isImproveMode ? t("optimize.recommendationsHeadingImprove") : t("optimize.recommendationsHeadingTailor")}
+                </h3>
+                <p className="ds-hint mt-1">
+                  {isImproveMode ? t("optimize.recommendationsSubImprove") : t("optimize.recommendationsSubTailor")}
+                </p>
+              </div>
+
+              {(() => {
+                const keywordGroup = treatmentGroupsOptimize.find((g) => g.categoryKey === "keywords");
+                const tipItems = treatmentGroupsOptimize.flatMap((group) => {
+                  if (group.categoryKey === "keywords") return [];
+                  if (group.tips.length > 0) {
+                    return group.tips.map((tip) => ({
+                      key: `${group.category}-${tip.title}`,
+                      title: tip.title,
+                      body: tip.do,
+                    }));
+                  }
+                  return group.problems.slice(0, 2).map((label) => ({
+                    key: `${group.category}-${label}`,
+                    title: cleanRecommendationReason(label),
+                    body: recommendationLabelIsSelfContained(label)
+                      ? ""
+                      : fixFromRecommendationLabel(label, group.category),
+                  }));
+                });
+                const hiddenCount = Math.max(0, tipItems.length - TIPS_PREVIEW_COUNT);
+                const visibleTips = tipsExpanded ? tipItems : tipItems.slice(0, TIPS_PREVIEW_COUNT);
+                const ghostTips =
+                  !tipsExpanded && hiddenCount > 0 ? tipItems.slice(TIPS_PREVIEW_COUNT, TIPS_PREVIEW_COUNT + 2) : [];
+
+                const renderTipRow = (item: { key: string; title: string; body: string }) => (
+                  <li key={item.key} className="flex items-start gap-3 py-3">
+                    <span
+                      className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[var(--accent)]/25 bg-[var(--accent)]/[0.08] text-[var(--accent)]"
+                      aria-hidden
+                      title={t("optimize.tipNeedsChange")}
+                    >
+                      <PencilSquareIcon className="h-3.5 w-3.5" strokeWidth={1.75} />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <TipTitleRow title={item.title} />
+                      {item.body ? (
+                        <p className="mt-1 text-[12px] leading-snug text-[var(--text-muted)]">{item.body}</p>
+                      ) : null}
+                    </div>
+                  </li>
+                );
+
+                return (
+                  <div className="mt-4 space-y-3">
+                    {keywordGroup && keywordGroup.problems.length > 0 && (
+                      <div>
+                        <p className="ds-hint mb-1.5">{t("optimize.keywordsMissingTerms")}</p>
+                        <div className="flex flex-wrap gap-1.5" role="list" aria-label={t("optimize.keywordsMissingTerms")}>
+                          {keywordGroup.problems.map((label) => (
+                            <span
+                              key={`kw-${label}`}
+                              role="listitem"
+                              className="ds-chip"
+                              title={cleanRecommendationReason(label)}
+                            >
                               {cleanRecommendationReason(label)}
-                            </p>
-                            {!recommendationLabelIsSelfContained(label) ? (
-                              <p className="mt-1 text-[12px] leading-relaxed text-[var(--text-muted)]">
-                                {fixFromRecommendationLabel(label, group.category)}
-                              </p>
-                            ) : null}
-                          </li>
-                        ))}
-                      </ul>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {tipItems.length > 0 && (
+                      <div>
+                        <ul className="divide-y divide-[var(--border)]/60" role="list">
+                          {visibleTips.map(renderTipRow)}
+                        </ul>
+
+                        {ghostTips.length > 0 && (
+                          <div className="relative mt-0">
+                            <ul
+                              className="divide-y divide-[var(--border)]/40 pointer-events-none select-none"
+                              aria-hidden
+                            >
+                              {ghostTips.map((item) => (
+                                <li key={`ghost-${item.key}`} className="flex items-start gap-3 py-3 opacity-45">
+                                  <span className="mt-0.5 flex h-7 w-7 shrink-0 rounded-full border border-[var(--border)] bg-white/40" />
+                                  <div className="min-w-0 flex-1 space-y-1.5 pt-0.5">
+                                    <div className="h-3 w-[70%] rounded bg-[var(--border)]/70" />
+                                    <div className="h-2.5 w-full rounded bg-[var(--border)]/45" />
+                                  </div>
+                                </li>
+                              ))}
+                            </ul>
+                            <div className="absolute inset-0 flex flex-col justify-end bg-gradient-to-b from-transparent via-[color-mix(in_srgb,var(--bg-elevated)_35%,transparent)] to-[color-mix(in_srgb,var(--bg-elevated)_88%,transparent)] backdrop-blur-[1.5px]">
+                              <button
+                                type="button"
+                                onClick={() => setTipsExpanded(true)}
+                                className="mx-auto mb-1 inline-flex items-center gap-1.5 rounded-full border border-white/70 bg-white/75 px-3.5 py-1.5 text-[12px] font-semibold text-[var(--text)] shadow-[var(--shadow-sm)] backdrop-blur-md hover:bg-white transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/30"
+                              >
+                                {tFormat(t("optimize.tipsShowMore"), { count: hiddenCount })}
+                                <ChevronDownIcon className="h-3.5 w-3.5 text-[var(--text-tertiary)]" aria-hidden />
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {tipsExpanded && tipItems.length > TIPS_PREVIEW_COUNT && (
+                          <button
+                            type="button"
+                            onClick={() => setTipsExpanded(false)}
+                            className="mt-2 text-[12px] font-medium text-[var(--text-muted)] hover:text-[var(--text)] transition-colors"
+                          >
+                            {t("optimize.tipsShowLess")}
+                          </button>
+                        )}
+                      </div>
                     )}
                   </div>
-                ))}
-              </div>
+                );
+              })()}
             </section>
           )}
 

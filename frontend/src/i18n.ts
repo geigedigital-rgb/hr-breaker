@@ -274,10 +274,11 @@ const en = {
     recommendationsTitleTailor: "Job-match tips",
     recommendationsHeadingImprove: "Make this resume clearer and ATS-friendly",
     recommendationsHeadingTailor: "Close the gaps for this vacancy",
-    recommendationsSubImprove:
-      "Short fixes for structure, wording, and impact — based on your resume only.",
-    recommendationsSubTailor:
-      "Missing terms from the job and concrete places to prove requirements.",
+    recommendationsSubImprove: "What to tweak next — structure, wording, and impact.",
+    recommendationsSubTailor: "What to add so this resume fits the job.",
+    tipsShowMore: "Show {count} more",
+    tipsShowLess: "Show less",
+    tipNeedsChange: "Needs a change",
     recCategoryKeywords: "Keywords",
     recCategoryRequirements: "Requirements",
     recCategoryStructure: "Structure",
@@ -315,7 +316,7 @@ const en = {
     portfolio: "Portfolio",
     keywords: "Keywords",
     /** ARIA label for keyword gap chips under Improvement recommendations */
-    keywordsMissingTerms: "Missing or weak keywords from the job posting",
+    keywordsMissingTerms: "Add these terms from the job",
     leftColumn: "Assessment + breakdown",
     rightColumn: "Job readiness + improve",
     uploadResumeFirst: "Complete Step 1 first: upload your resume",
