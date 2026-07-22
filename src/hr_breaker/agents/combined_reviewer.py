@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from pydantic_ai import Agent, BinaryContent
 
 from hr_breaker.config import get_model_settings, get_settings
+from hr_breaker.agents.model import gemini_model
 from hr_breaker.models import JobPosting, OptimizedResume
 from hr_breaker.services.renderer import get_renderer, RenderError
 
@@ -139,7 +140,7 @@ Return ALL fields:
 def get_combined_reviewer_agent() -> Agent:
     settings = get_settings()
     agent = Agent(
-        f"google-gla:{settings.gemini_flash_model}",
+        gemini_model(settings.gemini_flash_model),
         output_type=CombinedReviewResult,
         system_prompt=SYSTEM_PROMPT,
         model_settings=get_model_settings(),

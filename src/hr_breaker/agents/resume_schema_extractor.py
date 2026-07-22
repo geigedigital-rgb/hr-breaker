@@ -5,6 +5,7 @@ from __future__ import annotations
 from pydantic_ai import Agent
 
 from hr_breaker.config import get_model_settings, get_settings
+from hr_breaker.agents.model import gemini_model
 from hr_breaker.models import UnifiedResumeSchema
 
 EXTRACTOR_PROMPT = """
@@ -46,7 +47,7 @@ Rules:
 def get_resume_schema_extractor() -> Agent:
     settings = get_settings()
     return Agent(
-        f"google-gla:{settings.gemini_flash_model}",
+        gemini_model(settings.gemini_flash_model),
         output_type=UnifiedResumeSchema,
         system_prompt=EXTRACTOR_PROMPT,
         model_settings=get_model_settings(),
@@ -56,7 +57,7 @@ def get_resume_schema_extractor() -> Agent:
 def get_resume_schema_verifier() -> Agent:
     settings = get_settings()
     return Agent(
-        f"google-gla:{settings.gemini_flash_model}",
+        gemini_model(settings.gemini_flash_model),
         output_type=UnifiedResumeSchema,
         system_prompt=VERIFIER_PROMPT,
         model_settings=get_model_settings(),

@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from pydantic_ai import Agent
 
 from hr_breaker.config import get_model_settings, get_settings
+from hr_breaker.agents.model import gemini_model
 
 
 class ResumeSummary(BaseModel):
@@ -36,7 +37,7 @@ async def extract_resume_summary(content: str) -> ResumeSummary:
     settings = get_settings()
     snippet = content[: settings.agent_resume_summary_chars]
     agent = Agent(
-        f"google-gla:{settings.gemini_flash_model}",
+        gemini_model(settings.gemini_flash_model),
         output_type=ResumeSummary,
         system_prompt=SYSTEM_PROMPT,
         model_settings=get_model_settings(),

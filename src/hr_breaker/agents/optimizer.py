@@ -7,6 +7,7 @@ from pydantic_ai import Agent, BinaryContent, ModelRetry
 
 from hr_breaker.agents.combined_reviewer import pdf_to_image
 from hr_breaker.config import get_model_settings, get_settings
+from hr_breaker.agents.model import gemini_model
 from hr_breaker.filters.data_validator import validate_html
 from hr_breaker.filters.keyword_matcher import check_keywords
 from hr_breaker.models import (
@@ -227,7 +228,7 @@ def get_optimizer_agent(
     # Improve mode uses flash model — no job matching needed, simpler task
     model_name = settings.gemini_flash_model if improve_mode else settings.gemini_pro_model
     agent = Agent(
-        f"google-gla:{model_name}",
+        gemini_model(model_name),
         output_type=OptimizerResult,
         system_prompt=system_prompt,
         model_settings=get_model_settings(),

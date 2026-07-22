@@ -21,7 +21,7 @@ dependencies = [
     "uvicorn[standard]>=0.32",
     "streamlit>=1.30",
     "pydantic>=2.0",
-    "pydantic-ai",
+    "pydantic-ai>=1.48,<2",
     "google-generativeai",
     "httpx",
     "beautifulsoup4",

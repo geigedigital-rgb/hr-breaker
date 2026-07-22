@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from pydantic_ai import Agent
 
 from hr_breaker.config import get_model_settings, get_settings
+from hr_breaker.agents.model import gemini_model
 from hr_breaker.models import JobPosting
 
 
@@ -32,7 +33,7 @@ Output ONLY the score as JSON: {"score": N}.
 def get_resume_scorer_agent() -> Agent:
     settings = get_settings()
     return Agent(
-        f"google-gla:{settings.gemini_flash_model}",
+        gemini_model(settings.gemini_flash_model),
         output_type=ResumeScore,
         system_prompt=SYSTEM_PROMPT,
         model_settings=get_model_settings(),
@@ -141,7 +142,7 @@ Be strict but fair. Output valid JSON matching the schema."""
 def get_analysis_insights_agent() -> Agent:
     settings = get_settings()
     return Agent(
-        f"google-gla:{settings.gemini_flash_model}",
+        gemini_model(settings.gemini_flash_model),
         output_type=AnalysisInsights,
         system_prompt=INSIGHTS_SYSTEM,
         model_settings=get_model_settings(),

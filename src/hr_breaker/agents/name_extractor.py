@@ -2,6 +2,7 @@ from pydantic import BaseModel
 from pydantic_ai import Agent
 
 from hr_breaker.config import get_model_settings, get_settings
+from hr_breaker.agents.model import gemini_model
 
 
 class ExtractedName(BaseModel):
@@ -31,7 +32,7 @@ async def extract_name(
     settings = get_settings()
     model = settings.gemini_flash_model
     agent = Agent(
-        f"google-gla:{model}",
+        gemini_model(model),
         output_type=ExtractedName,
         system_prompt=SYSTEM_PROMPT,
         model_settings=get_model_settings(),

@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 from pydantic_ai import Agent
 
 from hr_breaker.config import get_model_settings, get_settings
+from hr_breaker.agents.model import gemini_model
 from hr_breaker.models import FilterResult, OptimizedResume, ResumeSource
 
 
@@ -57,7 +58,7 @@ Be balanced: allow careful summarization, but do not excuse unsupported named to
 def get_hallucination_agent() -> Agent:
     settings = get_settings()
     agent = Agent(
-        f"google-gla:{settings.gemini_pro_model}",
+        gemini_model(settings.gemini_pro_model),
         output_type=HallucinationResult,
         system_prompt=SYSTEM_PROMPT,
         model_settings=get_model_settings(),
