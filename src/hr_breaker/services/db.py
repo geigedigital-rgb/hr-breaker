@@ -547,9 +547,7 @@ async def uploaded_pdf_delete(pool, *, source_checksum: str) -> None:
 
 async def db_insert(pool, output_dir: Path, pdf: GeneratedPDF, user_id: str) -> None:
     """Insert or replace one record for the given user."""
-    async with pool.acquire() as conn:
-        await conn.execute(
-            f"""
+    sql = f"""
             INSERT INTO {TABLE} (
                 filename, user_id, source_checksum, company, job_title, created_at,
                 first_name, last_name, pre_ats_score, post_ats_score,
@@ -572,24 +570,38 @@ async def db_insert(pool, output_dir: Path, pdf: GeneratedPDF, user_id: str) -> 
                 job_url = EXCLUDED.job_url,
                 source_was_pdf = EXCLUDED.source_was_pdf,
                 original_filename = COALESCE(EXCLUDED.original_filename, {TABLE}.original_filename)
-            """,
-            pdf.path.name,
-            user_id,
-            pdf.source_checksum,
-            pdf.company,
-            pdf.job_title,
-            pdf.timestamp,
-            pdf.first_name,
-            pdf.last_name,
-            pdf.pre_ats_score,
-            pdf.post_ats_score,
-            pdf.pre_keyword_score,
-            pdf.post_keyword_score,
-            pdf.company_logo_url,
-            pdf.job_url,
-            pdf.source_was_pdf,
-            pdf.original_filename,
-        )
+            """
+    args = (
+        pdf.path.name,
+        user_id,
+        pdf.source_checksum,
+        pdf.company,
+        pdf.job_title,
+        pdf.timestamp,
+        pdf.first_name,
+        pdf.last_name,
+        pdf.pre_ats_score,
+        pdf.post_ats_score,
+        pdf.pre_keyword_score,
+        pdf.post_keyword_score,
+        pdf.company_logo_url,
+        pdf.job_url,
+        pdf.source_was_pdf,
+        pdf.original_filename,
+    )
+    async with pool.acquire() as conn:
+        try:
+            await conn.execute(sql, *args)
+        except Exception as e:
+            # Prod may not have run ALTER yet (startup migrations are async/deferred).
+            msg = str(e).lower()
+            if "original_filename" in msg and ("does not exist" in msg or "undefinedcolumn" in msg):
+                await conn.execute(
+                    f"ALTER TABLE {TABLE} ADD COLUMN IF NOT EXISTS original_filename TEXT"
+                )
+                await conn.execute(sql, *args)
+            else:
+                raise
 
 
 def _row_to_record(row, output_dir: Path) -> GeneratedPDF:

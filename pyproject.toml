@@ -40,6 +40,7 @@ dependencies = [
     "nest-asyncio>=1.6.0",
     "playwright>=1.40",
     "stripe>=11.0",
+    "python-multipart>=0.0.9",
 ]
 
 [project.scripts]

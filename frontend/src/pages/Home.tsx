@@ -87,6 +87,7 @@ export default function Home() {
   const { user, refreshUser } = useAuth();
   const [thumbnailErrors, setThumbnailErrors] = useState<Set<string>>(new Set());
   const [addUploading, setAddUploading] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ filename: string; name: string } | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [improvingFilename, setImprovingFilename] = useState<string | null>(null);
@@ -132,8 +133,12 @@ export default function Home() {
     e.target.value = "";
     if (!file) return;
     const ext = file.name.split(".").pop()?.toLowerCase();
-    if (!ext || !ADD_RESUME_EXTS.includes(ext)) return;
+    if (!ext || !ADD_RESUME_EXTS.includes(ext)) {
+      setAddError(t("home.importResumeDescLine1"));
+      return;
+    }
     setAddUploading(true);
+    setAddError(null);
     try {
       let content: string;
       let sourceWasPdf = false;
@@ -143,10 +148,14 @@ export default function Home() {
         const res = await api.parseResumePdf(file);
         content = res.content ?? "";
         sourceWasPdf = true;
-        if (user) {
-          const upRes = await api.registerResumeUpload(file);
-          uploadedFileName = upRes.filename;
-          await refreshUser();
+        if (user && user.id !== "local") {
+          try {
+            const upRes = await api.registerResumeUpload(file);
+            uploadedFileName = upRes.filename;
+            await refreshUser();
+          } catch (regErr) {
+            console.warn("registerResumeUpload failed:", regErr);
+          }
         }
       } else if (ext === "docx" || ext === "doc") {
         const res = await api.parseResumeDocx(file);
@@ -159,12 +168,16 @@ export default function Home() {
           r.readAsText(file, "UTF-8");
         });
       }
+      if (!content.trim()) {
+        setAddError("Could not read text from this file. Try another PDF or a DOCX/TXT.");
+        return;
+      }
       navigate("/optimize", {
         state: { resumeContent: content, uploadedFileName, originalFileName, sourceWasPdf },
         replace: false,
       });
-    } catch {
-      setAddUploading(false);
+    } catch (err) {
+      setAddError(err instanceof Error ? err.message : t("home.readFileError"));
     } finally {
       setAddUploading(false);
     }
@@ -242,6 +255,11 @@ export default function Home() {
           )}
           {error && (
             <p className="text-sm text-red-600 py-8" role="alert">{error}</p>
+          )}
+          {addError && (
+            <p className="mb-4 rounded-xl border border-[var(--danger-soft)] bg-[var(--danger-soft)] px-4 py-3 text-sm text-[var(--danger)]" role="alert">
+              {addError}
+            </p>
           )}
           {!loading && !error && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">

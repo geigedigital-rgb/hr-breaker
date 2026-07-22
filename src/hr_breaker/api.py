@@ -2906,7 +2906,13 @@ async def _register_uploaded_pdf_bytes(
 ) -> str:
     """Store uploaded PDF bytes as history record (same behavior as /resume/register-upload)."""
     checksum = hashlib.sha256(content.encode()).hexdigest()
-    first_name, last_name = await extract_name(content)
+    first_name: str | None = None
+    last_name: str | None = None
+    try:
+        first_name, last_name = await extract_name(content)
+    except Exception as e:
+        # Name extraction is nice-to-have; never block saving the upload on prod LLM/API hiccups.
+        logger.warning("register-upload: extract_name failed (non-fatal): %s", e)
     settings = get_settings()
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     safe_hash = checksum[:12]
@@ -2945,7 +2951,10 @@ async def _register_uploaded_pdf_bytes(
 
 
 @router.post("/resume/register-upload", response_model=RegisterUploadResponse)
-async def api_register_upload(file: UploadFile = File(...), user: dict | None = Depends(get_current_user)) -> RegisterUploadResponse:
+async def api_register_upload(
+    file: UploadFile = File(...),
+    user: dict | None = Depends(get_optional_user),
+) -> RegisterUploadResponse:
     """Save uploaded PDF and create a history record (user-scoped when DB is used)."""
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(400, "Expected a PDF file")
@@ -2957,14 +2966,21 @@ async def api_register_upload(file: UploadFile = File(...), user: dict | None = 
     except Exception as e:
         logger.exception("register-upload: extract text failed: %s", e)
         raise HTTPException(500, detail=f"PDF error: {e!s}")
+    pool = await get_pool()
+    if pool is not None and not user:
+        raise HTTPException(401, "Not authenticated")
     user_id = str(user["id"]) if user else None
     original_filename = _sanitize_original_filename(file.filename, fallback="resume.pdf")
-    filename = await _register_uploaded_pdf_bytes(
-        body=body,
-        content=content,
-        user_id=user_id,
-        original_filename=original_filename,
-    )
+    try:
+        filename = await _register_uploaded_pdf_bytes(
+            body=body,
+            content=content,
+            user_id=user_id,
+            original_filename=original_filename,
+        )
+    except Exception as e:
+        logger.exception("register-upload: save failed: %s", e)
+        raise HTTPException(500, detail=f"Failed to save upload: {e!s}") from e
     return RegisterUploadResponse(filename=filename, original_filename=original_filename)
 
 

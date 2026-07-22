@@ -22,10 +22,15 @@ async function readFileContent(
     const res = await api.parseResumePdf(file);
     const content = res.content ?? "";
     let fileName = originalFileName;
-    if (user) {
-      const upRes = await api.registerResumeUpload(file);
-      fileName = upRes.filename;
-      await refreshUser();
+    if (user && user.id !== "local") {
+      try {
+        const upRes = await api.registerResumeUpload(file);
+        fileName = upRes.filename;
+        await refreshUser();
+      } catch (e) {
+        // Parsing succeeded — keep going even if history save fails on prod.
+        console.warn("registerResumeUpload failed:", e);
+      }
     }
     return { content, fileName, originalFileName, sourceWasPdf: true };
   }
@@ -58,29 +63,85 @@ export default function ImproveResume() {
   const [selectedMode, setSelectedMode] = useState<Mode>(null);
   const [jobDescription, setJobDescription] = useState("");
   const [isDragging, setIsDragging] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const dragDepthRef = useRef(0);
 
   const handleFile = async (file: File) => {
     const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
-    if (!RESUME_EXTS.includes(ext)) return;
+    if (!RESUME_EXTS.includes(ext)) {
+      setUploadError(t("improveResume.uploadHint"));
+      return;
+    }
     setUploading(true);
+    setUploadError(null);
     try {
       const { content, fileName, originalFileName, sourceWasPdf: wasPdf } = await readFileContent(
         file,
         user,
         refreshUser,
       );
+      if (!content.trim()) {
+        setUploadError("Could not read text from this file. Try another PDF or a DOCX/TXT.");
+        return;
+      }
       setResumeContent(content);
       setUploadedFileName(fileName);
       setSourceWasPdf(wasPdf);
       setUploadedDisplayName(originalFileName);
       setSelectedMode(null);
       setJobDescription("");
-    } catch {
-      // ignore
+    } catch (e) {
+      setUploadError(e instanceof Error ? e.message : t("improveResume.readFileError"));
     } finally {
       setUploading(false);
+      setIsDragging(false);
+      dragDepthRef.current = 0;
     }
   };
+
+  // Full-viewport drop target while waiting for a resume
+  useEffect(() => {
+    if (resumeContent || uploading) return;
+
+    const hasFiles = (e: DragEvent) =>
+      Array.from(e.dataTransfer?.types ?? []).includes("Files");
+
+    const onDragEnter = (e: DragEvent) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      dragDepthRef.current += 1;
+      setIsDragging(true);
+    };
+    const onDragLeave = (e: DragEvent) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+      if (dragDepthRef.current === 0) setIsDragging(false);
+    };
+    const onDragOver = (e: DragEvent) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+    };
+    const onDrop = (e: DragEvent) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      dragDepthRef.current = 0;
+      setIsDragging(false);
+      const file = e.dataTransfer?.files?.[0];
+      if (file) void handleFile(file);
+    };
+
+    window.addEventListener("dragenter", onDragEnter);
+    window.addEventListener("dragleave", onDragLeave);
+    window.addEventListener("dragover", onDragOver);
+    window.addEventListener("drop", onDrop);
+    return () => {
+      window.removeEventListener("dragenter", onDragEnter);
+      window.removeEventListener("dragleave", onDragLeave);
+      window.removeEventListener("dragover", onDragOver);
+      window.removeEventListener("drop", onDrop);
+    };
+  }, [resumeContent, uploading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -90,7 +151,9 @@ export default function ImproveResume() {
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     setIsDragging(false);
+    dragDepthRef.current = 0;
     const file = e.dataTransfer.files?.[0];
     if (file) void handleFile(file);
   };
@@ -172,7 +235,18 @@ export default function ImproveResume() {
   const shownName = displayFilename(uploadedDisplayName || "Resume");
 
   return (
-    <div className="ds-page-stage">
+    <div className="ds-page-stage relative">
+    {isDragging && !resumeContent && (
+      <div
+        className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-[var(--accent)]/10 backdrop-blur-[2px]"
+        aria-hidden
+      >
+        <div className="rounded-2xl border-2 border-dashed border-[var(--accent)] bg-white/95 px-8 py-6 text-center shadow-lg">
+          <p className="text-base font-semibold text-[var(--accent)]">Drop resume to upload</p>
+          <p className="mt-1 text-sm text-[var(--text-muted)]">PDF, Word, TXT, MD, HTML, TEX</p>
+        </div>
+      </div>
+    )}
     <div className="ds-page-stage-body max-w-2xl mx-auto space-y-5">
       {/* Upload zone — shown while no file yet */}
       {!resumeContent ? (
@@ -180,6 +254,11 @@ export default function ImproveResume() {
         <h1 className="text-xl font-bold text-[var(--text)] text-center tracking-tight">
           {t("improveResume.uploadSectionHeading")}
         </h1>
+        {uploadError && (
+          <div className="rounded-xl border border-[var(--danger-soft)] bg-[var(--danger-soft)] px-4 py-3 text-sm text-[var(--danger)]" role="alert">
+            {uploadError}
+          </div>
+        )}
         <div
           className={`rounded-2xl border-2 border-dashed transition-colors cursor-pointer ${
             isDragging
@@ -189,9 +268,13 @@ export default function ImproveResume() {
           onClick={() => !uploading && fileInputRef.current?.click()}
           onDragOver={(e) => {
             e.preventDefault();
+            e.stopPropagation();
             setIsDragging(true);
           }}
-          onDragLeave={() => setIsDragging(false)}
+          onDragLeave={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
           onDrop={handleDrop}
           role="button"
           tabIndex={0}
