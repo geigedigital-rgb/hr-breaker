@@ -22,8 +22,8 @@ type AuthContextValue = {
   loginWithGoogle: () => void;
   logout: () => void;
   setUserFromToken: (token: string) => void;
-  /** Refetch /auth/me to update readiness after upload/optimize. */
-  refreshUser: () => Promise<void>;
+  /** Refetch /auth/me to update readiness after upload/optimize. Returns latest user or null. */
+  refreshUser: () => Promise<api.AuthUser | null>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -106,13 +106,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [loadUser]
   );
 
-  const refreshUser = useCallback(async () => {
-    if (!api.getStoredToken()) return;
+  const refreshUser = useCallback(async (): Promise<api.AuthUser | null> => {
+    if (!api.getStoredToken()) return null;
     try {
       const me = await api.getMe();
       setUser(me);
+      return me;
     } catch {
       // keep current user on error
+      return null;
     }
   }, []);
 

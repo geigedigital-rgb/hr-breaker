@@ -787,6 +787,18 @@ async def user_get_subscription(pool, user_id: str) -> dict:
         if period_end < now and status in ("trial", "active"):
             status = "free"
             plan = "free"
+            period_end = None
+            async with pool.acquire() as conn:
+                await conn.execute(
+                    f"""
+                    UPDATE {USERS_TABLE}
+                    SET subscription_status = 'free',
+                        subscription_plan = 'free',
+                        current_period_end = NULL
+                    WHERE id = $1::uuid
+                    """,
+                    user_id,
+                )
     # Free quota resets every UTC month for non-paid users.
     if plan == "free" and (
         free_quota_month_start is None or free_quota_month_start < month_start_utc

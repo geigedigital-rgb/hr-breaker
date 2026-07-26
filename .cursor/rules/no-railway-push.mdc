@@ -1,0 +1,10 @@
+---
+description: Never push/deploy to Railway without explicit user request
+alwaysApply: true
+---
+
+# No Railway push without asking
+
+- Do **not** push to Railway, trigger Railway deploys, or run Railway deploy/CLI push commands unless the user **explicitly** asks for it in the current message.
+- Git push to remotes that auto-deploy to Railway also requires an explicit ask.
+- After finishing code changes, stop at local work (or a normal commit only if the user asked for a commit). Do not deploy or push “to finish” on your own.

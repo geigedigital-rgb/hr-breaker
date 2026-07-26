@@ -1793,22 +1793,41 @@ export default function Optimize() {
     }
   }, []);
 
-  // Return from Stripe checkout (trial / subscription) — refresh profile
+  // Return from Stripe checkout (trial / subscription) — refresh profile until paid or retries exhausted
   useEffect(() => {
     const co = searchParams.get("checkout");
     if (co !== "success" && co !== "cancel") return;
     if (co === "cancel") {
       sessionStorage.removeItem(OPTIMIZE_PENDING_AUTO_IMPROVE_KEY);
     }
-    void refreshUser();
-    setSearchParams(
-      (prev) => {
-        const next = new URLSearchParams(prev);
-        next.delete("checkout");
-        return next;
-      },
-      { replace: true },
-    );
+    let cancelled = false;
+    void (async () => {
+      if (co === "success") {
+        for (let i = 0; i < 4; i++) {
+          if (cancelled) return;
+          const me = await refreshUser();
+          const p = me?.subscription?.plan ?? "free";
+          const s = me?.subscription?.status ?? "free";
+          const paid = (p === "trial" || p === "monthly") && (s === "active" || s === "trial");
+          if (paid) break;
+          if (i < 3) await new Promise((r) => setTimeout(r, 1500));
+        }
+      } else {
+        await refreshUser();
+      }
+      if (cancelled) return;
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.delete("checkout");
+          return next;
+        },
+        { replace: true },
+      );
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [searchParams, setSearchParams, refreshUser]);
 
   // Редирект с главной после загрузки файла — сразу шаг 2 (файл уже есть)

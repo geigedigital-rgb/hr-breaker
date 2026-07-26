@@ -14,19 +14,11 @@ export default function Upgrade() {
   const [error, setError] = useState<string | null>(null);
   const [showRules, setShowRules] = useState(false);
 
-  useEffect(() => {
-    const success = searchParams.get("success");
-    const cancel = searchParams.get("cancel");
-    if (success === "1" || cancel === "1") {
-      void refreshUser();
-      setSearchParams({}, { replace: true });
-    }
-  }, [searchParams, setSearchParams, refreshUser]);
-
   const plan = user?.subscription?.plan ?? "free";
   const status = user?.subscription?.status ?? "free";
   const periodEnd = user?.subscription?.current_period_end ?? null;
-  const hasPaidPlan = plan === "trial" || plan === "monthly" || status === "active";
+  const hasPaidPlan =
+    (plan === "trial" || plan === "monthly") && (status === "active" || status === "trial");
 
   const planLabel =
     plan === "trial" ? t("upgrade.trial7days") : plan === "monthly" ? t("upgrade.monthly") : status;
@@ -34,6 +26,32 @@ export default function Upgrade() {
   const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
   const successUrl = `${baseUrl}/upgrade?success=1`;
   const cancelUrl = `${baseUrl}/upgrade?cancel=1`;
+
+  useEffect(() => {
+    const success = searchParams.get("success");
+    const cancel = searchParams.get("cancel");
+    if (success !== "1" && cancel !== "1") return;
+    let cancelled = false;
+    void (async () => {
+      if (success === "1") {
+        for (let i = 0; i < 4; i++) {
+          if (cancelled) return;
+          const me = await refreshUser();
+          const p = me?.subscription?.plan ?? "free";
+          const s = me?.subscription?.status ?? "free";
+          const paid = (p === "trial" || p === "monthly") && (s === "active" || s === "trial");
+          if (paid) break;
+          if (i < 3) await new Promise((r) => setTimeout(r, 1500));
+        }
+      } else {
+        await refreshUser();
+      }
+      if (!cancelled) setSearchParams({}, { replace: true });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [searchParams, setSearchParams, refreshUser]);
 
   const startCheckout = async (priceKey: "trial" | "monthly") => {
     if (!user) {

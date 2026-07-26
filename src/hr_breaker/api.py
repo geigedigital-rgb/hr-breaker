@@ -922,6 +922,15 @@ def _is_admin_user(user: dict | None) -> bool:
     return (user.get("email") or "").strip().lower() in _admin_emails_set()
 
 
+def _subscription_has_paid(sub: dict | None) -> bool:
+    """Canonical paid entitlement: trial/monthly with active or trial status."""
+    if not sub:
+        return False
+    plan = (sub.get("plan") or "free").lower()
+    status = (sub.get("status") or "free").lower()
+    return plan in ("trial", "monthly") and status in ("active", "trial")
+
+
 def _partner_enabled() -> bool:
     return bool(get_settings().partner_program_enabled)
 
@@ -1065,9 +1074,7 @@ async def _admin_build_user_detail(pool, user_id: str) -> AdminUserDetailRespons
         a.get("action") in _FUNNEL_ANALYSIS_ACTIONS and a.get("success") for a in audits
     )
     has_pdf = len(resumes) > 0
-    plan = (sub.get("plan") or "free").lower()
-    status_eff = (sub.get("status") or "free").lower()
-    has_paid = plan in ("trial", "monthly") and status_eff in ("trial", "active")
+    has_paid = _subscription_has_paid(sub)
 
     stages = [
         AdminFunnelStageOut(id="registered", label="Registered", done=True),
@@ -3411,9 +3418,7 @@ async def api_analyze(req: AnalyzeRequest, user: dict | None = Depends(get_optio
         if pool:
             sub = await user_get_subscription(pool, user_id)
             if sub:
-                plan = sub.get("plan") or "free"
-                status = sub.get("status") or "free"
-                has_paid = plan in ("trial", "monthly") and status in ("active", "trial")
+                has_paid = _subscription_has_paid(sub)
                 if not has_paid:
                     free_count = int(sub.get("free_analyses_count") or 0)
                     if free_count >= FREE_ANALYSES_PER_MONTH:
@@ -3665,9 +3670,7 @@ async def _run_optimize(
         if pool:
             sub = await user_get_subscription(pool, user_id)
             if sub:
-                plan = sub.get("plan") or "free"
-                status = sub.get("status") or "free"
-                has_paid = plan in ("trial", "monthly") and status in ("active", "trial")
+                has_paid = _subscription_has_paid(sub)
                 if not has_paid:
                     free_opt = int(sub.get("free_optimize_count") or 0)
                     if free_opt >= FREE_OPTIMIZE_PER_MONTH:
@@ -3918,7 +3921,7 @@ async def _run_optimize(
         pool_for_sub = await get_pool()
         if pool_for_sub:
             sub = await user_get_subscription(pool_for_sub, str(user["id"]))
-            if (sub.get("plan") or "free") == "free":
+            if not _subscription_has_paid(sub):
                 can_export_pdf = False
 
     async def _extract_schema_json_for_templates() -> str | None:
@@ -4075,13 +4078,9 @@ async def _run_optimize(
             and not _is_admin_user(user)
             and optimized
         ):
-            u_done = await user_get_by_id(pool_rd, opt_uid)
-            if u_done:
-                pln = u_done.get("subscription_plan") or "free"
-                stt = u_done.get("subscription_status") or "free"
-                paid_done = pln in ("trial", "monthly") and stt in ("active", "trial")
-                if not paid_done:
-                    await user_increment_free_optimize(pool_rd, opt_uid)
+            sub_done = await user_get_subscription(pool_rd, opt_uid)
+            if not _subscription_has_paid(sub_done):
+                await user_increment_free_optimize(pool_rd, opt_uid)
 
     pool_done = await get_pool()
     ok = validation.passed and bool(optimized and optimized.pdf_bytes)
@@ -4265,10 +4264,7 @@ async def api_download_pending_optimize_export(token: str, user: dict = Depends(
         if not pool:
             raise HTTPException(503, "Database unavailable")
         sub = await user_get_subscription(pool, uid)
-        plan = sub.get("plan") or "free"
-        status = sub.get("status") or "free"
-        has_paid = plan in ("trial", "monthly") and status in ("active", "trial")
-        if not has_paid:
+        if not _subscription_has_paid(sub):
             raise HTTPException(402, "PDF export requires trial or subscription")
 
     pending = _read_pending_export(token)
@@ -4422,8 +4418,19 @@ async def api_templates(
 @router.post("/templates/render-pdf", response_model=AdminTemplateRenderPdfResponse)
 async def api_templates_render_pdf(
     req: AdminTemplateRenderRequest,
-    _user: dict | None = Depends(get_current_user),
+    user: dict | None = Depends(get_current_user),
 ) -> AdminTemplateRenderPdfResponse:
+    """Render resume schema to PDF. Paid plan required for non-admin users."""
+    if user and not _is_admin_user(user):
+        uid = str(user.get("id") or "")
+        if not uid or uid == "local":
+            raise HTTPException(401, "Sign in is required")
+        pool = await get_pool()
+        if not pool:
+            raise HTTPException(503, "Database unavailable")
+        sub = await user_get_subscription(pool, uid)
+        if not _subscription_has_paid(sub):
+            raise HTTPException(402, "Upgrade to download PDFs")
     try:
         html_body = render_template_html(req.resume_schema, req.template_id)
     except ValueError as e:
@@ -6233,7 +6240,7 @@ async def api_download(filename: str, user: dict | None = Depends(get_current_us
         pool = await get_pool()
         if pool and not _is_admin_user(user):
             sub = await user_get_subscription(pool, user_id)
-            if (sub.get("plan") or "free") == "free":
+            if not _subscription_has_paid(sub):
                 raise HTTPException(402, "Upgrade to a paid plan to download PDFs")
         record = await pdf_storage.get_record_by_filename_async(filename, user_id=user_id)
         if not record:
@@ -6259,7 +6266,7 @@ async def api_history_open(filename: str, user: dict | None = Depends(get_curren
         pool = await get_pool()
         if pool and not _is_admin_user(user):
             sub = await user_get_subscription(pool, user_id)
-            if (sub.get("plan") or "free") == "free" and not filename.startswith("uploaded_"):
+            if not _subscription_has_paid(sub) and not filename.startswith("uploaded_"):
                 raise HTTPException(
                     402,
                     "Upgrade to a paid plan to view PDFs. Go to Upgrade in the menu.",
