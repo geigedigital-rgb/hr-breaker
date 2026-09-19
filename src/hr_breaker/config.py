@@ -13,6 +13,9 @@ load_dotenv(_ENV_PATH, override=True)
 # Fallback: load from current working directory (e.g. when run from project root)
 load_dotenv(override=False)
 
+# Fail fast if google-auth probes the GCE metadata server (common hang on local macOS).
+os.environ.setdefault("GCE_METADATA_TIMEOUT", "1")
+
 
 def setup_logging() -> logging.Logger:
     general_level = os.getenv("LOG_LEVEL_GENERAL", "WARNING").upper()
@@ -36,7 +39,7 @@ class Settings(BaseModel):
     """Application settings."""
 
     google_api_key: str = ""
-    gemini_pro_model: str = "gemini-3-pro-preview"
+    gemini_pro_model: str = "gemini-3.1-pro-preview"
     gemini_flash_model: str = "gemini-3-flash-preview"
     gemini_thinking_budget: int | None = 8192
     cache_dir: Path = Path(".cache/resumes")
@@ -142,6 +145,12 @@ class Settings(BaseModel):
     resend_template_short_nudge: str = ""
 
 
+def _canonical_gemini_env(model_name: str) -> str:
+    from hr_breaker.agents.model import canonical_gemini_model_id
+
+    return canonical_gemini_model_id(model_name)
+
+
 def get_settings() -> Settings:
     """Return settings from env. No cache so .env changes (e.g. MAX_ITERATIONS) apply without restart."""
     # Must load root .env explicitly — bare load_dotenv() only searches CWD.
@@ -153,8 +162,12 @@ def get_settings() -> Settings:
         thinking_budget = int(thinking_env) if thinking_env else None
     return Settings(
         google_api_key=os.getenv("GOOGLE_API_KEY", ""),
-        gemini_pro_model=os.getenv("GEMINI_PRO_MODEL") or "gemini-3-pro-preview",
-        gemini_flash_model=os.getenv("GEMINI_FLASH_MODEL") or "gemini-3-flash-preview",
+        gemini_pro_model=_canonical_gemini_env(
+            os.getenv("GEMINI_PRO_MODEL") or "gemini-3.1-pro-preview"
+        ),
+        gemini_flash_model=_canonical_gemini_env(
+            os.getenv("GEMINI_FLASH_MODEL") or "gemini-3-flash-preview"
+        ),
         gemini_thinking_budget=thinking_budget,
         fast_mode=os.getenv("HR_BREAKER_FAST_MODE", "true").lower() in ("true", "1", "yes"),
         # Product policy: always single-pass optimization.

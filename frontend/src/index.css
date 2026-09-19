@@ -471,3 +471,98 @@ body {
     transform: translateX(100%);
   }
 }
+
+/* Optimize workspace sits on shared --grad-page (no nested panel fill) */
+.optimize-workspace {
+  background: transparent;
+  border-radius: 0;
+  padding: 0;
+  margin: 0;
+}
+
+/* Post-analyze: hide app sidebar — WorkspaceHeader is the chrome */
+body.optimize-ws-active .ds-sandbox-aside {
+  display: none !important;
+}
+body.optimize-ws-active [data-app-mobile-menu] {
+  display: none !important;
+}
+body.optimize-ws-active .ds-sandbox-shell > .flex-1 {
+  --app-sidebar-width: 0px !important;
+}
+body.optimize-ws-active main.ds-sandbox-main {
+  padding-top: 1rem !important;
+}
+
+/* Soft paper shadow — very light diffuse bloom (no hard edge / no visual sink) */
+.optimize-ws-a4 {
+  box-shadow:
+    0 0 0 1px rgba(15, 23, 42, 0.03),
+    0 2px 6px rgba(15, 23, 42, 0.03),
+    0 12px 40px rgba(15, 23, 42, 0.05);
+}
+
+/* Align workspace columns to the same top edge */
+.optimize-ws-grid {
+  align-items: start;
+}
+.optimize-ws-grid > * {
+  margin-top: 0;
+  padding-top: 0;
+}
+.optimize-ws-stage {
+  align-items: start;
+}
+
+/* Gemini-like soft shimmer on Improve CTA */
+@keyframes optimize-ws-cta-shimmer {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+@keyframes optimize-ws-cta-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.35), 0 4px 16px rgba(15, 23, 42, 0.08);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(255, 255, 255, 0), 0 6px 20px rgba(15, 23, 42, 0.12);
+  }
+}
+.optimize-ws-improve-cta--live {
+  isolation: isolate;
+  animation: optimize-ws-cta-pulse 2.8s ease-in-out infinite;
+}
+.optimize-ws-improve-cta--live::before {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: 0.8rem;
+  background: linear-gradient(
+    120deg,
+    rgba(34, 211, 238, 0.9),
+    rgba(255, 255, 255, 0.95),
+    rgba(69, 120, 252, 0.95),
+    rgba(45, 212, 191, 0.85),
+    rgba(34, 211, 238, 0.9)
+  );
+  background-size: 220% 220%;
+  animation: optimize-ws-cta-shimmer 3.2s ease infinite;
+  z-index: 0;
+  opacity: 0.85;
+}
+.optimize-ws-improve-cta--live::after {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  border-radius: 0.7rem;
+  background: #fff;
+  z-index: 0;
+}
+

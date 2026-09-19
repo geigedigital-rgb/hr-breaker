@@ -44,7 +44,11 @@ cp .env.example .env
 uv run streamlit run src/hr_breaker/main.py
 
 # Or run React UI (API + frontend)
-uv run hr-breaker-api          # Backend on http://127.0.0.1:8000
+# Backend on http://127.0.0.1:8000 — `uv` or existing .venv
+uv run hr-breaker-api
+# if `uv` is not installed:
+#   ./scripts/run-local.sh
+#   # or: .venv/bin/hr-breaker-api
 cd frontend && npm install && npm run dev   # Frontend on http://localhost:5173
 ```
 
@@ -109,7 +113,7 @@ uv run hr-breaker list
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `GOOGLE_API_KEY` | Yes | Google Gemini API key |
-| `GEMINI_PRO_MODEL` | No | Model for complex tasks (default: `gemini-3-pro-preview`) |
+| `GEMINI_PRO_MODEL` | No | Model for complex tasks (default: `gemini-3.1-pro-preview`) |
 | `GEMINI_FLASH_MODEL` | No | Model for simple tasks (default: `gemini-3-flash-preview`) |
 | `GEMINI_THINKING_BUDGET` | No | Thinking tokens budget (default: 8192) |
 | `MAX_ITERATIONS` | No | Optimization loop limit (default: 5) |

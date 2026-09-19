@@ -8,7 +8,7 @@ from typing import Any
 from contextlib import contextmanager
 from pathlib import Path
 
-from hr_breaker.agents import optimize_resume, parse_job_posting
+from hr_breaker.agents.job_parser import parse_job_posting
 from hr_breaker.config import get_settings, logger
 from hr_breaker.filters import (
     LLMChecker,
@@ -16,7 +16,6 @@ from hr_breaker.filters import (
     FilterRegistry,
     HallucinationChecker,
     KeywordMatcher,
-    VectorSimilarityMatcher,
 )
 from hr_breaker.models import (
     FilterResult,
@@ -29,9 +28,17 @@ from hr_breaker.models import (
 from hr_breaker.services.pdf_parser import extract_text_from_pdf
 from hr_breaker.services.renderer import RenderError, HTMLRenderer
 
-# Ensure filters are registered
-_ = DataValidator, LLMChecker, KeywordMatcher, VectorSimilarityMatcher, HallucinationChecker
+# Ensure core filters are registered (vector matcher is optional / heavy — load lazily).
+_ = DataValidator, LLMChecker, KeywordMatcher, HallucinationChecker
 
+
+def _ensure_optional_filters() -> None:
+    try:
+        from hr_breaker.filters.vector_similarity_matcher import VectorSimilarityMatcher
+
+        _ = VectorSimilarityMatcher
+    except Exception as e:
+        logger.warning("VectorSimilarityMatcher unavailable: %s", e)
 
 @contextmanager
 def log_time(operation: str):
@@ -53,6 +60,7 @@ async def run_filters(
     improve_mode: bool = False,
 ) -> ValidationResult:
     """Run filters, either sequentially (early exit) or in parallel."""
+    _ensure_optional_filters()
     all_filters = FilterRegistry.all()
     # In improve mode, skip job-specific filters — they add time with no value
     filters = [f for f in all_filters if not improve_mode or f.name not in _JOB_SPECIFIC_FILTERS]
@@ -145,6 +153,7 @@ async def optimize_for_job(
     pre_ats_score: int | None = None,
     pre_keyword_score: float | None = None,
     improve_mode: bool = False,
+    session_analyze: dict[str, Any] | None = None,
 ) -> tuple[OptimizedResume, ValidationResult, JobPosting]:
     """
     Core optimization loop.
@@ -159,10 +168,14 @@ async def optimize_for_job(
         no_shame: If True, use lenient rules (add skills from job posting where plausible)
         output_language: Preferred language for LLM output (e.g. "en", "ru"). Default: English.
         improve_mode: If True, improve resume without tailoring to a specific job.
+        session_analyze: Prior /analyze JSON so Improve applies the same tip cards.
 
     Returns:
         (optimized_resume, validation_result, job_posting)
     """
+    from hr_breaker.agents.optimizer import optimize_resume
+
+    _ensure_optional_filters()
     settings = get_settings()
     if max_iterations is None:
         max_iterations = settings.max_iterations
@@ -250,6 +263,7 @@ async def optimize_for_job(
                     pre_ats_score=pre_ats_score,
                     pre_keyword_score=pre_keyword_score,
                     improve_mode=improve_mode,
+                    session_analyze=session_analyze,
                 )
         finally:
             if heartbeat_task is not None:

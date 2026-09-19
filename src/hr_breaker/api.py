@@ -28,6 +28,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from hr_breaker.agents import (
     AnalysisInsights,
+    CategoryScores,
+    WorkspaceAnnotation,
     extract_name,
     extract_resume_schema_strict,
     extract_resume_summary,
@@ -527,7 +529,7 @@ class OptimizeRequest(BaseModel):
     # Client session (stored in optimization_snapshots JSON for email / ?resume= restore; not used by optimizer)
     session_template_id: str | None = Field(None, max_length=200)
     session_photo_data_url: str | None = Field(None, max_length=900_000)
-    session_analyze: dict[str, Any] | None = None  # AnalyzeResponse-shaped JSON from client
+    session_analyze: dict[str, Any] | None = None  # AnalyzeResponse JSON: tips applied by optimizer + snapshot
 
 
 class AnalyzeRequest(BaseModel):
@@ -560,6 +562,26 @@ class CallbackBlockerOut(BaseModel):
     action: str
 
 
+class CategoryScoresOut(BaseModel):
+    """Workspace Match-tab dimension scores 0-100."""
+
+    content: int
+    keywords: int
+    impact: int
+    formatting: int
+
+
+class WorkspaceAnnotationOut(BaseModel):
+    """Left-rail annotation with section anchor for resume paper connectors."""
+
+    id: str
+    severity: str  # positive | warning | suggestion
+    title: str
+    body: str
+    section: str  # summary | experience | education | skills | header | other
+    anchor_y: float
+
+
 class AnalyzeResponse(BaseModel):
     ats_score: int  # 0-100
     keyword_score: float
@@ -572,6 +594,10 @@ class AnalyzeResponse(BaseModel):
     callback_blockers: list[CallbackBlockerOut] = Field(default_factory=list)
     risk_summary: str | None = None
     improvement_tips: str | None = None  # LLM-generated tips with headers for "recommendations" block
+    category_scores: CategoryScoresOut | None = None
+    annotations: list[WorkspaceAnnotationOut] = Field(default_factory=list)
+    # Unified resume schema JSON for live template preview in workspace (after analyze).
+    schema_json: str | None = None
     # Admin-only: ordered pipeline steps (scraping, parsing, scoring, LLM); omitted for non-admins
     admin_pipeline_log: list[dict[str, Any]] | None = None
     # JWT (purpose session_draft) for /optimize?resume= after server persisted analyze; null without DB / guest.
@@ -630,6 +656,35 @@ class OptimizeResponse(BaseModel):
     improvement_ats_pp: int | None = None
     improvement_keyword_pp: int | None = None
     improvement_overall_pp: int | None = None
+    category_scores: CategoryScoresOut | None = None
+    annotations: list[WorkspaceAnnotationOut] = Field(default_factory=list)
+
+
+def _category_scores_out(cs: CategoryScores | None) -> CategoryScoresOut | None:
+    if cs is None:
+        return None
+    return CategoryScoresOut(
+        content=cs.content,
+        keywords=cs.keywords,
+        impact=cs.impact,
+        formatting=cs.formatting,
+    )
+
+
+def _annotations_out(items: list[WorkspaceAnnotation] | None) -> list[WorkspaceAnnotationOut]:
+    if not items:
+        return []
+    return [
+        WorkspaceAnnotationOut(
+            id=a.id,
+            severity=a.severity,
+            title=a.title,
+            body=a.body,
+            section=a.section,
+            anchor_y=a.anchor_y,
+        )
+        for a in items
+    ]
 
 
 def _keyword_score_to_pct(score: float | None) -> int | None:
@@ -700,6 +755,8 @@ class OptimizationSnapshotPublicOut(BaseModel):
     photo_data_url: str | None = None
     pre_analyze: AnalyzeResponse | None = None
     snapshot_source_was_pdf: bool | None = None
+    category_scores: CategoryScoresOut | None = None
+    annotations: list[WorkspaceAnnotationOut] = Field(default_factory=list)
 
 
 class SessionDraftRestoreOut(BaseModel):
@@ -2717,7 +2774,7 @@ async def api_landing_analyze(
     kw_result = await asyncio.to_thread(check_keywords, resume_content, job)
     ats_score, insights = await asyncio.gather(
         score_resume_vs_job(resume_content, job),
-        get_analysis_insights(resume_content, job),
+        get_analysis_insights(resume_content, job, keyword_score_0_1=kw_result.score),
     )
     job_out = JobPostingOut(
         title=job.title,
@@ -2760,6 +2817,8 @@ async def api_landing_analyze(
         callback_blockers=callback_out,
         risk_summary=insights.risk_summary,
         improvement_tips=insights.improvement_tips,
+        category_scores=_category_scores_out(insights.category_scores),
+        annotations=_annotations_out(insights.annotations),
     )
 
 
@@ -3563,7 +3622,20 @@ async def api_analyze(req: AnalyzeRequest, user: dict | None = Depends(get_optio
         "Keyword match (TF-IDF vs job)",
         {"score": kw_result.score, "missing_keywords_n": len(kw_result.missing_keywords)},
     )
-    # Run ATS and breakdown (Skills/Experience/Portfolio) in parallel
+
+    async def _extract_schema_json_for_workspace() -> str | None:
+        try:
+            schema_obj = await extract_resume_schema_strict(
+                resume_stripped,
+                target_role=(job.title or "").strip() or None,
+            )
+            return schema_obj.model_dump_json()
+        except Exception as e:
+            logger.warning("Analyze schema extract failed: %s", e)
+            return None
+
+    schema_extract_task = asyncio.create_task(_extract_schema_json_for_workspace())
+    # Run ATS and breakdown (Skills/Experience/Portfolio) in parallel with schema extract
     ats_score, insights = await asyncio.gather(
         score_resume_vs_job(resume_stripped, job, audit_user_id=audit_uid),
         get_analysis_insights(
@@ -3572,8 +3644,10 @@ async def api_analyze(req: AnalyzeRequest, user: dict | None = Depends(get_optio
             output_language=out_lang,
             audit_user_id=audit_uid,
             improve_mode=bool(req.improve_mode),
+            keyword_score_0_1=kw_result.score,
         ),
     )
+    schema_json = await schema_extract_task
     alog(
         "parallel_llm",
         "ATS score + resume insights (LLM)",
@@ -3582,6 +3656,7 @@ async def api_analyze(req: AnalyzeRequest, user: dict | None = Depends(get_optio
             "rejection_risk_model": insights.rejection_risk_score,
             "callback_blockers_n": len(insights.callback_blockers),
             "improve_mode": bool(req.improve_mode),
+            "schema_json": bool(schema_json),
         },
     )
     recommendations = _recommendations_from_insights(
@@ -3621,6 +3696,9 @@ async def api_analyze(req: AnalyzeRequest, user: dict | None = Depends(get_optio
         callback_blockers=callback_out,
         risk_summary=insights.risk_summary,
         improvement_tips=insights.improvement_tips,
+        category_scores=_category_scores_out(insights.category_scores),
+        annotations=_annotations_out(insights.annotations),
+        schema_json=schema_json,
         admin_pipeline_log=pipe if is_admin else None,
     )
     resume_tok: str | None = None
@@ -3811,6 +3889,7 @@ async def _run_optimize(
     out_lang = (req.output_language or "en").strip().lower() or "en"
     _job_cache_key = _cache_key("job:", job_text or "__improve_mode__") if not req.improve_mode else None
     _cached_job = _cache_get(_job_cache_key) if _job_cache_key else None
+    analyze_for_optimize = _session_analyze_for_optimizer(req.session_analyze)
     try:
         optimized, validation, job = await optimize_for_job(
             source,
@@ -3826,6 +3905,7 @@ async def _run_optimize(
             pre_ats_score=req.pre_ats_score,
             pre_keyword_score=req.pre_keyword_score,
             improve_mode=req.improve_mode,
+            session_analyze=analyze_for_optimize,
         )
         # Store result for future reuse if it wasn't cached already
         if _cached_job is None and _job_cache_key is not None:
@@ -4066,6 +4146,24 @@ async def _run_optimize(
                 if r.filter_name == "LLMChecker":
                     post_ats = round(r.score * 100)
                     break
+
+    post_category_scores: CategoryScoresOut | None = None
+    post_annotations: list[WorkspaceAnnotationOut] = []
+    if optimized_resume_text and optimized_resume_text.strip() and job:
+        try:
+            post_insights = await get_analysis_insights(
+                optimized_resume_text.strip(),
+                job,
+                output_language=out_lang,
+                audit_user_id=audit_uid,
+                improve_mode=bool(req.improve_mode),
+                keyword_score_0_1=post_kw,
+            )
+            post_category_scores = _category_scores_out(post_insights.category_scores)
+            post_annotations = _annotations_out(post_insights.annotations)
+        except Exception as e:
+            logger.warning("Post-optimize category scores / annotations failed: %s", e)
+
     _put_progress(progress_queue, 100, "Done")
 
     if opt_uid:
@@ -4102,6 +4200,23 @@ async def _run_optimize(
         }
         if pending_export_token:
             oc_meta["pending_export"] = True
+        if not validation.passed and validation.results:
+            failed = [
+                {
+                    "filter": r.filter_name,
+                    "score": r.score,
+                    "issues": (r.issues or [])[:3],
+                }
+                for r in validation.results
+                if not r.passed
+            ]
+            if failed:
+                oc_meta["failed_filters"] = failed
+                # Prefer a concrete filter issue in the admin timeline over a generic message.
+                first_issue = (failed[0].get("issues") or [None])[0]
+                if first_issue:
+                    fname = failed[0].get("filter") or "filter"
+                    opt_fail_reason = f"{fname}: {str(first_issue)[:350]}"
         await log_usage_event(
             pool_done,
             audit_uid,
@@ -4131,6 +4246,8 @@ async def _run_optimize(
                 "pre_keyword_score": req.pre_keyword_score,
                 "post_ats_score": post_ats,
                 "post_keyword_score": post_kw,
+                "category_scores": post_category_scores.model_dump() if post_category_scores else None,
+                "annotations": [a.model_dump() for a in post_annotations],
                 "pending_export_token": pending_export_token,
                 "job_url": req.job_url,
                 "optimized_resume_text": optimized_resume_text,
@@ -4186,6 +4303,8 @@ async def _run_optimize(
         schema_json=schema_json,
         snapshot_url=snapshot_url_out,
         snapshot_expires_at=snapshot_expires_at_out,
+        category_scores=post_category_scores,
+        annotations=post_annotations,
         **_optimize_score_fields(
             pre_ats=req.pre_ats_score,
             pre_kw=req.pre_keyword_score,
@@ -4443,6 +4562,20 @@ async def api_templates_render_pdf(
         page_count=result.page_count,
         warnings=result.warnings,
     )
+
+
+@router.post("/templates/render-html", response_model=AdminTemplateRenderHtmlResponse)
+async def api_templates_render_html(
+    req: AdminTemplateRenderRequest,
+    _user: dict | None = Depends(get_current_user),
+) -> AdminTemplateRenderHtmlResponse:
+    """Live HTML preview for optimize workspace (no paywall — export still uses render-pdf)."""
+    try:
+        html_body = render_template_html(req.resume_schema, req.template_id)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    full_html = wrap_full_html(html_body)
+    return AdminTemplateRenderHtmlResponse(html_body=html_body, full_html=full_html)
 
 
 @router.get("/admin/templates", response_model=AdminTemplateListResponse)
@@ -5343,6 +5476,21 @@ def _sanitize_session_analyze_payload(raw: dict[str, Any] | None) -> dict[str, A
         return None
 
 
+def _session_analyze_for_optimizer(raw: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Prefer full analyze blob; if invalid, still pass tip cards for the rewriter."""
+    cleaned = _sanitize_session_analyze_payload(raw)
+    if cleaned:
+        return cleaned
+    if not raw or not isinstance(raw, dict):
+        return None
+    slim: dict[str, Any] = {}
+    for key in ("annotations", "recommendations", "callback_blockers"):
+        val = raw.get(key)
+        if val:
+            slim[key] = val
+    return slim or None
+
+
 @router.get("/email/open-resume")
 async def api_email_open_resume(token: str = Query("", min_length=10)):
     """Open a specific saved resume from email using signed JWT token."""
@@ -5477,6 +5625,24 @@ async def _build_optimization_snapshot_public_out(row: dict[str, Any], user_id: 
     swp = pl.get("snapshot_source_was_pdf")
     snapshot_source_was_pdf: bool | None = bool(swp) if swp is not None else None
 
+    cat_out: CategoryScoresOut | None = None
+    cat_raw = pl.get("category_scores")
+    if isinstance(cat_raw, dict):
+        try:
+            cat_out = CategoryScoresOut.model_validate(cat_raw)
+        except Exception:
+            cat_out = None
+    ann_out: list[WorkspaceAnnotationOut] = []
+    ann_raw = pl.get("annotations")
+    if isinstance(ann_raw, list):
+        for item in ann_raw:
+            if not isinstance(item, dict):
+                continue
+            try:
+                ann_out.append(WorkspaceAnnotationOut.model_validate(item))
+            except Exception:
+                continue
+
     return OptimizationSnapshotPublicOut(
         expires_at=exp.isoformat(),
         pdf_filename=pdf_fn or None,
@@ -5496,6 +5662,8 @@ async def _build_optimization_snapshot_public_out(row: dict[str, Any], user_id: 
         photo_data_url=photo_out,
         pre_analyze=pre_analyze_out,
         snapshot_source_was_pdf=snapshot_source_was_pdf,
+        category_scores=cat_out,
+        annotations=ann_out,
     )
 
 
@@ -6488,6 +6656,10 @@ if _frontend_dist.is_dir():
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
         if full_path.startswith("api/") or full_path == "api":
+            raise HTTPException(404)
+        # SPA fallback would otherwise 200 index.html for /.git/config, /wp-login.php, etc.
+        first = (full_path.split("/", 1)[0] or "").lower()
+        if first.startswith(".") or first.endswith(".php") or first.endswith(".git"):
             raise HTTPException(404)
         path = _frontend_dist / full_path
         if path.is_file():

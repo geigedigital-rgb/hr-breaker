@@ -388,6 +388,7 @@ export default function Layout() {
       >
         <button
           type="button"
+          data-app-mobile-menu
           className="md:hidden fixed top-3 left-3 z-30 inline-flex items-center justify-center rounded-xl border border-[var(--border)] bg-white/90 p-2 text-[var(--text)] shadow-sm backdrop-blur-md hover:bg-[var(--accent-soft)]"
           onClick={() => setMobileMenuOpen(true)}
           aria-label="Open mobile menu"

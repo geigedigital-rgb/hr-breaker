@@ -6,8 +6,15 @@ import * as api from "../api";
 import { useAuth } from "../contexts/AuthContext";
 import { t, tFormat } from "../i18n";
 import { storeCheckoutResumePreview } from "../checkoutResumePreview";
-import { PostResultResumeStudio } from "../components/PostResultResumeStudio";
 import { PipelineVerticalStepCards } from "../components/PipelineVerticalStepCards";
+import { OptimizeWorkspace } from "../components/optimize-workspace/OptimizeWorkspace";
+import { StylePanel } from "../components/optimize-workspace/StylePanel";
+import {
+  beginNewOptimizeWork,
+  clearOptimizeWorkSession,
+  loadOptimizeWorkSession,
+  saveOptimizeWorkSession,
+} from "../optimizeWorkSession";
 
 const RESUME_FILE_ACCEPT = ".txt,.md,.html,.htm,.tex,.pdf,.doc,.docx";
 const RESUME_TEXT_EXTS = ["txt", "md", "html", "htm", "tex", "pdf", "doc", "docx"];
@@ -247,14 +254,12 @@ function LoaderFactCard({ fact }: { fact: string }) {
   const body = stripFactPrefix(fact);
   if (!body) return null;
   return (
-    <div className="mt-5 max-w-[min(28rem,92vw)] px-2">
-      <p className="mb-1.5 text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--accent)]/75">
+    <p className="mt-4 mx-auto flex max-w-md items-center justify-center gap-2 px-3 text-left">
+      <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--accent)]/80">
         {t("optimize.quickFactLabel")}
-      </p>
-      <p className="text-center text-[15px] sm:text-[17px] md:text-lg leading-relaxed font-medium text-[#334155]">
-        {body}
-      </p>
-    </div>
+      </span>
+      <span className="min-w-0 truncate text-[13px] font-medium text-[#475569] sm:text-[14px]">{body}</span>
+    </p>
   );
 }
 
@@ -1420,6 +1425,7 @@ export default function Optimize() {
   const [error, setError] = useState<string | null>(null);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
+  const [styleVisited, setStyleVisited] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [parsedJob, setParsedJob] = useState<api.JobPostingOut | null>(null);
   const [_isParsingJob, _setIsParsingJob] = useState(false);
@@ -1440,6 +1446,8 @@ export default function Optimize() {
   const [pendingPdfDownloadLoading, setPendingPdfDownloadLoading] = useState(false);
   const [pendingAutoImproveAfterCheckout, setPendingAutoImproveAfterCheckout] = useState(false);
   const checkoutSnapshotRestoredRef = useRef(false);
+  const workSessionRestoredRef = useRef(false);
+  const workSessionSkipPersistRef = useRef(false);
   const autoImproveStartedRef = useRef(false);
   const [loadingHintIndex, setLoadingHintIndex] = useState(0);
   const [analysisPipelineCompleted, setAnalysisPipelineCompleted] = useState(0);
@@ -1506,6 +1514,22 @@ export default function Optimize() {
   const scanSessionStartedAtRef = useRef<number | null>(null);
   const assessEnteredAtRef = useRef<number | null>(null);
 
+  // Clean focus chrome: hide app sidebar from analyze / optimize loaders through workspace
+  useEffect(() => {
+    const hideChrome =
+      stage === "scanning" ||
+      stage === "loading" ||
+      stage === "assessment" ||
+      stage === "result" ||
+      resumeBootstrapping ||
+      claimGate;
+    if (hideChrome) document.body.classList.add("optimize-ws-active");
+    else document.body.classList.remove("optimize-ws-active");
+    return () => {
+      document.body.classList.remove("optimize-ws-active");
+    };
+  }, [stage, resumeBootstrapping, claimGate]);
+
   const plan = user?.subscription?.plan || "free";
   const subStatus = user?.subscription?.status || "free";
   const hasPaidPlan = (plan === "trial" || plan === "monthly") && (subStatus === "active" || subStatus === "trial");
@@ -1553,6 +1577,7 @@ export default function Optimize() {
         );
         setJobInput(job);
         setJobMode("text");
+        beginNewOptimizeWork();
         setResult(null);
         setError(null);
         setStage("scanning");
@@ -1770,6 +1795,7 @@ export default function Optimize() {
         photoDataUrl?: string | null;
       };
       if (p.v !== 1) return;
+      workSessionSkipPersistRef.current = true;
       setResumeContent(p.resumeContent ?? "");
       setJobInput(p.jobInput ?? "");
       setJobMode(p.jobMode === "url" ? "url" : "text");
@@ -1786,12 +1812,58 @@ export default function Optimize() {
       setStage(hasResultToResume ? "result" : (p.stage === "result" ? "assessment" : (p.stage ?? "assessment")));
       setPendingAutoImproveAfterCheckout(!hasResultToResume);
       checkoutSnapshotRestoredRef.current = true;
+      workSessionRestoredRef.current = true;
       sessionStorage.removeItem(OPTIMIZE_CHECKOUT_SNAPSHOT_KEY);
       sessionStorage.removeItem(OPTIMIZE_PENDING_AUTO_IMPROVE_KEY);
+      queueMicrotask(() => {
+        workSessionSkipPersistRef.current = false;
+      });
     } catch {
       /* ignore */
     }
   }, []);
+
+  // Restore last analyze/optimize work for ~30 min (refresh / accidental leave)
+  useLayoutEffect(() => {
+    if (typeof window === "undefined" || workSessionRestoredRef.current) return;
+    if (checkoutSnapshotRestoredRef.current) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get(api.OPTIMIZE_RESUME_QUERY_PARAM)) return;
+    if (params.get("pending")) return;
+    if (params.get("checkout") === "success") return;
+    const incoming = location.state as { resumeContent?: string } | null;
+    if (incoming?.resumeContent != null && incoming.resumeContent !== "") {
+      // New file from Home/Improve — drop stale session, let the state effect take over
+      clearOptimizeWorkSession();
+      workSessionRestoredRef.current = true;
+      return;
+    }
+    const session = loadOptimizeWorkSession();
+    if (!session) {
+      workSessionRestoredRef.current = true;
+      return;
+    }
+    workSessionSkipPersistRef.current = true;
+    workSessionRestoredRef.current = true;
+    setResumeContent(session.resumeContent);
+    setJobInput(session.jobInput);
+    setJobMode(session.jobMode === "url" ? "url" : "text");
+    setIsImproveMode(Boolean(session.isImproveMode));
+    setPreScores(session.preScores);
+    setParsedJob(session.parsedJob);
+    setResumeSourceWasPdf(Boolean(session.resumeSourceWasPdf));
+    setUploadedFileName(session.uploadedFileName);
+    setResumeSummaryFromApi(session.resumeSummaryFromApi);
+    setResult(session.result);
+    setSelectedTemplateId(session.selectedTemplateId || "");
+    setPhotoDataUrl(session.photoDataUrl);
+    setError(null);
+    setClaimGate(false);
+    setStage(session.stage);
+    queueMicrotask(() => {
+      workSessionSkipPersistRef.current = false;
+    });
+  }, [location.state]);
 
   // Return from Stripe checkout (trial / subscription) — refresh profile until paid or retries exhausted
   useEffect(() => {
@@ -1842,6 +1914,7 @@ export default function Optimize() {
       autoStart?: boolean;
     } | null;
     if (state?.resumeContent != null && state.resumeContent !== "") {
+      beginNewOptimizeWork();
       setResumeContent(state.resumeContent);
       setUploadedFileName(state.uploadedFileName ?? null);
       setResumeSourceWasPdf(state.sourceWasPdf ?? false);
@@ -1853,6 +1926,7 @@ export default function Optimize() {
         setJobInput(state.jobInputPreset);
         if (state.autoStart) autoStartPendingRef.current = true;
       }
+      setPreScores(null);
       setStage("idle");
       setResult(null);
       setResumeName(null);
@@ -1971,6 +2045,7 @@ export default function Optimize() {
   }, []);
   useEffect(() => {
     if (stage !== "scanning" || !hasResume || !hasJob || result != null) return;
+    beginNewOptimizeWork();
     setIsAnalyzing(true);
     setPreScores(null);
     const jobPayload = isImproveMode
@@ -2025,22 +2100,22 @@ export default function Optimize() {
       });
   }, [stage, hasResume, hasJob, jobMode, jobInput, resumeContent, result, refreshUser, selectedTemplateId, isImproveMode]);
 
-  // PDF thumbnail on assessment when user is not logged in (no register-upload path).
+  // PDF thumbnail on assessment — for guests and logged-in users.
   useEffect(() => {
     if (stage !== "assessment" || !lastUploadedPdfFile || resumeThumbnailUrl) return;
     if (!lastUploadedPdfFile.name.toLowerCase().endsWith(".pdf")) return;
-    if (user) return;
     let cancelled = false;
     api
       .getResumeThumbnailUrl(lastUploadedPdfFile)
       .then((url) => {
         if (!cancelled) setResumeThumbnailUrl(url);
+        else URL.revokeObjectURL(url);
       })
       .catch(() => {});
     return () => {
       cancelled = true;
     };
-  }, [stage, lastUploadedPdfFile, resumeThumbnailUrl, user]);
+  }, [stage, lastUploadedPdfFile, resumeThumbnailUrl]);
 
   // После успешного анализа: сначала PNG превью (пока есть File), затем register — иначе гонка с очисткой File ломала превью.
   useEffect(() => {
@@ -2091,6 +2166,7 @@ export default function Optimize() {
   }
 
   const handleClearResume = () => {
+    beginNewOptimizeWork();
     if (resumeThumbnailUrl) {
       URL.revokeObjectURL(resumeThumbnailUrl);
       setResumeThumbnailUrl(null);
@@ -2103,6 +2179,7 @@ export default function Optimize() {
   };
 
   async function readResumeFile(file: File) {
+    beginNewOptimizeWork();
     setError(null);
     const ext = file.name.split(".").pop()?.toLowerCase();
     const isPdf = ext === "pdf";
@@ -2117,6 +2194,15 @@ export default function Optimize() {
         setStage("idle");
         setResumeSourceWasPdf(true);
         setLastUploadedPdfFile(file);
+        // Eager thumbnail so assessment workspace has a preview immediately.
+        if (resumeThumbnailUrlRef.current) {
+          URL.revokeObjectURL(resumeThumbnailUrlRef.current);
+          setResumeThumbnailUrl(null);
+        }
+        void api
+          .getResumeThumbnailUrl(file)
+          .then((url) => setResumeThumbnailUrl(url))
+          .catch(() => {});
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Не удалось распознать PDF";
         setError(
@@ -2295,6 +2381,7 @@ export default function Optimize() {
   }
 
   async function runOptimizeResumeMax() {
+    beginNewOptimizeWork();
     setError(null);
     optimizeLoadStartedAtRef.current = Date.now();
     sseOptimizeCapRef.current = 0;
@@ -2474,8 +2561,64 @@ export default function Optimize() {
     if (stage !== "result") setPostResultFlow("main");
   }, [stage]);
 
+  // Persist assessment/result for ~30 minutes (refresh-safe)
+  useEffect(() => {
+    if (workSessionSkipPersistRef.current) return;
+    if (!resumeContent.trim()) return;
+    if (stage === "assessment" && preScores) {
+      saveOptimizeWorkSession({
+        stage: "assessment",
+        resumeContent,
+        jobInput,
+        jobMode,
+        isImproveMode,
+        preScores,
+        parsedJob,
+        resumeSourceWasPdf,
+        uploadedFileName,
+        resumeSummaryFromApi,
+        result: null,
+        selectedTemplateId,
+        photoDataUrl,
+      });
+      return;
+    }
+    if (stage === "result" && result && !result.error) {
+      saveOptimizeWorkSession({
+        stage: "result",
+        resumeContent,
+        jobInput,
+        jobMode,
+        isImproveMode,
+        preScores,
+        parsedJob,
+        resumeSourceWasPdf,
+        uploadedFileName,
+        resumeSummaryFromApi,
+        result,
+        selectedTemplateId,
+        photoDataUrl,
+      });
+    }
+  }, [
+    stage,
+    preScores,
+    result,
+    resumeContent,
+    jobInput,
+    jobMode,
+    isImproveMode,
+    parsedJob,
+    resumeSourceWasPdf,
+    uploadedFileName,
+    resumeSummaryFromApi,
+    selectedTemplateId,
+    photoDataUrl,
+  ]);
+
   function applyNewJobSameResume() {
     if (!result) return;
+    beginNewOptimizeWork();
     try {
       sessionStorage.removeItem(api.OPTIMIZE_LAST_SNAPSHOT_JWT_KEY);
     } catch {
@@ -2500,6 +2643,7 @@ export default function Optimize() {
       setOptimizePaywallOpen(true);
       return;
     }
+    beginNewOptimizeWork();
     setError(null);
     setIsImprovingMore(true);
     optimizeLoadStartedAtRef.current = Date.now();
@@ -2832,6 +2976,174 @@ export default function Optimize() {
         })()
       : t("optimize.vacancyUntitled"));
 
+  const workspaceAnnotations = useMemo(() => {
+    if (result?.annotations?.length) return result.annotations;
+    if (preScores?.annotations?.length) return preScores.annotations;
+    return [];
+  }, [result?.annotations, preScores?.annotations]);
+
+  const workspaceCategoryScores = useMemo(() => {
+    if (result?.category_scores) return result.category_scores;
+    if (preScores?.category_scores) return preScores.category_scores;
+    return null;
+  }, [result?.category_scores, preScores?.category_scores]);
+
+  const workspaceMissingKeywords = useMemo(() => {
+    const kw = preScores?.recommendations?.find((r) => r.category === "Keywords");
+    return kw?.labels?.filter(Boolean) ?? [];
+  }, [preScores?.recommendations]);
+
+  const [resultPdfPreviewUrl, setResultPdfPreviewUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!result?.pdf_base64) {
+      setResultPdfPreviewUrl(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const { getDocument, GlobalWorkerOptions } = await import("pdfjs-dist/legacy/build/pdf.mjs");
+        const workerSrc = new URL("pdfjs-dist/legacy/build/pdf.worker.min.mjs", import.meta.url).href;
+        GlobalWorkerOptions.workerSrc = workerSrc;
+        const bytes = Uint8Array.from(atob(result.pdf_base64!), (c) => c.charCodeAt(0));
+        const loadingTask = getDocument({ data: bytes.slice() });
+        const pdf = await loadingTask.promise;
+        const page = await pdf.getPage(1);
+        const natural = page.getViewport({ scale: 1 });
+        const targetW = 520;
+        const viewport = page.getViewport({ scale: targetW / natural.width });
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d", { alpha: false });
+        if (!ctx) return;
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        canvas.width = Math.floor(viewport.width * dpr);
+        canvas.height = Math.floor(viewport.height * dpr);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, viewport.width, viewport.height);
+        await page.render({ canvas, canvasContext: ctx, viewport }).promise;
+        if (!cancelled) setResultPdfPreviewUrl(canvas.toDataURL("image/png"));
+        loadingTask.destroy();
+      } catch {
+        if (!cancelled) setResultPdfPreviewUrl(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [result?.pdf_base64]);
+
+  const workspacePaperUrl =
+    stage === "result"
+      ? resultPdfPreviewUrl || resumeThumbnailUrl || resumeThumbnailUrlRef.current
+      : resumeThumbnailUrl || resumeThumbnailUrlRef.current;
+
+  const workspacePaperText =
+    (stage === "result" ? result?.optimized_resume_text?.trim() : "") ||
+    resumeContent.trim() ||
+    null;
+
+  const workspaceSchemaJson =
+    (stage === "result" ? result?.schema_json : null)?.trim() ||
+    preScores?.schema_json?.trim() ||
+    null;
+
+  const [workspaceHtml, setWorkspaceHtml] = useState<string | null>(null);
+  const [workspaceHtmlLoading, setWorkspaceHtmlLoading] = useState(false);
+
+  // Live template HTML from schema — preferred paper preview after analyze/optimize.
+  useEffect(() => {
+    if (!showSummaryBlocks || !workspaceSchemaJson) {
+      setWorkspaceHtml(null);
+      return;
+    }
+    let cancelled = false;
+    let schema: api.UnifiedResumeSchema;
+    try {
+      schema = JSON.parse(workspaceSchemaJson) as api.UnifiedResumeSchema;
+    } catch {
+      setWorkspaceHtml(null);
+      return;
+    }
+    const basics =
+      schema.basics && typeof schema.basics === "object"
+        ? { ...schema.basics, image: photoDataUrl || schema.basics.image || undefined }
+        : { name: "Candidate", image: photoDataUrl || undefined };
+    const schemaWithPhoto = { ...schema, basics } as api.UnifiedResumeSchema;
+    const templateId = selectedTemplateId.trim() || "jsonresume-classic-inspired";
+    setWorkspaceHtmlLoading(true);
+    const t = window.setTimeout(() => {
+      void api
+        .renderTemplateHtml({ template_id: templateId, schema: schemaWithPhoto })
+        .then((res) => {
+          if (!cancelled) setWorkspaceHtml(res.full_html || res.html_body || null);
+        })
+        .catch(() => {
+          if (!cancelled) setWorkspaceHtml(null);
+        })
+        .finally(() => {
+          if (!cancelled) setWorkspaceHtmlLoading(false);
+        });
+    }, 120);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(t);
+    };
+  }, [showSummaryBlocks, workspaceSchemaJson, selectedTemplateId, photoDataUrl]);
+
+  // History PDF thumbnail when File is gone but we still know the uploaded filename.
+  useEffect(() => {
+    if (resumeThumbnailUrl) return;
+    if (!showSummaryBlocks) return;
+    const fn = uploadedFileName?.trim();
+    if (!fn || !fn.toLowerCase().endsWith(".pdf")) return;
+    if (!user?.id || user.id === "local") return;
+    let cancelled = false;
+    const token = api.getStoredToken();
+    const url = api.historyThumbnailUrl(fn, token);
+    void (async () => {
+      try {
+        const r = await fetch(url, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (!r.ok) throw new Error("thumb");
+        const blob = await r.blob();
+        if (!blob.type.startsWith("image/")) throw new Error("unexpected");
+        if (cancelled) return;
+        setResumeThumbnailUrl(URL.createObjectURL(blob));
+      } catch {
+        /* optional */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [resumeThumbnailUrl, showSummaryBlocks, uploadedFileName, user?.id]);
+
+  const workspaceJob: api.JobPostingOut | null =
+    result?.job ||
+    parsedJob ||
+    preScores?.job ||
+    null;
+
+  const profileLabel = [
+    summaryData?.displayName ||
+      [resumeName?.first, resumeName?.last].filter(Boolean).join(" ") ||
+      user?.name ||
+      user?.email ||
+      "Resume",
+    summaryData?.displaySpecialty || "",
+  ]
+    .filter(Boolean)
+    .join(" — ");
+
+  const userInitials = (() => {
+    const n = (user?.name || summaryData?.displayName || user?.email || "U").trim();
+    const parts = n.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`;
+    return n.slice(0, 2);
+  })();
+
 
   if (postResultFlow === "newJobWarning" && stage === "result" && result && !result.error) {
     const ctaPrimaryCls = "ds-btn-primary inline-flex min-h-[3rem] w-full flex-1 items-center justify-center gap-2 !px-5 !text-[15px] disabled:opacity-50 whitespace-nowrap";
@@ -2917,640 +3229,143 @@ export default function Optimize() {
         )}
 
       {showSummaryBlocks && summaryData ? (
-        <div className="relative flex flex-col gap-4 w-full min-w-0 max-w-3xl mx-auto px-1 sm:px-0 overflow-x-hidden">
-          {(() => {
-            const q = summaryData.qualityPct;
-            const resultViewOk = stage === "result" && result && !result.error && q >= 60;
-            const ringSizes = [
-              { cls: "sm:hidden", size: 104, thick: 12, fs: "text-[19px]" },
-              { cls: "hidden sm:block lg:hidden", size: 110, thick: 13, fs: "text-[21px]" },
-              { cls: "hidden lg:block", size: 118, thick: 14, fs: "text-[22px]" },
-            ];
-            return (
-              <section className="ds-card ds-card--success p-5 sm:p-6">
-                <p className="ds-label mb-5">
-                  {isImproveMode ? t("optimize.resumeQuality") : t("optimize.interviewChances")}
-                </p>
-                <div className="flex flex-col lg:flex-row items-center lg:items-center gap-5 lg:gap-6 min-w-0 max-w-full">
-                      <div className="flex items-center gap-3 shrink-0 max-w-full min-w-0 justify-center flex-wrap sm:flex-nowrap">
-                        <div className="w-[72px] sm:w-[84px] shrink-0 rounded-md bg-white shadow-[var(--shadow-sm)] border border-[var(--border)] flex flex-col relative aspect-[210/297] overflow-hidden group">
-                          {(() => {
-                            const isPdfFromHistory = uploadedFileName?.toLowerCase().endsWith(".pdf");
-                            if (resumeThumbnailUrl) {
-                              return <ResumeBlobThumbnail url={resumeThumbnailUrl} />;
-                            }
-                            if (lastUploadedPdfFile && lastUploadedPdfFile.name.toLowerCase().endsWith(".pdf")) {
-                              return <div className="absolute inset-0 bg-[var(--bg-elevated)] animate-pulse" aria-hidden />;
-                            }
-                            if (isPdfFromHistory && user?.id && user.id !== "local" && !lastUploadedPdfFile && uploadedFileName) {
-                              return <ResumeHistoryThumbnailPreview filename={uploadedFileName} />;
-                            }
-                            return (
-                              <ResumeSheetPreview
-                                name={
-                                  resumeName?.first || resumeName?.last
-                                    ? [resumeName.first, resumeName.last].filter(Boolean).join(" ")
-                                    : "Resume"
-                                }
-                              />
-                            );
-                          })()}
-                          <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/5 backdrop-blur-[1px] pointer-events-none">
-                            <span
-                              className={`ds-chip !text-[9px] ${
-                                resultViewOk ? "!text-[var(--success)]" : ""
-                              }`}
-                            >
-                              {t("home.resume")}
-                            </span>
-                          </div>
-                        </div>
-                        <span className="text-[var(--text-tertiary)] text-xl font-light">+</span>
-                        <div className="w-[72px] sm:w-[84px] shrink-0 rounded-md bg-white shadow-[var(--shadow-sm)] border border-[var(--border)] flex flex-col relative aspect-[210/297] p-2 text-center justify-center min-h-[84px]">
-                          {parsedJob?.title?.trim() || jobInput.trim() ? (
-                            <>
-                              <p className="text-[10px] sm:text-[11px] font-semibold text-[var(--text)] leading-tight line-clamp-4">
-                                {parsedJob?.title?.trim() || jobInput.trim().slice(0, 72) || "—"}
-                                {parsedJob?.title ? "" : jobInput.trim().length > 72 ? "…" : ""}
-                              </p>
-                              <p className="text-[8px] sm:text-[9px] text-[var(--text-muted)] mt-1.5 line-clamp-2">
-                                {parsedJob?.company?.trim() || ""}
-                              </p>
-                            </>
-                          ) : (
-                            <div className="flex flex-1 flex-col justify-center gap-1.5 px-0.5" aria-hidden>
-                              <div className="h-2 w-full rounded bg-[var(--border)] animate-pulse" />
-                              <div className="h-2 w-[80%] mx-auto rounded bg-[var(--border)] animate-pulse" />
-                              <div className="h-1.5 w-[60%] mx-auto rounded bg-[var(--bg-elevated)] animate-pulse mt-1" />
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      <div className="hidden lg:block w-px h-[100px] bg-[var(--border)] shrink-0" />
-                      <div className="lg:hidden w-full h-px bg-[var(--border)]" />
-                      <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-4 flex-1 w-full justify-center sm:justify-start">
-                        {ringSizes.map(({ cls, size, thick, fs }) => (
-                          <div key={cls} className={`${cls} shrink-0 relative`} style={{ width: size, height: size }}>
-                            <ScoreRing percent={q} size={size} thickness={thick} />
-                            <span
-                              className={`absolute inset-0 flex items-center justify-center font-bold tabular-nums ${fs} ${
-                                resultViewOk ? "text-[var(--success)]" : "text-[var(--text)]"
-                              }`}
-                            >
-                              {q}%
-                            </span>
-                          </div>
-                        ))}
-                        <div className="text-center sm:text-left flex-1 min-w-0">
-                          <span
-                            className={`ds-soft-pill ${
-                              resultViewOk ? "ds-soft-pill--success" : q < 50 ? "ds-soft-pill--danger" : "ds-soft-pill--warning"
-                            }`}
-                          >
-                            {isImproveMode
-                              ? `${t("optimize.resumeQuality")} (${getQualityLevelLabel(q)})`
-                              : `${t("optimize.interviewChances")} (${getQualityLevelLabel(q)})`}
-                          </span>
-                          {stage === "result" &&
-                            summaryData.preOverall != null &&
-                            !isImproveMode && (
-                              <p className="mt-2.5 text-[13px] font-semibold text-[var(--text)] tabular-nums">
-                                {tFormat(t("optimize.matchBeforeAfter"), {
-                                  before: String(summaryData.preOverall),
-                                  after: String(q),
-                                })}
-                                {summaryData.improvementOverallPp != null &&
-                                  summaryData.improvementOverallPp !== 0 && (
-                                    <span
-                                      className={`ml-2 text-[12px] font-semibold ${
-                                        summaryData.improvementOverallPp > 0
-                                          ? "text-[var(--success)]"
-                                          : "text-[var(--warning)]"
-                                      }`}
-                                    >
-                                      {summaryData.improvementOverallPp > 0 ? "+" : ""}
-                                      {summaryData.improvementOverallPp}
-                                      {t("optimize.improvementPpSuffix")}
-                                    </span>
-                                  )}
-                              </p>
-                            )}
-                          {stage === "result" && !isImproveMode && (
-                            <p className="mt-1 text-[11px] text-[var(--text-muted)] tabular-nums">
-                              {tFormat(t("optimize.atsBeforeAfter"), {
-                                before: String(summaryData.preAts ?? "—"),
-                                after: String(Math.round(summaryData.atsPct)),
-                              })}
-                              {" · "}
-                              {tFormat(t("optimize.keywordsBeforeAfter"), {
-                                before: String(summaryData.preKw ?? "—"),
-                                after: String(Math.round(summaryData.kwPct)),
-                              })}
-                            </p>
-                          )}
-                          <p className="ds-body mt-2.5 max-w-[280px] mx-auto sm:mx-0 !text-[12px]">
-                            {isImproveMode
-                              ? (resultViewOk ? t("optimize.resumeQualityHintHigh") : t("optimize.resumeQualityHintLow"))
-                              : (resultViewOk ? t("optimize.interviewChancesHintHigh") : t("optimize.interviewChancesHintLow"))}
-                          </p>
-                        </div>
-                      </div>
-                </div>
-              </section>
-            );
-          })()}
-
-          {showWhyNoCallbacksSection && (
-            <section className="ds-card p-5 sm:p-6">
-              <div className="border-b border-[var(--border)]/80 pb-5">
-                <p className="ds-label text-[var(--accent)]">{t("optimize.recommendationsTitle")}</p>
-                <h3 className="mt-1.5 text-[length:var(--text-lg)] font-semibold tracking-tight text-[var(--text)]">
-                  {t("optimize.whyNoCallbacksTitle")}
-                </h3>
-                <p className="ds-body mt-2 max-w-2xl">{scanSummaryTextOptimize}</p>
-              </div>
-              <ul className="mt-5 space-y-3">
-                {callbackBlockersOptimize.length > 0
-                  ? callbackBlockersOptimize.map((cb, i) => {
-                      const Icon = i === 0 ? KeyIcon : BoltIcon;
-                      return (
-                        <li key={`cb-${i}-${cb.headline.slice(0, 48)}`}>
-                          <Disclosure>
-                            {({ open }) => (
-                              <div className="rounded-[var(--radius-md)] border border-white/70 bg-white/55 shadow-[var(--shadow-sm)] backdrop-blur-sm overflow-hidden">
-                                <DisclosureButton className="w-full flex items-start gap-3.5 p-4 text-left hover:bg-white/80 transition-colors">
-                                  <div className="ds-icon-well ds-icon-well--danger" aria-hidden>
-                                    <Icon className="h-5 w-5" strokeWidth={1.35} />
-                                  </div>
-                                  <div className="min-w-0 flex-1 pt-0.5">
-                                    <p className="text-[length:var(--text-sm)] font-semibold leading-snug text-[var(--text)]">
-                                      {cleanRecommendationReason(cb.headline)}
-                                    </p>
-                                    {(cb.action || "").trim() ? (
-                                      <p className="ds-hint mt-1.5 !text-[var(--text-muted)] line-clamp-2">
-                                        {(cb.action || "").trim()}
-                                      </p>
-                                    ) : null}
-                                  </div>
-                                  <div className="flex shrink-0 flex-col items-end gap-1.5 self-start pt-0.5">
-                                    <span className="ds-soft-pill ds-soft-pill--danger">
-                                      {t("optimize.criticalReason")}
-                                    </span>
-                                    <ChevronDownIcon
-                                      className={`w-4 h-4 text-[var(--text-tertiary)] transition-transform ${open ? "rotate-180" : ""}`}
-                                    />
-                                  </div>
-                                </DisclosureButton>
-                                <DisclosurePanel className="px-4 pb-4 pt-0">
-                                  <div className="ml-[3.25rem] pt-2 border-t border-[var(--border)]/80">
-                                    <p className="text-[12px] text-[var(--text-muted)] leading-relaxed">
-                                      <span className="font-semibold text-[var(--text)]">{t("optimize.ifIgnored")}</span>{" "}
-                                      {(cb.impact || "").trim()}
-                                    </p>
-                                    <p className="text-[12px] text-[var(--text-muted)] leading-relaxed mt-1.5">
-                                      <span className="font-semibold text-[var(--text)]">{t("optimize.whatToChange")}</span>{" "}
-                                      {(cb.action || "").trim()}
-                                    </p>
-                                  </div>
-                                </DisclosurePanel>
-                              </div>
-                            )}
-                          </Disclosure>
-                        </li>
-                      );
-                    })
-                  : topIssuesOptimizeLegacy.map((issue, i) => {
-                      const Icon = i === 0 ? KeyIcon : BoltIcon;
-                      return (
-                        <li key={issue}>
-                          <Disclosure>
-                            {({ open }) => (
-                              <div className="rounded-[var(--radius-md)] border border-white/70 bg-white/55 shadow-[var(--shadow-sm)] backdrop-blur-sm overflow-hidden">
-                                <DisclosureButton className="w-full flex items-start gap-3.5 p-4 text-left hover:bg-white/80 transition-colors">
-                                  <div className="ds-icon-well ds-icon-well--danger" aria-hidden>
-                                    <Icon className="h-5 w-5" strokeWidth={1.35} />
-                                  </div>
-                                  <div className="min-w-0 flex-1 pt-0.5">
-                                    <p className="text-[length:var(--text-sm)] font-semibold leading-snug text-[var(--text)]">
-                                      {cleanRecommendationReason(issue)}
-                                    </p>
-                                  </div>
-                                  <div className="flex shrink-0 flex-col items-end gap-1.5 self-start pt-0.5">
-                                    <span className="ds-soft-pill ds-soft-pill--danger">
-                                      {t("optimize.criticalReason")}
-                                    </span>
-                                    <ChevronDownIcon
-                                      className={`w-4 h-4 text-[var(--text-tertiary)] transition-transform ${open ? "rotate-180" : ""}`}
-                                    />
-                                  </div>
-                                </DisclosureButton>
-                                <DisclosurePanel className="px-4 pb-4 pt-0">
-                                  <div className="ml-[3.25rem] pt-2 border-t border-[var(--border)]/80">
-                                    <p className="text-[12px] text-[var(--text-muted)] leading-relaxed">
-                                      <span className="font-semibold text-[var(--text)]">{t("optimize.ifIgnored")}</span>{" "}
-                                      {impactFromRecommendationLabel(issue, "critical")}
-                                    </p>
-                                    <p className="text-[12px] text-[var(--text-muted)] leading-relaxed mt-1.5">
-                                      <span className="font-semibold text-[var(--text)]">{t("optimize.whatToChange")}</span>{" "}
-                                      {fixFromRecommendationLabel(issue, "critical")}
-                                    </p>
-                                  </div>
-                                </DisclosurePanel>
-                              </div>
-                            )}
-                          </Disclosure>
-                        </li>
-                      );
-                    })}
-              </ul>
-            </section>
-          )}
-
-          {stage === "assessment" && treatmentGroupsOptimize.length > 0 && (
-            <section className="ds-card p-4 sm:p-5">
-              <div className="min-w-0">
-                <p className="ds-label text-[var(--accent)]">
-                  {isImproveMode ? t("optimize.recommendationsTitleImprove") : t("optimize.recommendationsTitleTailor")}
-                </p>
-                <h3 className="mt-0.5 text-[length:var(--text-base)] font-semibold tracking-tight text-[var(--text)]">
-                  {isImproveMode ? t("optimize.recommendationsHeadingImprove") : t("optimize.recommendationsHeadingTailor")}
-                </h3>
-                <p className="ds-hint mt-1">
-                  {isImproveMode ? t("optimize.recommendationsSubImprove") : t("optimize.recommendationsSubTailor")}
-                </p>
-              </div>
-
-              {(() => {
-                const keywordGroup = treatmentGroupsOptimize.find((g) => g.categoryKey === "keywords");
-                const tipItems = treatmentGroupsOptimize.flatMap((group) => {
-                  if (group.categoryKey === "keywords") return [];
-                  if (group.tips.length > 0) {
-                    return group.tips.map((tip) => ({
-                      key: `${group.category}-${tip.title}`,
-                      title: tip.title,
-                      body: tip.do,
-                    }));
-                  }
-                  return group.problems.slice(0, 2).map((label) => ({
-                    key: `${group.category}-${label}`,
-                    title: cleanRecommendationReason(label),
-                    body: recommendationLabelIsSelfContained(label)
-                      ? ""
-                      : fixFromRecommendationLabel(label, group.category),
-                  }));
-                });
-                const hiddenCount = Math.max(0, tipItems.length - TIPS_PREVIEW_COUNT);
-                const visibleTips = tipsExpanded ? tipItems : tipItems.slice(0, TIPS_PREVIEW_COUNT);
-                const ghostTips =
-                  !tipsExpanded && hiddenCount > 0 ? tipItems.slice(TIPS_PREVIEW_COUNT, TIPS_PREVIEW_COUNT + 2) : [];
-
-                const renderTipRow = (item: { key: string; title: string; body: string }) => (
-                  <li key={item.key} className="flex items-start gap-3 py-3">
-                    <span
-                      className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[var(--accent)]/25 bg-[var(--accent)]/[0.08] text-[var(--accent)]"
-                      aria-hidden
-                      title={t("optimize.tipNeedsChange")}
-                    >
-                      <PencilSquareIcon className="h-3.5 w-3.5" strokeWidth={1.75} />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <TipTitleRow title={item.title} />
-                      {item.body ? (
-                        <p className="mt-1 text-[12px] leading-snug text-[var(--text-muted)]">{item.body}</p>
-                      ) : null}
-                    </div>
-                  </li>
-                );
-
-                return (
-                  <div className="mt-4 space-y-3">
-                    {keywordGroup && keywordGroup.problems.length > 0 && (
-                      <div>
-                        <p className="ds-hint mb-1.5">{t("optimize.keywordsMissingTerms")}</p>
-                        <div className="flex flex-wrap gap-1.5" role="list" aria-label={t("optimize.keywordsMissingTerms")}>
-                          {keywordGroup.problems.map((label) => (
-                            <span
-                              key={`kw-${label}`}
-                              role="listitem"
-                              className="ds-chip"
-                              title={cleanRecommendationReason(label)}
-                            >
-                              {cleanRecommendationReason(label)}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {tipItems.length > 0 && (
-                      <div>
-                        <ul className="divide-y divide-[var(--border)]/60" role="list">
-                          {visibleTips.map(renderTipRow)}
-                        </ul>
-
-                        {ghostTips.length > 0 && (
-                          <div className="relative mt-0">
-                            <ul
-                              className="divide-y divide-[var(--border)]/40 pointer-events-none select-none"
-                              aria-hidden
-                            >
-                              {ghostTips.map((item) => (
-                                <li key={`ghost-${item.key}`} className="flex items-start gap-3 py-3 opacity-45">
-                                  <span className="mt-0.5 flex h-7 w-7 shrink-0 rounded-full border border-[var(--border)] bg-white/40" />
-                                  <div className="min-w-0 flex-1 space-y-1.5 pt-0.5">
-                                    <div className="h-3 w-[70%] rounded bg-[var(--border)]/70" />
-                                    <div className="h-2.5 w-full rounded bg-[var(--border)]/45" />
-                                  </div>
-                                </li>
-                              ))}
-                            </ul>
-                            <div className="absolute inset-0 flex flex-col justify-end bg-gradient-to-b from-transparent via-[color-mix(in_srgb,var(--bg-elevated)_35%,transparent)] to-[color-mix(in_srgb,var(--bg-elevated)_88%,transparent)] backdrop-blur-[1.5px]">
-                              <button
-                                type="button"
-                                onClick={() => setTipsExpanded(true)}
-                                className="mx-auto mb-1 inline-flex items-center gap-1.5 rounded-full border border-white/70 bg-white/75 px-3.5 py-1.5 text-[12px] font-semibold text-[var(--text)] shadow-[var(--shadow-sm)] backdrop-blur-md hover:bg-white transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/30"
-                              >
-                                {tFormat(t("optimize.tipsShowMore"), { count: hiddenCount })}
-                                <ChevronDownIcon className="h-3.5 w-3.5 text-[var(--text-tertiary)]" aria-hidden />
-                              </button>
-                            </div>
-                          </div>
-                        )}
-
-                        {tipsExpanded && tipItems.length > TIPS_PREVIEW_COUNT && (
-                          <button
-                            type="button"
-                            onClick={() => setTipsExpanded(false)}
-                            className="mt-2 text-[12px] font-medium text-[var(--text-muted)] hover:text-[var(--text)] transition-colors"
-                          >
-                            {t("optimize.tipsShowLess")}
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
-            </section>
-          )}
-
-          {stage === "assessment" && (
-            <section className="ds-card ds-card--accent w-full p-4 sm:p-5">
-              <div className="flex flex-col gap-4">
-                <div className="flex min-w-0 items-start gap-3">
-                  <div className="ds-icon-well ds-icon-well--accent !h-11 !w-11" aria-hidden>
-                    <SparklesIcon className="h-5 w-5" strokeWidth={1.35} />
-                  </div>
-                  <div className="min-w-0 flex-1 space-y-1.5 pt-0.5">
-                    <p className="text-[length:var(--text-sm)] font-semibold leading-snug text-[var(--text)]">
-                      {t("optimize.nextStepImproveTitle")}
-                    </p>
-                    <p className="ds-hint !text-[var(--text-muted)]">{t("optimize.strictNote")}</p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => void handleImprove()}
-                  disabled={!canImprove}
-                  className="ds-btn-primary w-full inline-flex items-center justify-center gap-2 disabled:opacity-45 disabled:cursor-not-allowed"
-                >
-                  <SparklesIcon className="w-5 h-5 shrink-0" aria-hidden />
-                  {t("optimize.applyAutoImprove")}
-                </button>
-              </div>
-            </section>
-          )}
-
-          {stage === "result" && result && (
-            <>
-              {result.error ? (
-                <div className="ds-card p-4 sm:p-6 space-y-2">
-                  <p className="ds-label">{t("optimize.errorLabel")}</p>
-                  <p className="text-sm text-[var(--text-tertiary)] whitespace-pre-wrap">{result.error}</p>
-                </div>
-              ) : (
-                <>
-                  {result.key_changes === undefined && (
-                    <section
-                      className="ds-card p-4 sm:p-5"
-                      aria-busy="true"
-                      aria-label={t("optimize.keyChanges")}
-                    >
-                      <div className="h-3 w-36 rounded bg-[#e8ecf4] animate-pulse mb-4" />
-                      <div className="space-y-3">
-                        {[0, 1, 2].map((i) => (
-                          <div key={i} className="space-y-2">
-                            <div className="h-3 w-48 rounded bg-[#eef1f6] animate-pulse" />
-                            <div className="h-2.5 w-full max-w-md rounded bg-[#f4f6fa] animate-pulse" />
-                            <div className="flex flex-wrap gap-1.5">
-                              <div className="h-6 w-20 rounded-full bg-[#ecfdf5]/80 animate-pulse" />
-                              <div className="h-6 w-24 rounded-full bg-[#ecfdf5]/60 animate-pulse" />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </section>
-                  )}
-                  {result.key_changes && result.key_changes.length > 0 && (
-                    <section className="w-full" aria-labelledby="key-changes-heading">
-                      {(() => {
-                        const improvementCount = result.key_changes.reduce(
-                          (n, g) => n + (g.items?.length || 0),
-                          0,
-                        );
-                        return (
-                          <>
-                            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-                              <div className="min-w-0">
-                                <h3
-                                  id="key-changes-heading"
-                                  className="text-[length:var(--text-lg)] font-semibold tracking-tight text-[var(--text)]"
-                                >
-                                  {t("optimize.keyChangesTitle")}
-                                </h3>
-                                <p className="ds-subtitle mt-1">{t("optimize.keyChangesSubtitle")}</p>
-                              </div>
-                              {improvementCount > 0 && (
-                                <span className="ds-soft-pill ds-soft-pill--success self-start sm:self-auto shrink-0">
-                                  <CheckIcon className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
-                                  {tFormat(t("optimize.keyChangesApplied"), { count: improvementCount })}
-                                </span>
-                              )}
-                            </div>
-
-                            <ul className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                              {result.key_changes.map((group, idx) => {
-                                const { headline, why, well, Icon } = keyChangeUserFacing(
-                                  group.category,
-                                  group.description,
-                                );
-                                const wellClass =
-                                  well === "success"
-                                    ? "ds-icon-well--success"
-                                    : well === "warning"
-                                      ? "ds-icon-well--warning"
-                                      : "ds-icon-well--accent";
-                                const items = group.items || [];
-                                return (
-                                  <li key={`${group.category}-${idx}`} className="ds-card !rounded-[var(--radius-md)] p-4 flex flex-col">
-                                    <div className="flex items-start gap-3.5">
-                                      <div className={`ds-icon-well ${wellClass}`} aria-hidden>
-                                        <Icon className="h-5 w-5" strokeWidth={1.35} />
-                                      </div>
-                                      <div className="min-w-0 flex-1">
-                                        <div className="flex items-start justify-between gap-2">
-                                          <p className="text-[length:var(--text-sm)] font-semibold leading-snug text-[var(--text)]">
-                                            {headline}
-                                          </p>
-                                          <span className="ds-soft-pill ds-soft-pill--success !py-1 !px-2.5 !text-[11px] shrink-0">
-                                            {t("optimize.keyChangesImproved")}
-                                          </span>
-                                        </div>
-                                        <p className="ds-body mt-1.5 !text-[12px]">{why}</p>
-                                      </div>
-                                    </div>
-                                    {items.length > 0 && (
-                                      <Disclosure>
-                                        {({ open }) => (
-                                          <div className="mt-3 border-t border-[var(--border)]/80 pt-3">
-                                            <DisclosureButton className="flex w-full items-center justify-between gap-2 text-left text-[12px] font-semibold text-[var(--accent)] hover:text-[var(--accent-hover)]">
-                                              <span>
-                                                {open
-                                                  ? t("optimize.keyChangesHideDetails")
-                                                  : t("optimize.keyChangesSeeDetails")}
-                                              </span>
-                                              <ChevronDownIcon
-                                                className={`h-4 w-4 shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
-                                              />
-                                            </DisclosureButton>
-                                            <DisclosurePanel>
-                                              <ul className="mt-2.5 space-y-2">
-                                                {items.map((item, i) => (
-                                                  <li
-                                                    key={`${idx}-${i}`}
-                                                    className="flex items-start gap-2 text-[12px] leading-snug text-[var(--text-muted)]"
-                                                  >
-                                                    <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[var(--success-soft)]">
-                                                      <CheckIcon
-                                                        className="h-2.5 w-2.5 text-[var(--success)]"
-                                                        strokeWidth={2.5}
-                                                        aria-hidden
-                                                      />
-                                                    </span>
-                                                    <span>{item}</span>
-                                                  </li>
-                                                ))}
-                                              </ul>
-                                            </DisclosurePanel>
-                                          </div>
-                                        )}
-                                      </Disclosure>
-                                    )}
-                                  </li>
-                                );
-                              })}
-                            </ul>
-                          </>
-                        );
-                      })()}
-                    </section>
-                  )}
-
-                  <PostResultResumeStudio
-                    qualityPct={summaryData.qualityPct}
-                    jobTitle={resultJobTitleLabel}
-                    isImproveMode={isImproveMode}
-                    fallbackPreviewUrl={resumeThumbnailUrlRef.current}
-                    schemaJson={result.schema_json || "{}"}
-                    initialTemplateId={selectedTemplateId}
-                    initialPhotoDataUrl={photoDataUrl}
-                    onTemplateChange={setSelectedTemplateId}
-                    onPhotoChange={setPhotoDataUrl}
-                    onDownload={
-                      hasPaidPlan
-                        ? () => {
-                            void handleDownloadCustomPdf();
-                          }
-                        : openDownloadCheckoutFlow
-                    }
-                    onTailorAnother={() => setPostResultFlow("newJobWarning")}
-                    onImproveEvenStronger={() => {
-                      if (user?.id !== "local" && !hasPaidPlan) {
-                        setOptimizePaywallOpen(true);
-                        return;
-                      }
-                      void handleImproveMore();
-                    }}
-                    showImproveEvenStronger={showOptimizeAgainForAts}
-                  />
-                </>
-              )}
-            </>
+        <div className="relative flex w-full min-w-0 flex-col gap-3 overflow-x-hidden">
+          {result?.error ? (
+            <div className="ds-card p-4 sm:p-6 space-y-2">
+              <p className="ds-label">{t("optimize.errorLabel")}</p>
+              <p className="text-sm text-[var(--text-tertiary)] whitespace-pre-wrap">{result.error}</p>
+            </div>
+          ) : (
+            <OptimizeWorkspace
+              stage={stage === "result" ? "result" : "assessment"}
+              profileLabel={profileLabel}
+              userInitials={userInitials}
+              jobTitle={workspaceJob?.title || resultJobTitleLabel}
+              jobCompany={workspaceJob?.company || parsedJob?.company || ""}
+              isImproveMode={isImproveMode}
+              matchPct={isImproveMode ? summaryData.qualityPct : summaryData.atsPct}
+              atsScore={isImproveMode ? summaryData.qualityPct : summaryData.atsPct}
+              categoryScores={workspaceCategoryScores}
+              annotations={workspaceAnnotations}
+              job={workspaceJob}
+              missingKeywords={workspaceMissingKeywords}
+              keyChanges={result?.key_changes}
+              shareUrl={result?.snapshot_url || null}
+              paperPreviewUrl={workspaceHtml ? null : workspacePaperUrl}
+              paperHtml={workspaceHtml}
+              paperText={workspaceHtmlLoading && !workspaceHtml ? null : workspacePaperText}
+              paperEditable
+              onPaperTextChange={(text) => setResumeContent(text)}
+              paperFallbackName={summaryData.displayName || "Resume"}
+              canImprove={canImprove}
+              showImproveStronger={showOptimizeAgainForAts}
+              improveLoading={stage === "loading"}
+              onImprove={() => {
+                void handleImprove();
+              }}
+              onImproveStronger={() => {
+                if (user?.id !== "local" && !hasPaidPlan) {
+                  setOptimizePaywallOpen(true);
+                  return;
+                }
+                void handleImproveMore();
+              }}
+              onExport={() => {
+                if (hasPaidPlan) {
+                  void handleDownloadCustomPdf();
+                } else {
+                  openDownloadCheckoutFlow(workspacePaperUrl);
+                }
+              }}
+              onTailorAnother={
+                stage === "result" ? () => setPostResultFlow("newJobWarning") : undefined
+              }
+              stylePanel={
+                <StylePanel
+                  locked={false}
+                  selectedTemplateId={selectedTemplateId}
+                  photoDataUrl={photoDataUrl}
+                  onTemplateChange={(id) => {
+                    setSelectedTemplateId(id);
+                    setStyleVisited(true);
+                  }}
+                  onPhotoChange={(url) => {
+                    setPhotoDataUrl(url);
+                    setStyleVisited(true);
+                  }}
+                />
+              }
+              hasStyled={styleVisited || Boolean(selectedTemplateId.trim()) || Boolean(photoDataUrl)}
+              onStyleVisited={() => setStyleVisited(true)}
+            />
           )}
         </div>
       ) : stage === "landing" ? (
-        <div className="flex flex-col items-center justify-start sm:justify-center pt-2 sm:pt-8 pb-8 sm:pb-16 px-3 sm:px-6 w-full max-w-5xl mx-auto min-h-0 overflow-x-hidden">
-          {/* Main Visual Block */}
-          <div className="w-full max-w-[900px] mb-6 sm:mb-12">
-            <div className="relative rounded-2xl p-5 sm:p-8 lg:p-12 overflow-hidden flex flex-col justify-center min-h-[320px] sm:min-h-[380px] lg:min-h-[420px]"
-                 style={{ background: "var(--grad-accent-soft)" }}>
-              <div className="max-w-[420px] relative z-10">
-                <h1 className="text-[1.9rem] sm:text-3xl md:text-[40px] leading-tight font-bold text-[#0f172a] tracking-tight mb-4 sm:mb-5">
+        <div className="flex w-full min-h-[calc(100dvh-5.5rem)] flex-col items-center justify-center px-3 py-8 sm:px-6 sm:py-10 overflow-x-hidden">
+          <div className="w-full max-w-[900px]">
+            <div
+              className="relative flex min-h-[320px] flex-col justify-center overflow-hidden rounded-2xl p-5 sm:min-h-[380px] sm:p-8 lg:min-h-[420px] lg:p-12"
+              style={{ background: "var(--grad-accent-soft)" }}
+            >
+              <div className="relative z-10 max-w-[420px]">
+                <h1 className="mb-4 text-[1.9rem] font-bold leading-tight tracking-tight text-[#0f172a] sm:mb-5 sm:text-3xl md:text-[40px]">
                   Get expert feedback on your resume
                 </h1>
-                <p className="text-[0.95rem] sm:text-base md:text-[17px] text-[#334155] leading-relaxed mb-7 sm:mb-10">
+                <p className="mb-7 text-[0.95rem] leading-relaxed text-[#334155] sm:mb-10 sm:text-base md:text-[17px]">
                   Make small improvements to your resume score. A match rate of 85% or higher significantly boosts your interview chances.
                 </p>
                 <button
                   type="button"
                   onClick={() => setStage("idle")}
-                  className="ds-btn-primary inline-flex items-center gap-2 !h-12 !px-8 !rounded-full !text-[16px]"
+                  className="ds-btn-primary inline-flex items-center gap-2 !h-12 !rounded-full !px-8 !text-[16px]"
                 >
-                  <SparklesIcon className="w-5 h-5 shrink-0" aria-hidden />
+                  <SparklesIcon className="h-5 w-5 shrink-0" aria-hidden />
                   Check your resume now
                 </button>
               </div>
-              
-              <div className="absolute right-0 top-10 bottom-0 w-[320px] hidden sm:block z-0 text-right opacity-50 lg:opacity-100 right-[-60px] lg:right-0">
-                <img 
-                  src="https://www.pitchcv.app/assets/resume-example-1.png" 
-                  alt="Resume Preview" 
-                  className="w-full h-auto bg-white shadow-[-10px_10px_40px_-10px_rgba(0,0,0,0.15)] rounded-tl-md object-cover object-top"
+
+              <div className="absolute bottom-0 right-[-60px] top-10 z-0 hidden w-[320px] text-right opacity-50 sm:block lg:right-0 lg:opacity-100">
+                <img
+                  src="https://www.pitchcv.app/assets/resume-example-1.png"
+                  alt="Resume Preview"
+                  className="h-auto w-full rounded-tl-md bg-white object-cover object-top shadow-[-10px_10px_40px_-10px_rgba(0,0,0,0.15)]"
                 />
-                
-                {/* Score Badge */}
-                <div className="absolute right-5 top-5 bg-white p-3 rounded-xl shadow-[0_8px_24px_rgba(0,0,0,0.12)] border border-[#f1f5f9] flex items-center gap-3 text-left">
-                  <div className="inline-block bg-[#fb7185] text-white text-[1.05rem] font-bold px-2.5 py-1.5 rounded-lg text-center">
+
+                <div className="absolute right-5 top-5 flex items-center gap-3 rounded-xl border border-[#f1f5f9] bg-white p-3 text-left shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
+                  <div className="inline-block rounded-lg bg-[#fb7185] px-2.5 py-1.5 text-center text-[1.05rem] font-bold text-white">
                     85%
                   </div>
-                  <div className="text-[0.9rem] font-semibold text-[#334155] leading-snug">
-                    ATS<br/>Match
+                  <div className="text-[0.9rem] font-semibold leading-snug text-[#334155]">
+                    ATS
+                    <br />
+                    Match
                   </div>
                 </div>
 
-                {/* Skills Badge */}
-                <div className="absolute left-[-20px] top-32 bg-white p-3.5 rounded-xl shadow-[0_8px_24px_rgba(0,0,0,0.12)] border border-[#f1f5f9] flex flex-col gap-2.5 text-left w-[180px]">
-                  <div className="text-[10px] font-bold text-[#64748b] uppercase tracking-wider">Skills analysis</div>
+                <div className="absolute left-[-20px] top-32 flex w-[180px] flex-col gap-2.5 rounded-xl border border-[#f1f5f9] bg-white p-3.5 text-left shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-[#64748b]">Skills analysis</div>
                   <div className="flex flex-col gap-2">
                     <div className="flex items-center gap-2">
-                      <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
-                        <CheckCircleIcon className="w-3.5 h-3.5" />
+                      <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
+                        <CheckCircleIcon className="h-3.5 w-3.5" />
                       </div>
-                      <span className="text-[12px] font-semibold text-[#334155] truncate">Strategic Planning</span>
+                      <span className="truncate text-[12px] font-semibold text-[#334155]">Strategic Planning</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
-                        <CheckCircleIcon className="w-3.5 h-3.5" />
+                      <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
+                        <CheckCircleIcon className="h-3.5 w-3.5" />
                       </div>
-                      <span className="text-[12px] font-semibold text-[#334155] truncate">Market Expansion</span>
+                      <span className="truncate text-[12px] font-semibold text-[#334155]">Market Expansion</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <div className="w-5 h-5 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
-                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                      <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-rose-100 text-rose-600">
+                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                         </svg>
                       </div>
-                      <span className="text-[12px] font-medium text-[#64748b] truncate line-through decoration-[#fb7185]/50 decoration-2">B2C Sales</span>
+                      <span className="truncate text-[12px] font-medium text-[#64748b] line-through decoration-[#fb7185]/50 decoration-2">
+                        B2C Sales
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -3774,8 +3589,10 @@ export default function Optimize() {
                   <button
                     type="button"
                     onClick={() => {
+                      beginNewOptimizeWork();
                       setJobInput("");
                       setParsedJob(null);
+                      setPreScores(null);
                       setResult(null);
                       setStage("idle");
                     }}

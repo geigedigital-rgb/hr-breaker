@@ -49,7 +49,7 @@ export function PipelineVerticalStepCards({ labels, subtitles, completedSteps, i
 
   return (
     <div id={id} className="w-full max-w-md mx-auto" role="group" aria-label="Progress">
-      <ul className="flex flex-col gap-3">
+      <ul className="flex flex-col gap-2">
         {Array.from({ length: n }, (_, i) => {
           const done = i < safeDone;
           const active = !allComplete && i === safeDone;
@@ -59,7 +59,7 @@ export function PipelineVerticalStepCards({ labels, subtitles, completedSteps, i
           return (
             <li
               key={`step-${i}`}
-              className={`flex items-stretch gap-3 ds-card px-3.5 py-3.5 text-left transition-[border-color,box-shadow,background-color] duration-300 sm:gap-4 sm:px-4 sm:py-4 ${
+              className={`flex items-center gap-2.5 ds-card px-3 py-2 text-left transition-[border-color,box-shadow,background-color] duration-300 sm:gap-3 sm:px-3.5 sm:py-2.5 ${
                 active
                   ? "!border-[var(--accent)]/50 !shadow-[var(--shadow-md)]"
                   : done
@@ -69,40 +69,44 @@ export function PipelineVerticalStepCards({ labels, subtitles, completedSteps, i
               aria-current={active ? "step" : undefined}
             >
               <div
-                className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full sm:h-12 sm:w-12 ${
+                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full sm:h-9 sm:w-9 ${
                   done
-                    ? "ds-icon-well ds-icon-well--success !h-11 !w-11 sm:!h-12 sm:!w-12 text-[var(--success)]"
+                    ? "ds-icon-well ds-icon-well--success !h-8 !w-8 sm:!h-9 sm:!w-9 text-[var(--success)]"
                     : active
-                      ? "ds-icon-well ds-icon-well--accent !h-11 !w-11 sm:!h-12 sm:!w-12 text-[var(--accent)]"
+                      ? "ds-icon-well ds-icon-well--accent !h-8 !w-8 sm:!h-9 sm:!w-9 text-[var(--accent)]"
                       : "bg-[var(--bg-elevated)] text-[var(--text-tertiary)]"
                 }`}
                 aria-hidden
               >
-                <Icon className="h-5 w-5 sm:h-6 sm:w-6" strokeWidth={1.5} />
+                <Icon className="h-4 w-4 sm:h-[18px] sm:w-[18px]" strokeWidth={1.5} />
               </div>
-              <div className="min-w-0 flex-1 py-0.5">
+              <div className="min-w-0 flex-1">
                 <p
-                  className={`text-[14px] sm:text-[15px] font-semibold leading-snug ${
+                  className={`text-[13px] sm:text-[14px] font-semibold leading-snug ${
                     active ? "text-[var(--text)]" : done ? "text-[var(--text-muted)]" : "text-[var(--text-tertiary)]"
                   }`}
                 >
                   {labels[i]}
                 </p>
                 {sub ? (
-                  <p className={`mt-0.5 text-[12px] sm:text-[13px] leading-snug ${done ? "text-[var(--text-muted)]" : "text-[var(--text-tertiary)]"}`}>
+                  <p
+                    className={`mt-0.5 truncate text-[11px] sm:text-[12px] leading-snug ${
+                      done ? "text-[var(--text-muted)]" : "text-[var(--text-tertiary)]"
+                    }`}
+                  >
                     {sub}
                   </p>
                 ) : null}
               </div>
-              <div className="flex w-9 shrink-0 flex-col items-center justify-center self-center sm:w-10">
+              <div className="flex w-7 shrink-0 flex-col items-center justify-center self-center sm:w-8">
                 {done ? (
-                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--success)] text-white">
-                    <CheckIcon className="h-4 w-4" strokeWidth={2.5} aria-hidden />
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--success)] text-white sm:h-7 sm:w-7">
+                    <CheckIcon className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden />
                   </span>
                 ) : active ? (
                   <LoadingDots />
                 ) : (
-                  <span className="h-8 w-8 rounded-full border border-[var(--border)] bg-white" aria-hidden />
+                  <span className="h-6 w-6 rounded-full border border-[var(--border)] bg-white sm:h-7 sm:w-7" aria-hidden />
                 )}
               </div>
             </li>

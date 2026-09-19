@@ -100,6 +100,41 @@ class ImprovementTip(BaseModel):
     do: str  # one short imperative: rewrite / move / add — no essay
 
 
+class CategoryScoresLLM(BaseModel):
+    """LLM dimension scores 0-100 (keywords may be hybrid-adjusted after)."""
+
+    content: int = 70
+    keywords: int = 70
+    impact: int = 70
+    formatting: int = 70
+
+
+class WorkspaceAnnotationLLM(BaseModel):
+    """Left-rail annotation with section anchor for resume paper connectors."""
+
+    severity: str  # positive | warning | suggestion
+    title: str
+    body: str
+    section: str  # summary | experience | education | skills | header | other
+    anchor_y: float = 0.35  # 0-1 relative Y on page 1
+
+
+class CategoryScores(BaseModel):
+    content: int
+    keywords: int
+    impact: int
+    formatting: int
+
+
+class WorkspaceAnnotation(BaseModel):
+    id: str
+    severity: str  # positive | warning | suggestion
+    title: str
+    body: str
+    section: str
+    anchor_y: float
+
+
 class AnalysisInsights(BaseModel):
     """Risk and actionable improvement insights for pre-analysis."""
 
@@ -113,6 +148,8 @@ class AnalysisInsights(BaseModel):
     tips_impact: list[ImprovementTip] = Field(default_factory=list)
     # Tailor mode (with job): must-have gaps vs THIS posting (structure shared)
     tips_requirements: list[ImprovementTip] = Field(default_factory=list)
+    category_scores: CategoryScores | None = None
+    annotations: list[WorkspaceAnnotation] = Field(default_factory=list)
 
 
 class _ImproveModeLLMOut(BaseModel):
@@ -122,6 +159,8 @@ class _ImproveModeLLMOut(BaseModel):
     tips_writing: list[ImprovementTip] = Field(default_factory=list)
     tips_structure: list[ImprovementTip] = Field(default_factory=list)
     tips_impact: list[ImprovementTip] = Field(default_factory=list)
+    category_scores: CategoryScoresLLM = Field(default_factory=CategoryScoresLLM)
+    annotations: list[WorkspaceAnnotationLLM] = Field(default_factory=list)
 
 
 class _TailorModeLLMOut(BaseModel):
@@ -130,6 +169,8 @@ class _TailorModeLLMOut(BaseModel):
     risk_summary: str | None = None
     tips_structure: list[ImprovementTip] = Field(default_factory=list)
     tips_requirements: list[ImprovementTip] = Field(default_factory=list)
+    category_scores: CategoryScoresLLM = Field(default_factory=CategoryScoresLLM)
+    annotations: list[WorkspaceAnnotationLLM] = Field(default_factory=list)
 
 
 IMPROVE_INSIGHTS_SYSTEM = """You are a resume coach focused on ATS-friendly clarity — NOT matching a job posting.
@@ -143,6 +184,19 @@ OUTPUT:
 - tips_structure (1-2): sections, lists, order, length, headings for ATS parse/scan. Same title+do format.
 - tips_impact (1-2): where THIS resume has task-only bullets without result/number — name the role/project. Same title+do format.
 - risk_summary (optional): one short sentence.
+- category_scores: four independent integers 0-100:
+  - content: substance and role relevance of what is written
+  - keywords: ATS-friendly terminology density/clarity on THIS resume (no job match)
+  - impact: measurable outcomes / strong verbs
+  - formatting: scanability, section structure, ATS parse friendliness
+- annotations (3-5): left-rail cards that WILL be applied verbatim when the user clicks Improve. Each:
+  - severity: "positive" | "warning" | "suggestion"
+  - title: short imperative label naming WHAT to fix/keep (3-7 words), e.g. "Add KPI to MTB bullets", "Fix future end dates", "Keep Fintech stack"
+  - body: ONE concrete instruction the rewriter must execute in the resume text (≤28 words). Name the role/company/section. Use imperative (Rewrite… / Move… / Add one %… / Start bullets with…). For positive: name the strength to PRESERVE.
+  - section: "summary" | "experience" | "education" | "skills" | "header" | "other"
+  - anchor_y: float 0.08-0.92 estimating vertical position on page 1 (header~0.1, summary~0.2, experience~0.4-0.6, skills~0.75, education~0.85)
+  Mix severities: at least one positive if something is strong; warnings for critical issues; suggestions for additions.
+  Prefer 2-4 actionable (warning/suggestion) cards that a rewriter can apply without inventing facts.
 
 TIP STYLE (mandatory):
 - title: scannable, e.g. "Prozessanalyse → bullets", "PitchCV metrics missing"
@@ -165,6 +219,18 @@ OUTPUT:
 - tips_structure (1-2): layout/scan issues that hurt matching THIS role. title (3-6 words) + do (≤18 words imperative).
 - tips_requirements (1-2): must-have from the posting that is missing/weak in the resume. title names the gap; do says where to add truthful proof (skills / bullet / summary). Quote or paraphrase a real posting requirement when possible.
 - risk_summary (optional): one sentence.
+- category_scores: four independent integers 0-100 for THIS resume vs THIS job:
+  - content: coverage of role-relevant experience/substance
+  - keywords: terminology overlap with posting (will be hybrid-adjusted with TF-IDF)
+  - impact: measurable outcomes aligned to what the role cares about
+  - formatting: ATS parse/scan friendliness for this application
+- annotations (3-5): left-rail cards that WILL be applied when the user clicks Improve for THIS job. Each:
+  - severity: "positive" | "warning" | "suggestion"
+  - title: short imperative label (3-7 words) naming the gap/strength, e.g. "Mirror Salesforce requirement", "Keep CRM experience"
+  - body: ONE concrete instruction to edit the resume text (≤28 words). Quote or paraphrase a real posting requirement when relevant. Imperative. For positive: what to PRESERVE because it matches the role.
+  - section: "summary" | "experience" | "education" | "skills" | "header" | "other"
+  - anchor_y: float 0.08-0.92 on page 1 (header~0.1, summary~0.2, experience~0.45, skills~0.75, education~0.85)
+  Include at least one positive if something aligns well, and warnings/suggestions for real gaps the rewriter must fix.
 
 Do NOT invent keyword chip lists — keywords are computed separately.
 
@@ -253,9 +319,92 @@ def _lang_instruction(output_language: str | None) -> str:
     if output_language and output_language.lower() != "en":
         return (
             f"\n\nWrite ALL user-facing strings (callback_blockers, tip titles/do, "
-            f"risk_summary) in: {output_language}."
+            f"risk_summary, annotation titles/bodies) in: {output_language}."
         )
     return "\n\nWrite ALL user-facing strings in English."
+
+
+_VALID_SEVERITIES = frozenset({"positive", "warning", "suggestion"})
+_VALID_SECTIONS = frozenset({"summary", "experience", "education", "skills", "header", "other"})
+_SECTION_DEFAULT_Y = {
+    "header": 0.10,
+    "summary": 0.22,
+    "experience": 0.48,
+    "skills": 0.72,
+    "education": 0.85,
+    "other": 0.40,
+}
+
+
+def _clamp_score_100(v: object, default: int = 70) -> int:
+    try:
+        n = int(v)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return default
+    return max(0, min(100, n))
+
+
+def _clamp_annotations(raw: object, max_n: int = 5) -> list[WorkspaceAnnotation]:
+    if not isinstance(raw, list):
+        return []
+    out: list[WorkspaceAnnotation] = []
+    for i, item in enumerate(raw[:max_n]):
+        if isinstance(item, WorkspaceAnnotationLLM):
+            a = item
+        elif isinstance(item, dict):
+            try:
+                a = WorkspaceAnnotationLLM(**item)
+            except Exception:
+                continue
+        else:
+            continue
+        sev = (a.severity or "").strip().lower()
+        if sev not in _VALID_SEVERITIES:
+            sev = "suggestion"
+        section = (a.section or "").strip().lower()
+        if section not in _VALID_SECTIONS:
+            section = "other"
+        title = _clamp_str(a.title, 72)
+        body = _clamp_str(a.body, 220)
+        if not title or not body:
+            continue
+        try:
+            ay = float(a.anchor_y)
+        except (TypeError, ValueError):
+            ay = _SECTION_DEFAULT_Y.get(section, 0.4)
+        ay = max(0.05, min(0.95, ay))
+        out.append(
+            WorkspaceAnnotation(
+                id=f"ann-{i+1}",
+                severity=sev,
+                title=title,
+                body=body,
+                section=section,
+                anchor_y=round(ay, 3),
+            )
+        )
+    return out
+
+
+def build_category_scores(
+    llm_scores: CategoryScoresLLM | None,
+    *,
+    keyword_score_0_1: float | None = None,
+) -> CategoryScores:
+    """Build category scores; hybrid keywords = TF-IDF base with LLM clamp ±15."""
+    base = llm_scores or CategoryScoresLLM()
+    content = _clamp_score_100(base.content)
+    impact = _clamp_score_100(base.impact)
+    formatting = _clamp_score_100(base.formatting)
+    llm_kw = _clamp_score_100(base.keywords)
+    if keyword_score_0_1 is None:
+        keywords = llm_kw
+    else:
+        tfidf = _clamp_score_100(round(float(keyword_score_0_1) * 100))
+        # Allow LLM to nudge ±15 around TF-IDF
+        keywords = max(tfidf - 15, min(tfidf + 15, llm_kw))
+        keywords = _clamp_score_100(keywords)
+    return CategoryScores(content=content, keywords=keywords, impact=impact, formatting=formatting)
 
 
 async def get_analysis_insights(
@@ -264,11 +413,13 @@ async def get_analysis_insights(
     output_language: str | None = None,
     audit_user_id: str | None = None,
     improve_mode: bool = False,
+    keyword_score_0_1: float | None = None,
 ) -> AnalysisInsights:
     """Return rejection risk and improvement tips from LLM.
 
     improve_mode=True: resume-only ATS/writing tips (no job matching).
     improve_mode=False: tips anchored to the given job posting.
+    keyword_score_0_1: optional TF-IDF score for hybrid keywords category.
     """
     from hr_breaker.services.db import get_pool
     from hr_breaker.services.usage_audit import log_usage_event, tokens_from_run_result
@@ -312,6 +463,19 @@ async def get_analysis_insights(
     tips_impact = _clamp_tips(getattr(out, "tips_impact", None)) if improve_mode else []
     tips_requirements = _clamp_tips(getattr(out, "tips_requirements", None)) if not improve_mode else []
 
+    raw_cs = getattr(out, "category_scores", None)
+    if isinstance(raw_cs, CategoryScoresLLM):
+        cs_llm = raw_cs
+    elif isinstance(raw_cs, dict):
+        try:
+            cs_llm = CategoryScoresLLM(**raw_cs)
+        except Exception:
+            cs_llm = CategoryScoresLLM()
+    else:
+        cs_llm = CategoryScoresLLM()
+    category_scores = build_category_scores(cs_llm, keyword_score_0_1=keyword_score_0_1)
+    annotations = _clamp_annotations(getattr(out, "annotations", None))
+
     if audit_user_id:
         pool = await get_pool()
         inp, out_tok = tokens_from_run_result(result)
@@ -328,4 +492,6 @@ async def get_analysis_insights(
         tips_structure=tips_structure,
         tips_impact=tips_impact,
         tips_requirements=tips_requirements,
+        category_scores=category_scores,
+        annotations=annotations,
     )

@@ -1,8 +1,6 @@
 import re
 from dataclasses import dataclass
 
-from sklearn.feature_extraction.text import TfidfVectorizer
-
 from hr_breaker.config import get_settings
 from hr_breaker.filters.base import BaseFilter
 from hr_breaker.filters.registry import FilterRegistry
@@ -32,6 +30,9 @@ def check_keywords(
     Returns:
         KeywordCheckResult with score, passed status, and missing keywords ranked by TF-IDF importance
     """
+    # Lazy import: sklearn can hang for a long time on first import in some local envs.
+    from sklearn.feature_extraction.text import TfidfVectorizer
+
     settings = get_settings()
     if threshold is None:
         threshold = settings.filter_keyword_threshold

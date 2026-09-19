@@ -3,12 +3,22 @@ from hr_breaker.filters.base import BaseFilter
 from hr_breaker.filters.registry import FilterRegistry
 from hr_breaker.models import FilterResult, JobPosting, OptimizedResume, ResumeSource
 
-try:
-    from sentence_transformers import SentenceTransformer
+_HAS_SENTENCE_TRANSFORMERS: bool | None = None
+SentenceTransformer = None  # type: ignore
 
-    _HAS_SENTENCE_TRANSFORMERS = True
-except ImportError:
-    _HAS_SENTENCE_TRANSFORMERS = False
+
+def _sentence_transformers_available() -> bool:
+    global _HAS_SENTENCE_TRANSFORMERS, SentenceTransformer
+    if _HAS_SENTENCE_TRANSFORMERS is not None:
+        return _HAS_SENTENCE_TRANSFORMERS
+    try:
+        from sentence_transformers import SentenceTransformer as _ST
+
+        SentenceTransformer = _ST
+        _HAS_SENTENCE_TRANSFORMERS = True
+    except ImportError:
+        _HAS_SENTENCE_TRANSFORMERS = False
+    return _HAS_SENTENCE_TRANSFORMERS
 
 
 @FilterRegistry.register
@@ -29,7 +39,7 @@ class VectorSimilarityMatcher(BaseFilter):
         settings = get_settings()
         model_name = settings.sentence_transformer_model
         if cls._model is None or cls._model_name != model_name:
-            if _HAS_SENTENCE_TRANSFORMERS:
+            if _sentence_transformers_available() and SentenceTransformer is not None:
                 cls._model = SentenceTransformer(model_name)
                 cls._model_name = model_name
         return cls._model
@@ -40,7 +50,7 @@ class VectorSimilarityMatcher(BaseFilter):
         job: JobPosting,
         source: ResumeSource,
     ) -> FilterResult:
-        if not _HAS_SENTENCE_TRANSFORMERS:
+        if not _sentence_transformers_available():
             return FilterResult(
                 filter_name=self.name,
                 passed=True,

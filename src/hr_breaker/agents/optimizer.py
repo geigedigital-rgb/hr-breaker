@@ -24,6 +24,95 @@ from hr_breaker.utils import extract_text_from_html
 logger = logging.getLogger(__name__)
 
 
+def build_improvement_directives(session_analyze: dict | None) -> str:
+    """Turn prior /analyze UI tips into optimizer instructions (same session)."""
+    if not session_analyze or not isinstance(session_analyze, dict):
+        return ""
+
+    apply_lines: list[str] = []
+    keep_lines: list[str] = []
+
+    annotations = session_analyze.get("annotations")
+    if isinstance(annotations, list):
+        for a in annotations:
+            if not isinstance(a, dict):
+                continue
+            sev = str(a.get("severity") or "").strip().lower()
+            title = " ".join(str(a.get("title") or "").split()).strip()
+            body = " ".join(str(a.get("body") or "").split()).strip()
+            section = str(a.get("section") or "other").strip().lower() or "other"
+            if not title or not body:
+                continue
+            line = f"- [{section}] {title}: {body}"
+            if sev == "positive":
+                keep_lines.append(line)
+            else:
+                apply_lines.append(line)
+
+    recommendations = session_analyze.get("recommendations")
+    if isinstance(recommendations, list):
+        for rec in recommendations:
+            if not isinstance(rec, dict):
+                continue
+            cat = str(rec.get("category") or "Tip").strip()
+            tips = rec.get("tips")
+            if isinstance(tips, list):
+                for tip in tips:
+                    if not isinstance(tip, dict):
+                        continue
+                    title = " ".join(str(tip.get("title") or "").split()).strip()
+                    do = " ".join(str(tip.get("do") or "").split()).strip()
+                    if title and do:
+                        apply_lines.append(f"- [{cat}] {title}: {do}")
+
+    blockers = session_analyze.get("callback_blockers")
+    if isinstance(blockers, list):
+        for b in blockers:
+            if not isinstance(b, dict):
+                continue
+            headline = " ".join(str(b.get("headline") or "").split()).strip()
+            action = " ".join(str(b.get("action") or "").split()).strip()
+            if headline and action:
+                apply_lines.append(f"- [blocker] {headline}: {action}")
+            elif action:
+                apply_lines.append(f"- [blocker] {action}")
+
+    # Dedupe while preserving order
+    def _uniq(items: list[str], limit: int) -> list[str]:
+        seen: set[str] = set()
+        out: list[str] = []
+        for it in items:
+            key = it.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(it)
+            if len(out) >= limit:
+                break
+        return out
+
+    apply_lines = _uniq(apply_lines, 10)
+    keep_lines = _uniq(keep_lines, 4)
+    if not apply_lines and not keep_lines:
+        return ""
+
+    parts = [
+        "## PRIORITY RECOMMENDATIONS (from the open analysis session — apply these into the resume text):",
+        "These are the same tips shown to the user. Implement each warning/suggestion as real edits in the HTML.",
+        "Do not invent facts, employers, dates, tools, or metrics. Prefer rewriting existing bullets over adding fiction.",
+    ]
+    if apply_lines:
+        parts.append("### Apply (mandatory when source-backed):")
+        parts.extend(apply_lines)
+    if keep_lines:
+        parts.append("### Preserve (do not weaken):")
+        parts.extend(keep_lines)
+    parts.append(
+        "In key_changes, reflect these recommendations as outcome-focused items (what improved), not a changelog of insertions."
+    )
+    return "\n".join(parts) + "\n"
+
+
 def _load_resume_guide() -> str:
     """Load the HTML generation guide for the optimizer (package-safe)."""
     return (
@@ -132,6 +221,7 @@ INPUT: The user's resume text (any format).
 OUTPUT: Generate HTML for the <body> of a resume PDF. Do NOT include <html>, <head>, or <body> tags - only the content.
 
 IMPROVEMENT GOALS:
+- FIRST apply every item in the PRIORITY RECOMMENDATIONS block from the prior analysis session (if provided) — those are the user's agreed edits
 - Rewrite achievement bullets to be impact-focused and quantifiable (add numbers, percentages, or concrete outcomes where clearly supported by the source)
 - Improve language quality, clarity, and professional tone
 - Ensure consistent, clean formatting and logical structure
@@ -140,6 +230,7 @@ IMPROVEMENT GOALS:
 - Ensure ATS-friendliness: use standard section headers, clear job titles, recognizable skill names
 - Preserve and showcase all real work experience, education, skills, and achievements
 - Use strong action verbs to open each bullet
+- Preserve strengths called out as positive recommendations
 
 CONTENT RULES:
 - NEVER fabricate job titles, companies, degrees, certifications, dates, metrics, or achievements not in original
@@ -352,9 +443,11 @@ async def optimize_resume(
     pre_ats_score: int | None = None,
     pre_keyword_score: float | None = None,
     improve_mode: bool = False,
+    session_analyze: dict | None = None,
 ) -> OptimizedResume:
     """Optimize resume for job posting (or general improvement when improve_mode=True).
-    output_language: Preferred language for all LLM output (e.g. 'en', 'ru'). Default: English."""
+    output_language: Preferred language for all LLM output (e.g. 'en', 'ru'). Default: English.
+    session_analyze: prior /analyze payload so Improve applies the same tip cards."""
     lang_override = ""
     out_lang = (output_language or "en").strip().lower() or "en"
     if out_lang == "en":
@@ -365,6 +458,9 @@ LANGUAGE OVERRIDE: Write ALL output (HTML body text, key changes categories, des
 """
     else:
         lang_override = f"\n\nLANGUAGE: Write ALL output in this language only: {out_lang}. Do not use the job posting language for output.\n"
+
+    directives_block = build_improvement_directives(session_analyze)
+
     if improve_mode:
         prompt = f"""## Original Resume:
 {context.original_resume}
@@ -375,6 +471,7 @@ LANGUAGE OVERRIDE: Write ALL output (HTML body text, key changes categories, des
 - Make achievement bullets concrete and quantifiable where source supports it.
 - Strengthen language, remove weak phrases, use strong action verbs.
 - Keep all claims truthful to the source resume.
+{directives_block}
 """
     else:
         _pre_kw = check_keywords(context.original_resume, job)
@@ -404,6 +501,7 @@ Description: {job.description}
 - Only surface a requirement or keyword prominently if you can point to concrete source evidence for it.
 - Prefer precise overlap from the source resume over broader "close enough" substitutions.
 - Keep every claim truthful to source resume content.
+{directives_block}
 """
         if pre_ats_score is not None or pre_keyword_score is not None:
             pre_kw_pct = (
@@ -419,6 +517,7 @@ Description: {job.description}
 Optimization target for this single deep pass:
 - Maximize truthful alignment with vacancy requirements and keywords.
 - Aim for strong match quality (about 75%+ when realistically achievable from source resume).
+- Also apply PRIORITY RECOMMENDATIONS above when present.
 """
         if no_shame:
             prompt += """
@@ -480,7 +579,8 @@ Output ONLY valid JSON. The html field should contain the raw HTML string.
     from hr_breaker.services.usage_audit import log_usage_event, tokens_from_run_result
 
     settings = get_settings()
-    model = settings.gemini_pro_model
+    # Must match get_optimizer_agent: improve mode uses flash, job mode uses pro.
+    model = settings.gemini_flash_model if improve_mode else settings.gemini_pro_model
     agent = get_optimizer_agent(job, source, no_shame=no_shame, improve_mode=improve_mode)
     try:
         result = await agent.run(prompt)

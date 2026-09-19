@@ -91,6 +91,8 @@ export type OptimizeResponse = {
   improvement_ats_pp?: number | null;
   improvement_keyword_pp?: number | null;
   improvement_overall_pp?: number | null;
+  category_scores?: CategoryScores | null;
+  annotations?: WorkspaceAnnotation[];
 };
 
 /** GET /api/optimization-snapshot — same shape as server `OptimizationSnapshotPublicOut`. */
@@ -113,6 +115,8 @@ export type OptimizationSnapshotPublic = {
   photo_data_url?: string | null;
   pre_analyze?: AnalyzeResponse | null;
   snapshot_source_was_pdf?: boolean | null;
+  category_scores?: CategoryScores | null;
+  annotations?: WorkspaceAnnotation[];
 };
 
 export function optimizationSnapshotPdfUrl(token: string): string {
@@ -351,6 +355,22 @@ export type CallbackBlockerOut = {
   action: string;
 };
 
+export type CategoryScores = {
+  content: number;
+  keywords: number;
+  impact: number;
+  formatting: number;
+};
+
+export type WorkspaceAnnotation = {
+  id: string;
+  severity: "positive" | "warning" | "suggestion" | string;
+  title: string;
+  body: string;
+  section: "summary" | "experience" | "education" | "skills" | "header" | "other" | string;
+  anchor_y: number;
+};
+
 export type AnalyzeResponse = {
   ats_score: number;
   keyword_score: number;
@@ -369,6 +389,10 @@ export type AnalyzeResponse = {
   risk_summary?: string | null;
   /** LLM-generated tips with headers for recommendations block */
   improvement_tips?: string | null;
+  category_scores?: CategoryScores | null;
+  annotations?: WorkspaceAnnotation[];
+  /** Unified resume schema JSON for live template HTML preview after analyze */
+  schema_json?: string | null;
   /** Admin-only: server pipeline steps */
   admin_pipeline_log?: AdminPipelineLogEntry[] | null;
 };
@@ -1045,6 +1069,7 @@ export type UnifiedResumeSchema = {
     phone?: string | null;
     url?: string | null;
     summary?: string | null;
+    image?: string | null;
     /** Matches backend `SchemaLocation` (e.g. Cobalt Contact block + location icon). */
     location?: { city?: string | null; region?: string | null; country?: string | null } | null;
   };
@@ -1203,6 +1228,23 @@ export async function renderTemplatePdf(params: {
     signal,
   });
   const data = await parseJsonOrThrow<AdminTemplateRenderPdfResponse & { detail?: string }>(r);
+  if (!r.ok) throw new Error(data.detail || r.statusText);
+  return data;
+}
+
+export async function renderTemplateHtml(params: {
+  template_id: string;
+  schema: UnifiedResumeSchema;
+  signal?: AbortSignal;
+}): Promise<AdminTemplateRenderHtmlResponse> {
+  const { signal, ...body } = params;
+  const r = await fetch(`${API}/templates/render-html`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(body),
+    signal,
+  });
+  const data = await parseJsonOrThrow<AdminTemplateRenderHtmlResponse & { detail?: string }>(r);
   if (!r.ok) throw new Error(data.detail || r.statusText);
   return data;
 }

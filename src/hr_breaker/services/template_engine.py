@@ -134,23 +134,28 @@ def list_recommended_templates() -> list[TemplateManifest]:
     return [t for t in _TEMPLATES if t.recommended]
 
 
-def _section(title: str, body: str, *, section_class: str | None = None) -> str:
+def _section(title: str, body: str, *, section_class: str | None = None, data_section: str | None = None) -> str:
     if not body.strip():
         return ""
     cls = f' class="{escape(section_class)}"' if section_class else ""
-    return f"<section{cls}><h2>{escape(title)}</h2>{body}</section>"
+    ds = f' data-section="{escape(data_section)}"' if data_section else ""
+    return f"<section{cls}{ds}><h2>{escape(title)}</h2>{body}</section>"
 
 
 def _render_basics(schema: UnifiedResumeSchema) -> str:
     b = schema.basics
     name = escape(b.name or "Candidate")
     label = f'<p class="label">{escape(b.label)}</p>' if b.label else ""
-    summary = f'<p class="summary">{escape(b.summary)}</p>' if b.summary else ""
+    summary = (
+        f'<div class="summary" data-section="summary"><p>{escape(b.summary)}</p></div>'
+        if b.summary
+        else ""
+    )
     location = b.location.compact() if b.location else ""
     contacts = [b.email, b.phone, b.url, location]
     contact_line = " | ".join(escape(x) for x in contacts if x)
     contacts_html = f'<p class="contacts">{contact_line}</p>' if contact_line else ""
-    return f"<header><h1>{name}</h1>{label}{contacts_html}{summary}</header>"
+    return f'<header data-section="header"><h1>{name}</h1>{label}{contacts_html}{summary}</header>'
 
 
 def _render_work(schema: UnifiedResumeSchema) -> str:
@@ -161,7 +166,7 @@ def _render_work(schema: UnifiedResumeSchema) -> str:
         date_html = f'<p class="muted">{escape(dates)}</p>' if dates else ""
         bullets = "".join(f"<li>{escape(x)}</li>" for x in item.highlights if x.strip())
         parts.append(f"<article><h3>{title}</h3>{date_html}<ul>{bullets}</ul></article>")
-    return _section("Experience", "".join(parts))
+    return _section("Experience", "".join(parts), data_section="experience")
 
 
 def _render_education(schema: UnifiedResumeSchema) -> str:
@@ -171,7 +176,7 @@ def _render_education(schema: UnifiedResumeSchema) -> str:
         line = " - ".join(x for x in [item.institution, degree] if x)
         dates = " - ".join(x for x in [item.start_date, item.end_date] if x)
         parts.append(f"<article><h3>{escape(line)}</h3><p class='muted'>{escape(dates)}</p></article>")
-    return _section("Education", "".join(parts))
+    return _section("Education", "".join(parts), data_section="education")
 
 
 def _get_skill_layout(layout_key: str) -> SkillLayoutConfig:
@@ -206,7 +211,12 @@ def _render_skills(schema: UnifiedResumeSchema, layout_key: str) -> str:
     if not parts:
         return ""
     dense_class = " skill-groups-dense" if config.dense else ""
-    return _section("Skills", f"<div class='skill-groups{dense_class}'>{''.join(parts)}</div>", section_class="skills-section")
+    return _section(
+        "Skills",
+        f"<div class='skill-groups{dense_class}'>{''.join(parts)}</div>",
+        section_class="skills-section",
+        data_section="skills",
+    )
 
 
 def _render_projects(schema: UnifiedResumeSchema) -> str:
@@ -215,7 +225,7 @@ def _render_projects(schema: UnifiedResumeSchema) -> str:
         bullets = "".join(f"<li>{escape(x)}</li>" for x in item.highlights if x.strip())
         desc = f"<p>{escape(item.description)}</p>" if item.description else ""
         parts.append(f"<article><h3>{escape(item.name)}</h3>{desc}<ul>{bullets}</ul></article>")
-    return _section("Projects", "".join(parts))
+    return _section("Projects", "".join(parts), data_section="experience")
 
 
 def _render_languages(schema: UnifiedResumeSchema) -> str:
@@ -223,7 +233,7 @@ def _render_languages(schema: UnifiedResumeSchema) -> str:
     for item in schema.languages:
         fluency = f" — {escape(item.fluency)}" if item.fluency else ""
         parts.append(f"<article><h3>{escape(item.language)}{fluency}</h3></article>")
-    return _section("Languages", "".join(parts))
+    return _section("Languages", "".join(parts), data_section="other")
 
 
 def _main_column(schema: UnifiedResumeSchema) -> str:
@@ -552,7 +562,7 @@ def _render_vega_work(schema: UnifiedResumeSchema) -> str:
         )
     if not parts:
         return ""
-    return f"<section><h2>Experience</h2>{''.join(parts)}</section>"
+    return f'<section data-section="experience"><h2>Experience</h2>{"".join(parts)}</section>'
 
 
 def _render_vega_education(schema: UnifiedResumeSchema) -> str:
@@ -573,7 +583,7 @@ def _render_vega_education(schema: UnifiedResumeSchema) -> str:
         )
     if not parts:
         return ""
-    return f"<section><h2>Education</h2>{''.join(parts)}</section>"
+    return f'<section data-section="education"><h2>Education</h2>{"".join(parts)}</section>'
 
 
 def _render_vega_projects(schema: UnifiedResumeSchema) -> str:
@@ -584,7 +594,7 @@ def _render_vega_projects(schema: UnifiedResumeSchema) -> str:
         parts.append(f"<article><h3>{escape(item.name)}</h3>{desc}<ul>{bullets}</ul></article>")
     if not parts:
         return ""
-    return f"<section><h2>Projects</h2>{''.join(parts)}</section>"
+    return f'<section data-section="experience"><h2>Projects</h2>{"".join(parts)}</section>'
 
 
 def _render_skills_pills(schema: UnifiedResumeSchema) -> str:
@@ -597,7 +607,10 @@ def _render_skills_pills(schema: UnifiedResumeSchema) -> str:
     if not all_items:
         return ""
     pills = "".join(f'<span class="rx-pill">{escape(item)}</span>' for item in all_items)
-    return f"<section class='rx-skills'><h2>Skills</h2><div class='rx-pills'>{pills}</div></section>"
+    return (
+        f"<section class='rx-skills' data-section='skills'>"
+        f"<h2>Skills</h2><div class='rx-pills'>{pills}</div></section>"
+    )
 
 
 def _render_rx_vega(schema: UnifiedResumeSchema, accent: str) -> str:
@@ -607,7 +620,9 @@ def _render_rx_vega(schema: UnifiedResumeSchema, accent: str) -> str:
     name = escape(b.name or "Candidate")
     label = f'<p class="rx-label">{escape(b.label)}</p>' if b.label else ""
     summary_html = (
-        f'<div class="rx-summary"><p>{escape(b.summary)}</p></div>' if b.summary else ""
+        f'<div class="rx-summary" data-section="summary"><p>{escape(b.summary)}</p></div>'
+        if b.summary
+        else ""
     )
 
     contacts_html = _render_vega_contacts(schema)
@@ -626,7 +641,7 @@ def _render_rx_vega(schema: UnifiedResumeSchema, accent: str) -> str:
             f'<div class="rx-lang-row"><span>{escape(item.language)}</span>{fluency}</div>'
         )
     langs_html = (
-        f"<section class='rx-langs'><h2>Languages</h2>"
+        f"<section class='rx-langs' data-section='other'><h2>Languages</h2>"
         f"<div class='rx-lang-list'>{''.join(lang_parts)}</div></section>"
         if lang_parts else ""
     )
@@ -827,7 +842,7 @@ def _render_cobalt_skills(schema: UnifiedResumeSchema) -> str:
     if not items:
         return ""
     return (
-        "<section class='rx-c-side-sec rx-c-skills'>"
+        "<section class='rx-c-side-sec rx-c-skills' data-section='skills'>"
         "<h2>Skills</h2>"
         f"<ul class='rx-c-side-bullets'>{''.join(items)}</ul>"
         "</section>"
@@ -852,7 +867,7 @@ def _render_cobalt_languages(schema: UnifiedResumeSchema) -> str:
     if not items:
         return ""
     return (
-        "<section class='rx-c-side-sec rx-c-langs'>"
+        "<section class='rx-c-side-sec rx-c-langs' data-section='other'>"
         "<h2>Languages</h2>"
         f"<ul class='rx-c-side-bullets'>{''.join(items)}</ul>"
         "</section>"
@@ -884,7 +899,7 @@ def _render_cobalt_contacts_block(schema: UnifiedResumeSchema) -> str:
     if not rows:
         return ""
     return (
-        "<section class='rx-c-side-sec rx-c-contact'>"
+        "<section class='rx-c-side-sec rx-c-contact' data-section='header'>"
         "<h2>Contact</h2>"
         "<table class='rx-c-contact-table' role='presentation'><tbody>"
         f"{''.join(rows)}"
@@ -901,7 +916,7 @@ def _render_rx_cobalt(schema: UnifiedResumeSchema, accent: str) -> str:
     name = escape(b.name or "Candidate")
     label = f'<p class="rx-c-title">{escape(b.label)}</p>' if b.label else ""
     summary_block = (
-        "<section class='rx-c-side-sec rx-c-summary-sec'><h2>Summary</h2>"
+        "<section class='rx-c-side-sec rx-c-summary-sec' data-section='summary'><h2>Summary</h2>"
         f"<div class='rx-c-summary'><p>{escape(b.summary)}</p></div></section>"
         if b.summary
         else ""
@@ -922,7 +937,7 @@ def _render_rx_cobalt(schema: UnifiedResumeSchema, accent: str) -> str:
         f"{_render_cobalt_languages(schema)}"
     )
     main = (
-        f'<header class="rx-c-header"><h1>{name}</h1>{label}</header>'
+        f'<header class="rx-c-header" data-section="header"><h1>{name}</h1>{label}</header>'
         f"{_render_vega_work(schema)}"
         f"{_render_vega_projects(schema)}"
         f"{_render_vega_education(schema)}"
