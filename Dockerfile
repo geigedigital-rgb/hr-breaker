@@ -28,7 +28,9 @@ RUN apt-get update && apt-get install -y \
 # Python deps and app
 COPY pyproject.toml README.md ./
 COPY src/ ./src/
-RUN pip install --no-cache-dir --upgrade pip \
+# Do not upgrade to latest pip — pip 26+ hits resolution-too-deep on this graph.
+# Use slim Google-only pydantic-ai (see pyproject.toml), not the full meta-package.
+RUN pip install --no-cache-dir 'pip>=24,<26' \
     && pip install --no-cache-dir '.[db]'
 
 # Playwright: only Chromium (no cache mount — browsers must be in image for runtime)

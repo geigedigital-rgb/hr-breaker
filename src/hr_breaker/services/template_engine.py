@@ -410,7 +410,7 @@ def _render_rx_chikorita(schema: UnifiedResumeSchema, accent: str) -> str:
 @page {{ margin: 0; }}
 {_css_base(accent)}
   html, body {{ height: 100%; }}
-  .rx-chikorita {{ display: flex; flex-direction: column; min-height: 100vh; background: linear-gradient(to right, var(--paper) 66%, var(--accent) 66%); }}
+  .rx-chikorita {{ display: flex; flex-direction: column; min-height: 100%; background: linear-gradient(to right, var(--paper) 66%, var(--accent) 66%); }}
   .rx-chikorita .rx-row {{ display: flex; width: 100%; flex: 1; }}
   .rx-chikorita .rx-main {{ width: 66%; padding: 36px 40px; }}
   .rx-chikorita .rx-side {{
@@ -452,7 +452,7 @@ def _render_rx_ditto(schema: UnifiedResumeSchema, accent: str) -> str:
 @page {{ margin: 0; }}
 {_css_base(accent)}
   html, body {{ height: 100%; }}
-  .rx-ditto {{ display: flex; flex-direction: column; min-height: 100vh; }}
+  .rx-ditto {{ display: flex; flex-direction: column; min-height: 100%; }}
   .rx-ditto .rx-hero {{ display: flex; background: var(--accent); color: var(--paper); }}
   .rx-ditto .rx-hero-slot {{ width: 30%; max-width: 140px; min-width: 72px; flex-shrink: 0; position: relative; }}
   .rx-ditto .rx-hero-slot .rx-photo {{ position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; display: block; }}
@@ -554,7 +554,8 @@ def _render_rx_ditgar(schema: UnifiedResumeSchema, accent: str) -> str:
     return f"""
 <style>
 {_css_base(accent)}
-  .rx-ditgar .rx-row {{ display: flex; align-items: flex-start; width: 100%; }}
+  .rx-ditgar .rx-row {{ display: flex; align-items: stretch; width: 100%; min-height: 100%; }}
+  .rx-ditgar {{ min-height: 100%; }}
   .rx-ditgar .rx-side {{
     width: 34%; max-width: 220px; min-width: 150px; flex-shrink: 0;
     background: color-mix(in srgb, var(--accent) 20%, var(--paper));
@@ -763,7 +764,9 @@ def _render_rx_vega(schema: UnifiedResumeSchema, accent: str) -> str:
   body {{
     font-family: 'Georgia', 'Palatino Linotype', 'Book Antiqua', Palatino, serif;
     color: var(--text); margin: 0; font-size: 13px; line-height: 1.4;
+    height: 100%;
   }}
+  html {{ height: 100%; }}
   h1 {{ font-size: 26px; margin: 0; line-height: 1.1; font-family: 'Georgia', serif; }}
   h2 {{
     font-family: 'Georgia', serif;
@@ -776,7 +779,7 @@ def _render_rx_vega(schema: UnifiedResumeSchema, accent: str) -> str:
   p {{ margin: 3px 0; line-height: 1.4; }}
   ul {{ margin: 5px 0 0 16px; padding: 0; }}
   li {{ margin: 2px 0; line-height: 1.35; font-size: 11.5px; }}
-  .rx-vega {{ display: flex; flex-direction: column; min-height: 100vh; }}
+  .rx-vega {{ display: flex; flex-direction: column; min-height: 100%; }}
   /* ── Header ── */
   .rx-vega .rx-head {{
     display: flex; align-items: center; justify-content: space-between;
@@ -1063,6 +1066,7 @@ def _render_rx_cobalt(schema: UnifiedResumeSchema, accent: str) -> str:
     line-height: 1.4;
     color: var(--rx-ink);
     background: var(--rx-paper);
+    min-height: 100%;
   }}
   .rx-cobalt .rx-c-band {{
     position: absolute;

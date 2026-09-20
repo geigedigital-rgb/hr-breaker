@@ -56,6 +56,32 @@ function ensureEditorStyles(doc: Document) {
     doc.head.appendChild(style);
   }
   style.textContent = `
+    /* Preview frame: fill the A4 iframe, never use viewport vh (wrong in iframe). */
+    html, body {
+      width: 100% !important;
+      height: 100% !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      overflow: hidden !important;
+      background: #fff !important;
+    }
+    #ws-a4-fit {
+      position: relative;
+      box-sizing: border-box;
+      transform-origin: top left;
+    }
+    .resume,
+    .rx-vega,
+    .rx-chikorita,
+    .rx-ditto,
+    .rx-ditgar,
+    .rx-cobalt,
+    .rx-onyx,
+    .rx-lapras {
+      min-height: 100% !important;
+      box-sizing: border-box;
+    }
+
     [${HL_ATTR}] {
       background: rgba(69, 120, 252, 0.22) !important;
       box-shadow: inset 0 0 0 1px rgba(69, 120, 252, 0.4);
@@ -85,9 +111,10 @@ function ensureEditorStyles(doc: Document) {
 }
 
 /**
- * Wrap body children once, measure natural size WITHOUT height constraints
- * (constrained height + overflow:hidden was clipping ~half the resume), then
- * scale the wrapper to fit one A4 viewport.
+ * Fit template HTML into the A4 iframe without letterboxing.
+ * 1) Measure natural content size (ignore 100vh page-fill).
+ * 2) Uniform scale-down if oversized.
+ * 3) Size the wrap so after scale it exactly fills the iframe (backgrounds stay full-page).
  */
 function fitIframeContentToA4(doc: Document, iframe: HTMLIFrameElement) {
   const body = doc.body;
@@ -100,42 +127,50 @@ function fitIframeContentToA4(doc: Document, iframe: HTMLIFrameElement) {
     body.appendChild(wrap);
   }
 
-  const html = doc.documentElement;
-  html.style.margin = "0";
-  html.style.padding = "0";
-  html.style.height = "100%";
-  html.style.overflow = "hidden";
-  body.style.margin = "0";
-  body.style.padding = "0";
-  body.style.background = "#fff";
-  body.style.height = "auto";
-  body.style.minHeight = "0";
-  body.style.overflow = "visible";
-  wrap.style.transform = "";
-  wrap.style.transformOrigin = "top left";
-  wrap.style.width = "100%";
-  wrap.style.maxWidth = "none";
-  wrap.style.margin = "0";
-  wrap.style.padding = "0";
-  wrap.style.height = "auto";
-
   const viewW = Math.max(iframe.clientWidth || A4_CSS_WIDTH, 1);
   const viewH = Math.max(iframe.clientHeight || A4_CSS_HEIGHT, 1);
+
+  const html = doc.documentElement;
+  html.style.cssText = "margin:0;padding:0;width:100%;height:100%;overflow:hidden;";
+  body.style.cssText = "margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#fff;";
+
+  // Reset transform for an honest measure
+  wrap.style.cssText =
+    "position:relative;box-sizing:border-box;transform:none;transform-origin:top left;width:100%;max-width:none;margin:0;padding:0;height:auto;min-height:0;";
+
+  // Temporarily drop page-fill min-heights so we measure real content, not vh
+  const pageRoots = [
+    ...wrap.querySelectorAll<HTMLElement>(
+      ".resume, .rx-vega, .rx-chikorita, .rx-ditto, .rx-ditgar, .rx-cobalt, .rx-onyx, .rx-lapras",
+    ),
+  ];
+  const prevMin = pageRoots.map((el) => el.style.minHeight);
+  for (const el of pageRoots) el.style.minHeight = "0";
+
+  // Force reflow
+  void wrap.offsetHeight;
   const naturalH = Math.max(wrap.scrollHeight, wrap.offsetHeight, 1);
   const naturalW = Math.max(wrap.scrollWidth, wrap.offsetWidth, 1);
-  const scale = Math.min(1, viewH / naturalH, viewW / naturalW);
 
-  wrap.style.transformOrigin = "top left";
-  if (scale < 0.999) {
-    wrap.style.width = `${(100 / scale).toFixed(4)}%`;
-    wrap.style.transform = `scale(${scale})`;
-  } else {
-    wrap.style.width = "100%";
-    wrap.style.transform = "";
+  for (let i = 0; i < pageRoots.length; i++) {
+    pageRoots[i].style.minHeight = prevMin[i] || "";
   }
 
-  body.style.height = "100%";
-  body.style.overflow = "hidden";
+  const scale = Math.min(1, viewW / naturalW, viewH / naturalH);
+  // Layout box before scale must be view/scale so the scaled result fills the iframe
+  const layoutW = viewW / scale;
+  const layoutH = viewH / scale;
+
+  wrap.style.width = `${layoutW}px`;
+  wrap.style.minHeight = `${layoutH}px`;
+  wrap.style.height = `${layoutH}px`;
+  wrap.style.transformOrigin = "top left";
+  wrap.style.transform = scale < 0.9995 ? `scale(${scale})` : "";
+
+  // Restore page-fill so sidebar / gradient backgrounds cover the full A4 preview
+  for (const el of pageRoots) {
+    el.style.minHeight = "100%";
+  }
 }
 
 function discoverBlocks(doc: Document): HTMLElement[] {
