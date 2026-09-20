@@ -120,8 +120,11 @@ def get_density_profile(template_id: str) -> TemplateDensityProfile:
         return _PROFILE_SINGLE
     if theme.id == "jsonresume-flat-inspired":
         return _PROFILE_TWO_COL
-    if theme.layout in ("rx_onyx", "rx_lapras"):
+    if theme.layout == "rx_onyx":
         return _PROFILE_SINGLE
+    # Lapras card chrome eats vertical space — use sidebar-tight budgets so fit stays 1 page.
+    if theme.layout == "rx_lapras":
+        return _PROFILE_SIDEBAR
     if theme.layout.startswith("rx_"):
         return _PROFILE_SIDEBAR
     if theme.layout == "standard" and theme.supports_columns:
@@ -410,18 +413,28 @@ def _render_rx_chikorita(schema: UnifiedResumeSchema, accent: str) -> str:
 @page {{ margin: 0; }}
 {_css_base(accent)}
   html, body {{ height: 100%; }}
+  body {{ font-size: 13.5px; }}
+  h1 {{ font-size: 28px; }}
+  h2 {{ font-size: 14px; margin: 16px 0 10px; }}
+  h3 {{ font-size: 14px; }}
+  p {{ line-height: 1.42; }}
+  li {{ line-height: 1.4; font-size: 13px; }}
+  .skill-group-title {{ font-size: 11px; }}
+  .skill-group-items {{ font-size: 12.5px; line-height: 1.4; }}
   .rx-chikorita {{ display: flex; flex-direction: column; min-height: 100%; background: linear-gradient(to right, var(--paper) 66%, var(--accent) 66%); }}
   .rx-chikorita .rx-row {{ display: flex; width: 100%; flex: 1; }}
-  .rx-chikorita .rx-main {{ width: 66%; padding: 36px 40px; }}
+  .rx-chikorita .rx-main {{ width: 66%; padding: 28px 32px; }}
   .rx-chikorita .rx-side {{
     width: 34%;
-    background: transparent; color: var(--paper); padding: 36px 24px;
+    background: transparent; color: var(--paper); padding: 28px 20px;
   }}
   .rx-chikorita .rx-side h2 {{
     color: var(--paper); border-bottom: 1px solid rgba(255,255,255,.45); padding-bottom: 4px;
   }}
   .rx-chikorita .rx-side .muted, .rx-chikorita .rx-side .contacts, .rx-chikorita .rx-side p, .rx-chikorita .rx-side li {{
     color: rgba(255,255,255,.92);
+    font-size: 12.5px;
+    line-height: 1.4;
   }}
   .rx-chikorita .rx-side section.skills-section .skill-group-title {{
     color: rgba(255,255,255,.85);
@@ -517,20 +530,29 @@ def _render_rx_lapras(schema: UnifiedResumeSchema, accent: str) -> str:
     return f"""
 <style>
 {_css_base(accent)}
-  .rx-lapras {{ padding: 20px 24px; }}
+  body {{ font-size: 13px; }}
+  h1 {{ font-size: 26px; }}
+  h2 {{ font-size: 13px; }}
+  h3 {{ font-size: 13.5px; }}
+  p {{ line-height: 1.4; }}
+  li {{ line-height: 1.38; font-size: 12.5px; }}
+  .skill-group-title {{ font-size: 10.5px; }}
+  .skill-group-items {{ font-size: 12px; }}
+  .rx-lapras {{ padding: 14px 18px; }}
   .rx-lapras .rx-head {{
-    border: 1px solid #d1d5db; border-radius: 10px; padding: 16px 18px; margin-bottom: 16px;
+    border: 1px solid #d1d5db; border-radius: 8px; padding: 12px 14px; margin-bottom: 10px;
   }}
   .rx-lapras section {{
-    border: 1px solid #d1d5db; border-radius: 10px; padding: 12px 14px; margin-bottom: 12px;
+    border: 1px solid #d1d5db; border-radius: 8px; padding: 8px 12px 10px; margin-bottom: 8px;
   }}
   .rx-lapras section h2 {{
     margin-top: 0; background: var(--paper); display: inline-block; padding: 0 6px;
-    position: relative; top: -22px; margin-bottom: -10px;
+    position: relative; top: -18px; margin-bottom: -12px;
   }}
   .rx-lapras section.skills-section .skill-group {{
-    padding-top: 2px;
+    padding-top: 0;
   }}
+  .rx-lapras ul {{ margin: 2px 0 6px 16px; }}
 </style>
 <div class="resume rx-lapras">
   <header class="rx-head"><h1>{name}</h1>{label}{contacts}{summary}</header>
@@ -763,33 +785,33 @@ def _render_rx_vega(schema: UnifiedResumeSchema, accent: str) -> str:
   /* Serif corporate font — Georgia available on all platforms */
   body {{
     font-family: 'Georgia', 'Palatino Linotype', 'Book Antiqua', Palatino, serif;
-    color: var(--text); margin: 0; font-size: 13px; line-height: 1.4;
+    color: var(--text); margin: 0; font-size: 14.5px; line-height: 1.45;
     height: 100%;
   }}
   html {{ height: 100%; }}
-  h1 {{ font-size: 26px; margin: 0; line-height: 1.1; font-family: 'Georgia', serif; }}
+  h1 {{ font-size: 28px; margin: 0; line-height: 1.1; font-family: 'Georgia', serif; }}
   h2 {{
     font-family: 'Georgia', serif;
-    font-size: 10px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase;
+    font-size: 11px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase;
     color: var(--accent);
     border-bottom: 1.5px solid color-mix(in srgb, var(--accent) 22%, transparent);
-    padding-bottom: 4px; margin: 16px 0 10px;
+    padding-bottom: 4px; margin: 14px 0 9px;
   }}
-  h3 {{ margin: 0 0 2px; font-size: 13px; font-weight: 700; }}
-  p {{ margin: 3px 0; line-height: 1.4; }}
+  h3 {{ margin: 0 0 2px; font-size: 14.5px; font-weight: 700; }}
+  p {{ margin: 3px 0; line-height: 1.45; }}
   ul {{ margin: 5px 0 0 16px; padding: 0; }}
-  li {{ margin: 2px 0; line-height: 1.35; font-size: 11.5px; }}
+  li {{ margin: 2px 0; line-height: 1.42; font-size: 13.5px; }}
   .rx-vega {{ display: flex; flex-direction: column; min-height: 100%; }}
   /* ── Header ── */
   .rx-vega .rx-head {{
     display: flex; align-items: center; justify-content: space-between;
     background: var(--accent); color: var(--paper);
-    padding: 24px 32px 22px 32px; gap: 24px;
+    padding: 20px 28px 18px 28px; gap: 20px;
   }}
   .rx-vega .rx-head-text {{ flex: 1; min-width: 0; }}
-  .rx-vega .rx-head-text h1 {{ color: var(--paper); font-size: 24px; margin-bottom: 4px; }}
+  .rx-vega .rx-head-text h1 {{ color: var(--paper); font-size: 26px; margin-bottom: 4px; }}
   .rx-vega .rx-label {{
-    color: rgba(255,255,255,.88); font-size: 12.5px; font-style: italic; margin: 2px 0 0;
+    color: rgba(255,255,255,.88); font-size: 13.5px; font-style: italic; margin: 2px 0 0;
   }}
   .rx-vega .rx-contacts {{
     display: flex;
@@ -802,7 +824,7 @@ def _render_rx_vega(schema: UnifiedResumeSchema, accent: str) -> str:
     row-gap: 10px;
     column-gap: 0;
     color: rgba(255,255,255,.88);
-    font-size: 11.5px;
+    font-size: 12.5px;
     line-height: 1.45;
   }}
   /* .rx-contact-item = icon + text; .rx-sep only between blocks — equal padding L/R so gap block↔•↔block is symmetric. */
@@ -875,46 +897,46 @@ def _render_rx_vega(schema: UnifiedResumeSchema, accent: str) -> str:
   }}
   /* ── Body ── */
   .rx-vega .rx-body {{ display: flex; align-items: flex-start; flex: 1; }}
-  .rx-vega .rx-main {{ flex: 1; min-width: 0; padding: 18px 16px 22px 26px; }}
-  .rx-vega .rx-side {{ width: 270px; flex-shrink: 0; padding: 18px 26px 22px 18px; }}
+  .rx-vega .rx-main {{ flex: 1; min-width: 0; padding: 16px 14px 18px 22px; }}
+  .rx-vega .rx-side {{ width: 270px; flex-shrink: 0; padding: 16px 22px 18px 16px; }}
   .rx-vega .rx-main h2:first-child, .rx-vega .rx-side > *:first-child h2 {{ margin-top: 0; }}
   /* ── Entry layout ── */
   .rx-vega .rx-entry-head {{
     display: flex; justify-content: space-between; align-items: baseline; gap: 8px;
   }}
   .rx-vega .rx-date {{
-    font-size: 10px; color: var(--muted); white-space: nowrap; flex-shrink: 0;
+    font-size: 11px; color: var(--muted); white-space: nowrap; flex-shrink: 0;
   }}
-  .rx-vega .rx-org {{ color: var(--accent); font-size: 12px; font-weight: 600; margin: 1px 0 3px; }}
-  .rx-vega .rx-loc {{ font-size: 11px; color: var(--muted); font-weight: 400; }}
+  .rx-vega .rx-org {{ color: var(--accent); font-size: 13px; font-weight: 600; margin: 1px 0 3px; }}
+  .rx-vega .rx-loc {{ font-size: 12px; color: var(--muted); font-weight: 400; }}
   /* ── Article separators ── */
   .rx-vega article {{
-    padding-bottom: 9px; margin-bottom: 9px;
+    padding-bottom: 8px; margin-bottom: 8px;
     border-bottom: 1px solid rgba(0,0,0,.07);
   }}
   .rx-vega section > article:last-child {{ border-bottom: none; margin-bottom: 0; padding-bottom: 0; }}
   /* ── Summary ── */
-  .rx-vega .rx-summary p {{ font-size: 11.5px; line-height: 1.5; color: var(--text); margin: 0; }}
+  .rx-vega .rx-summary p {{ font-size: 13px; line-height: 1.5; color: var(--text); margin: 0; }}
   .rx-vega .rx-summary {{ margin-bottom: 4px; }}
   /* ── Skills pills ── */
   .rx-vega .rx-skills {{ }}
   .rx-vega .rx-pills {{ display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }}
   .rx-vega .rx-pill {{
-    display: inline-block; font-size: 10px; padding: 2px 9px; border-radius: 20px;
+    display: inline-block; font-size: 11px; padding: 3px 10px; border-radius: 20px;
     background: color-mix(in srgb, var(--accent) 9%, var(--paper));
     color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
     white-space: nowrap; font-family: 'Georgia', serif;
   }}
   /* ── Languages ── */
-  .rx-vega .rx-langs {{ margin-top: 14px; }}
+  .rx-vega .rx-langs {{ margin-top: 12px; }}
   .rx-vega .rx-lang-list {{ display: flex; flex-direction: column; gap: 5px; margin-top: 6px; }}
   .rx-vega .rx-lang-row {{
     display: flex; justify-content: space-between; align-items: baseline;
-    font-size: 11.5px;
+    font-size: 12.5px;
     padding-bottom: 5px; border-bottom: 1px solid rgba(0,0,0,.07);
   }}
   .rx-vega .rx-lang-list .rx-lang-row:last-child {{ border-bottom: none; padding-bottom: 0; }}
-  .rx-vega .rx-lang-level {{ color: var(--muted); font-size: 10px; font-style: italic; }}
+  .rx-vega .rx-lang-level {{ color: var(--muted); font-size: 11px; font-style: italic; }}
 </style>
 <div class="resume rx-vega">
   <div class="rx-head">
@@ -1062,8 +1084,8 @@ def _render_rx_cobalt(schema: UnifiedResumeSchema, accent: str) -> str:
   .rx-cobalt {{
     position: relative;
     font-family: system-ui, -apple-system, "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
-    font-size: 12.5px;
-    line-height: 1.4;
+    font-size: 14px;
+    line-height: 1.42;
     color: var(--rx-ink);
     background: var(--rx-paper);
     min-height: 100%;
@@ -1082,8 +1104,8 @@ def _render_rx_cobalt(schema: UnifiedResumeSchema, accent: str) -> str:
     z-index: 1;
     display: flex;
     align-items: flex-start;
-    gap: 40px;
-    padding: 26px 22px 28px 26px;
+    gap: 36px;
+    padding: 22px 20px 24px 24px;
   }}
   .rx-cobalt .rx-c-main {{
     flex: 1;
@@ -1108,7 +1130,7 @@ def _render_rx_cobalt(schema: UnifiedResumeSchema, accent: str) -> str:
   }}
   .rx-cobalt .rx-c-header h1 {{
     margin: 0 0 4px;
-    font-size: 1.55em;
+    font-size: 1.6em;
     font-weight: 700;
     line-height: 1.15;
     color: var(--rx-ink);
@@ -1116,15 +1138,15 @@ def _render_rx_cobalt(schema: UnifiedResumeSchema, accent: str) -> str:
   }}
   .rx-cobalt .rx-c-title {{
     margin: 0 0 10px;
-    font-size: 0.95em;
+    font-size: 1em;
     font-weight: 600;
     color: var(--accent);
   }}
   /* Main column sections (shared Vega article markup) */
   .rx-cobalt .rx-c-main section > h2 {{
-    margin: 18px 0 10px;
-    padding-bottom: 6px;
-    font-size: 1.12em;
+    margin: 16px 0 9px;
+    padding-bottom: 5px;
+    font-size: 1.14em;
     font-weight: 700;
     color: var(--rx-ink);
     border-bottom: 2px solid var(--rx-rule);
@@ -1141,28 +1163,28 @@ def _render_rx_cobalt(schema: UnifiedResumeSchema, accent: str) -> str:
   }}
   .rx-cobalt .rx-c-main h3 {{
     margin: 0;
-    font-size: 0.95em;
+    font-size: 1em;
     font-weight: 700;
     color: var(--rx-ink);
   }}
   .rx-cobalt .rx-c-main .rx-date {{
-    font-size: 0.72em;
+    font-size: 0.78em;
     color: var(--rx-ink-soft);
     white-space: nowrap;
     flex-shrink: 0;
   }}
   .rx-cobalt .rx-c-main .rx-org {{
     margin: 2px 0 4px;
-    font-size: 0.88em;
+    font-size: 0.92em;
     font-weight: 600;
     color: var(--accent);
   }}
-  .rx-cobalt .rx-c-main .rx-loc {{ font-size: 0.78em; color: var(--rx-ink-soft); font-weight: 400; }}
-  .rx-cobalt .rx-c-main ul {{ margin: 4px 0 12px 16px; padding: 0; }}
-  .rx-cobalt .rx-c-main li {{ margin: 2px 0; font-size: 0.78em; line-height: 1.38; color: var(--rx-ink-soft); }}
+  .rx-cobalt .rx-c-main .rx-loc {{ font-size: 0.86em; color: var(--rx-ink-soft); font-weight: 400; }}
+  .rx-cobalt .rx-c-main ul {{ margin: 4px 0 10px 16px; padding: 0; }}
+  .rx-cobalt .rx-c-main li {{ margin: 2px 0; font-size: 0.92em; line-height: 1.42; color: var(--rx-ink-soft); }}
   .rx-cobalt .rx-c-main article {{
-    padding-bottom: 8px;
-    margin-bottom: 8px;
+    padding-bottom: 7px;
+    margin-bottom: 7px;
     border-bottom: 1px solid rgba(0, 0, 0, 0.06);
   }}
   .rx-cobalt .rx-c-main section > article:last-child {{
@@ -1186,9 +1208,9 @@ def _render_rx_cobalt(schema: UnifiedResumeSchema, accent: str) -> str:
   }}
   .rx-cobalt .rx-c-photo {{ width: 100%; height: 100%; object-fit: cover; display: block; }}
   .rx-cobalt .rx-c-side-sec h2 {{
-    margin: 14px 0 8px;
-    padding-bottom: 6px;
-    font-size: 1.08em;
+    margin: 12px 0 7px;
+    padding-bottom: 5px;
+    font-size: 1.1em;
     font-weight: 700;
     color: #fff;
     border-bottom: 2px solid rgba(255, 255, 255, 0.14);
@@ -1199,7 +1221,7 @@ def _render_rx_cobalt(schema: UnifiedResumeSchema, accent: str) -> str:
   .rx-cobalt .rx-c-photo-outer + .rx-c-side-sec h2 {{ margin-top: 0; }}
   .rx-cobalt .rx-c-summary p {{
     margin: 0;
-    font-size: 0.78em;
+    font-size: 0.9em;
     line-height: 1.45;
     color: var(--rx-side-muted);
   }}
@@ -1223,8 +1245,8 @@ def _render_rx_cobalt(schema: UnifiedResumeSchema, accent: str) -> str:
   }}
   .rx-cobalt .rx-c-contact-table .rx-c-ctext {{
     padding-left: 14px;
-    font-size: 0.86em;
-    line-height: 1.3;
+    font-size: 0.92em;
+    line-height: 1.35;
     color: var(--rx-side-text);
     overflow-wrap: anywhere;
   }}
@@ -1251,8 +1273,8 @@ def _render_rx_cobalt(schema: UnifiedResumeSchema, accent: str) -> str:
   .rx-cobalt .rx-c-side-bullets li {{
     position: relative;
     padding-left: 14px;
-    margin: 0 0 8px;
-    font-size: 0.76em;
+    margin: 0 0 7px;
+    font-size: 0.9em;
     line-height: 1.42;
     color: var(--rx-side-muted);
     overflow-wrap: anywhere;

@@ -232,13 +232,11 @@ export default function DownloadCheckout() {
           </Link>
 
           <div className="hidden md:flex items-center gap-5 min-w-0">
-            <StepItem idx={1} state="done" label="Optimization complete" />
+            <StepItem idx={1} state="active" label="Choose plan" />
             <div className="w-6 h-px bg-[#D7DBE8]" />
-            <StepItem idx={2} state="active" label="Choose plan" />
+            <StepItem idx={2} state="todo" label="Payment" />
             <div className="w-6 h-px bg-[#D7DBE8]" />
-            <StepItem idx={3} state="todo" label="Payment details" />
-            <div className="w-6 h-px bg-[#D7DBE8]" />
-            <StepItem idx={4} state="todo" label="Download resume" />
+            <StepItem idx={3} state="todo" label="Download" />
           </div>
 
           <button

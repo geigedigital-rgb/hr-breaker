@@ -825,7 +825,7 @@ export const es = {
     trialPrice: "$1.69",
     trialDesc: "Acceso completo por 7 días",
     trialAutoRenew:
-      "Después de 7 días, la suscripción se renovará automáticamente a $29.00/mes. Cancele cuando quiera.",
+      "Después de 7 días, la suscripción se renovará automáticamente a $18.99/mes. Cancele cuando quiera.",
     trialFeature1: "Análisis ATS ilimitados",
     trialFeature2: "Optimización automática con IA",
     trialFeature3: "Adaptación a empleos específicos",
@@ -834,7 +834,7 @@ export const es = {
     startTrial: "Iniciar prueba",
     redirectingStripe: "Redirigiendo a Stripe…",
     monthlyTitle: "Mensual",
-    monthlyPrice: "$29.00",
+    monthlyPrice: "$18.99",
     monthlyDesc: "Optimización ilimitada y exportación a PDF",
     monthlyFeature1: "Adaptación ilimitada de currículum con IA",
     monthlyFeature2: "Coincidencia avanzada de palabras clave ATS",

@@ -109,7 +109,7 @@ class Settings(BaseModel):
     stripe_webhook_secret: str = ""  # Webhook signing secret (whsec_...)
     stripe_publishable_key: str = ""  # For frontend if needed (e.g. Customer Portal)
     stripe_price_trial_id: str = ""   # One-time trial signup fee (e.g. $1.69), 7-day access line item
-    stripe_price_monthly_id: str = ""  # Recurring $29/month
+    stripe_price_monthly_id: str = ""  # Recurring $18.99/month
 
     # GA4 Measurement Protocol (Stripe webhook → server-side `purchase`). Stream → Measurement Protocol API secrets.
     ga4_measurement_id: str = ""  # G-XXXXXXXXXX

@@ -1,12 +1,9 @@
 import { useId, useState, type ReactNode } from "react";
-import {
-  DocumentTextIcon,
-  SwatchIcon,
-} from "@heroicons/react/24/outline";
+import { SwatchIcon } from "@heroicons/react/24/outline";
 import type { CategoryScores, ChangeDetailOut, JobPostingOut } from "../../api";
 import { t } from "../../i18n";
 
-type Tab = "match" | "job" | "style";
+type Tab = "match" | "style";
 
 function MatchTargetIcon({ className }: { className?: string }) {
   return (
@@ -94,22 +91,24 @@ export function InsightTabs({
   atsScore,
   categoryScores,
   preAts,
-  job,
   isImproveMode,
-  missingKeywords,
   keyChanges,
   stylePanel,
+  showStyle = false,
   tab: tabProp,
   onTabChange,
 }: {
   atsScore: number | null;
   categoryScores: CategoryScores | null;
   preAts?: number | null;
-  job: JobPostingOut | null;
+  /** Kept for API compatibility; Job tab removed. */
+  job?: JobPostingOut | null;
   isImproveMode: boolean;
-  missingKeywords: string[];
+  missingKeywords?: string[];
   keyChanges?: ChangeDetailOut[] | null;
   stylePanel: ReactNode;
+  /** Style tab only after resume has been improved. */
+  showStyle?: boolean;
   tab?: Tab;
   onTabChange?: (tab: Tab) => void;
 }) {
@@ -128,8 +127,9 @@ export function InsightTabs({
       label: isImproveMode ? t("optimize.workspace.tabScore") : t("optimize.workspace.tabMatch"),
       Icon: MatchTargetIcon,
     },
-    { id: "job", label: t("optimize.workspace.tabJob"), Icon: DocumentTextIcon },
-    { id: "style", label: t("optimize.workspace.tabStyle"), Icon: SwatchIcon },
+    ...(showStyle
+      ? [{ id: "style" as const, label: t("optimize.workspace.tabStyle"), Icon: SwatchIcon }]
+      : []),
   ];
 
   return (
@@ -192,59 +192,30 @@ export function InsightTabs({
           {keyChanges && keyChanges.length > 0 && (
             <div className="border-t border-[#E8ECF4] pt-3">
               <p className="text-[13px] font-semibold text-[#0f172a]">{t("optimize.workspace.whatChanged")}</p>
-              <ul className="mt-2 space-y-2">
-                {keyChanges.slice(0, 4).map((g, i) => (
-                  <li key={i} className="text-[12px] text-[#64748B]">
-                    <span className="font-semibold text-[#334155]">{g.category}</span>
-                    {g.items?.length ? `: ${g.items.slice(0, 3).join(", ")}` : ""}
-                  </li>
-                ))}
+              <ul className="mt-2 space-y-2.5">
+                {keyChanges.slice(0, 6).map((g, i) => {
+                  const items = (g.items || []).filter(Boolean).slice(0, 4);
+                  const desc = (g.description || "").trim();
+                  return (
+                    <li key={i} className="text-[12px] leading-snug text-[#64748B]">
+                      <span className="font-semibold text-emerald-700">{g.category}</span>
+                      {desc ? <span className="mt-0.5 block text-[#475569]">{desc}</span> : null}
+                      {!desc && items.length > 0 ? (
+                        <span className="mt-0.5 block">{items.join(" · ")}</span>
+                      ) : null}
+                      {desc && items.length > 0 ? (
+                        <span className="mt-0.5 block text-[#94A3B8]">{items.join(" · ")}</span>
+                      ) : null}
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           )}
         </div>
       )}
 
-      {tab === "job" && (
-        <div className="mt-4 space-y-3 text-[13px]">
-          {isImproveMode ? (
-            <p className="text-[#64748B]">{t("optimize.workspace.jobGeneral")}</p>
-          ) : job ? (
-            <>
-              <div>
-                <p className="font-semibold text-[#0f172a]">{job.title || "—"}</p>
-                <p className="text-[#64748B]">{job.company}</p>
-              </div>
-              {job.description && (
-                <p className="line-clamp-5 text-[12px] leading-relaxed text-[#64748B]">{job.description}</p>
-              )}
-              {job.requirements?.length > 0 && (
-                <ul className="list-disc space-y-1 pl-4 text-[12px] text-[#64748B]">
-                  {job.requirements.slice(0, 6).map((r, i) => (
-                    <li key={i}>{r}</li>
-                  ))}
-                </ul>
-              )}
-              {missingKeywords.length > 0 && (
-                <div>
-                  <p className="mb-1.5 font-semibold text-[#0f172a]">{t("optimize.workspace.missingKeywords")}</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {missingKeywords.slice(0, 12).map((k) => (
-                      <span key={k} className="rounded-full bg-[#EEF2FF] px-2 py-0.5 text-[11px] font-medium text-[#4578FC]">
-                        {k}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </>
-          ) : (
-            <p className="text-[#94A3B8]">{t("optimize.workspace.jobEmpty")}</p>
-          )}
-        </div>
-      )}
-
-      {tab === "style" && <div className="mt-4">{stylePanel}</div>}
+      {tab === "style" && showStyle && <div className="mt-4">{stylePanel}</div>}
     </div>
   );
 }

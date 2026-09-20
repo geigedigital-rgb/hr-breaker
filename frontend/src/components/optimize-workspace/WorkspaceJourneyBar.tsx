@@ -96,10 +96,8 @@ export function WorkspaceJourneyBar({
       <div className="optimize-ws-journey-glass w-full max-w-[420px] overflow-hidden rounded-[1.25rem]">
         <ol className="grid grid-cols-[1fr_auto_1fr_auto_1fr] items-center gap-x-0 px-3 py-3 sm:px-4">
           {steps.map((step, i) => {
-            // Style is reachable after analysis (preview templates); Improve stays gated.
-            const enabled =
-              step.state !== "upcoming" ||
-              (step.id === "style" && hasRecommendations);
+            // Style unlocks only after improve (result stage).
+            const enabled = step.state !== "upcoming";
             const prevDone = i > 0 && steps[i - 1].state === "done";
             return (
               <li key={step.id} className="contents">

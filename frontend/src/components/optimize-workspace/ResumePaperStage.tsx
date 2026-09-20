@@ -262,6 +262,46 @@ export function ResumePaperStage({
   const [paperReady, setPaperReady] = useState(false);
   const [activeSection, setActiveSection] = useState<string | null>(null);
   const [fmtState, setFmtState] = useState({ bold: false, italic: false });
+  const [toolbarPos, setToolbarPos] = useState<{ top: number; left: number } | null>(null);
+
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const updateToolbarPosRef = useRef<() => void>(() => {});
+  const [zoomHint, setZoomHint] = useState(false);
+  const zoomHintTimer = useRef<number | null>(null);
+  const zoomRef = useRef(zoom);
+  zoomRef.current = zoom;
+  const gestureBaseRef = useRef(100);
+
+  const updateToolbarPosition = useCallback(() => {
+    const host = scrollRef.current;
+    const iframe = iframeRef.current;
+    const doc = iframe?.contentDocument;
+    if (!host || !iframe || !doc) {
+      setToolbarPos(null);
+      return;
+    }
+    const block = doc.querySelector<HTMLElement>(`[${BLOCK_ACTIVE}]`);
+    if (!block) {
+      setToolbarPos(null);
+      return;
+    }
+    const blockRect = block.getBoundingClientRect();
+    const iframeRect = iframe.getBoundingClientRect();
+    const hostRect = host.getBoundingClientRect();
+    const TOOLBAR_H = 28;
+    const GAP = 5;
+    const absTop = iframeRect.top + blockRect.top;
+    const absLeft = iframeRect.left + blockRect.left;
+    let top = absTop - hostRect.top + host.scrollTop - TOOLBAR_H - GAP;
+    let left = absLeft - hostRect.left + host.scrollLeft;
+    if (top < host.scrollTop + 4) {
+      top = absTop - hostRect.top + host.scrollTop + GAP;
+    }
+    const maxLeft = Math.max(6, host.scrollWidth - 152);
+    left = Math.max(6, Math.min(left, maxLeft));
+    setToolbarPos({ top: Math.round(top), left: Math.round(left) });
+  }, []);
+  updateToolbarPosRef.current = updateToolbarPosition;
 
   const mode: "html" | "image" | "text" | "skeleton" = paperHtml?.trim()
     ? "html"
@@ -289,6 +329,7 @@ export function ResumePaperStage({
     setLocalAnchors(map);
     onSectionAnchors?.(map);
     setReady(true);
+    requestAnimationFrame(() => updateToolbarPosRef.current());
   }, [mode, onPaperHeight, onSectionAnchors]);
 
   const syncFmtState = useCallback(() => {
@@ -347,6 +388,7 @@ export function ResumePaperStage({
       setLocalAnchors({});
       onSectionAnchors?.({});
       setActiveSection(null);
+      setToolbarPos(null);
     }
   }, [paperHtml, mode]);
 
@@ -427,6 +469,7 @@ export function ResumePaperStage({
         const section = (block.getAttribute("data-section") || "other").toLowerCase();
         setActiveSection(section);
         syncFmtState();
+        requestAnimationFrame(() => updateToolbarPosRef.current());
       };
 
       const onFocusIn = (e: FocusEvent) => setActiveFromEvent(e.target);
@@ -440,11 +483,13 @@ export function ResumePaperStage({
           setActiveSection((block.getAttribute("data-section") || "other").toLowerCase());
         }
         syncFmtState();
+        requestAnimationFrame(() => updateToolbarPosRef.current());
       };
       const onInput = () => {
         onTextChangeRef.current?.(doc.body?.innerText || "");
         reportGeometry();
         syncFmtState();
+        requestAnimationFrame(() => updateToolbarPosRef.current());
       };
 
       doc.addEventListener("focusin", onFocusIn);
@@ -467,13 +512,6 @@ export function ResumePaperStage({
 
   useEffect(() => () => inputCleanupRef.current?.(), []);
 
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const [zoomHint, setZoomHint] = useState(false);
-  const zoomHintTimer = useRef<number | null>(null);
-  const zoomRef = useRef(zoom);
-  zoomRef.current = zoom;
-  const gestureBaseRef = useRef(100);
-
   function bumpZoom(next: number) {
     setZoom(clampZoom(next));
     setZoomHint(true);
@@ -481,7 +519,23 @@ export function ResumePaperStage({
     zoomHintTimer.current = window.setTimeout(() => setZoomHint(false), 700);
   }
 
-  // Pinch / Ctrl+wheel — only on the paper scroll viewport (not page chrome)
+  // Keep floating toolbar glued to the active block while scrolling / resizing
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const onScroll = () => updateToolbarPosRef.current();
+    el.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    return () => {
+      el.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (activeSection) requestAnimationFrame(() => updateToolbarPosRef.current());
+    else setToolbarPos(null);
+  }, [activeSection, zoom, paperReady]);
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
@@ -532,66 +586,66 @@ export function ResumePaperStage({
 
   return (
     <div className="optimize-ws-paper relative flex min-h-0 flex-1 flex-col items-center pt-0">
-      {showEditorChrome && (
-        <div className="optimize-ws-editor-toolbar sticky top-0 z-10 mb-2 flex w-full max-w-[560px] items-center gap-1 rounded-xl border border-[#E8ECF4] bg-white/95 px-2 py-1.5 shadow-sm backdrop-blur-sm">
-          <span
-            className="mr-1 hidden min-w-0 max-w-[7.5rem] truncate rounded-md bg-[#F1F5F9] px-2 py-1 text-[11px] font-semibold text-[#475569] sm:inline"
-            title={sectionLabel}
+      <div
+        ref={scrollRef}
+        className="optimize-ws-paper-scroll relative w-full max-w-[560px] flex-1 overflow-auto pb-20 pt-0 px-0 sm:px-1"
+        title={t("optimize.workspace.zoomHint")}
+      >
+        {showEditorChrome && activeSection && toolbarPos && (
+          <div
+            className="optimize-ws-block-toolbar pointer-events-auto absolute z-30 flex items-center gap-0.5 rounded-lg border border-[#E8ECF4] bg-white/95 px-1 py-0.5 shadow-[0_4px_14px_rgba(15,23,42,0.12)] backdrop-blur-sm"
+            style={{ top: toolbarPos.top, left: toolbarPos.left }}
+            role="toolbar"
+            aria-label={sectionLabel}
           >
-            {sectionLabel}
-          </span>
-          <div className="flex items-center gap-0.5 border-r border-[#E8ECF4] pr-1.5">
+            <span
+              className="mr-0.5 max-w-[4.5rem] truncate rounded px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-[#64748B]"
+              title={sectionLabel}
+            >
+              {sectionLabel}
+            </span>
             <ToolbarBtn
               label={t("optimize.workspace.editorBold")}
               active={fmtState.bold}
-              disabled={!activeSection}
               onClick={() => runCommand("bold")}
             >
-              <BoldIcon className="h-4 w-4" />
+              <BoldIcon className="h-3 w-3" />
             </ToolbarBtn>
             <ToolbarBtn
               label={t("optimize.workspace.editorItalic")}
               active={fmtState.italic}
-              disabled={!activeSection}
               onClick={() => runCommand("italic")}
             >
-              <ItalicIcon className="h-4 w-4" />
+              <ItalicIcon className="h-3 w-3" />
             </ToolbarBtn>
             <ToolbarBtn
               label={t("optimize.workspace.editorList")}
-              disabled={!activeSection}
               onClick={() => runCommand("insertUnorderedList")}
             >
-              <ListBulletIcon className="h-4 w-4" />
+              <ListBulletIcon className="h-3 w-3" />
+            </ToolbarBtn>
+            <span className="mx-0.5 h-3 w-px bg-[#E8ECF4]" aria-hidden />
+            <ToolbarBtn label={t("optimize.workspace.editorUndo")} onClick={() => runCommand("undo")}>
+              <ArrowUturnLeftIcon className="h-3 w-3" />
+            </ToolbarBtn>
+            <ToolbarBtn label={t("optimize.workspace.editorRedo")} onClick={() => runCommand("redo")}>
+              <ArrowUturnRightIcon className="h-3 w-3" />
             </ToolbarBtn>
           </div>
-          <div className="flex items-center gap-0.5 border-r border-[#E8ECF4] pr-1.5">
-            <ToolbarBtn
-              label={t("optimize.workspace.editorUndo")}
-              disabled={!activeSection}
-              onClick={() => runCommand("undo")}
-            >
-              <ArrowUturnLeftIcon className="h-4 w-4" />
-            </ToolbarBtn>
-            <ToolbarBtn
-              label={t("optimize.workspace.editorRedo")}
-              disabled={!activeSection}
-              onClick={() => runCommand("redo")}
-            >
-              <ArrowUturnRightIcon className="h-4 w-4" />
-            </ToolbarBtn>
-          </div>
-          <div className="ml-auto flex items-center gap-0.5">
+        )}
+
+        {showEditorChrome && (
+          <div className="optimize-ws-zoom-chip pointer-events-auto sticky top-2 z-20 mb-0 ml-auto mr-1 flex w-fit items-center gap-0 rounded-lg border border-[#E8ECF4] bg-white/90 px-0.5 py-0.5 shadow-sm backdrop-blur-sm">
             <ToolbarBtn
               label={t("optimize.workspace.zoomOut")}
               onClick={() => bumpZoom(zoomRef.current - 10)}
               disabled={zoom <= ZOOM_MIN}
             >
-              <MinusIcon className="h-4 w-4" />
+              <MinusIcon className="h-3 w-3" />
             </ToolbarBtn>
             <button
               type="button"
-              className="min-w-[2.75rem] rounded-md px-1 py-1 text-center text-[11px] font-semibold tabular-nums text-[#334155] hover:bg-[#F8FAFC]"
+              className="min-w-[2.25rem] rounded px-0.5 py-0.5 text-center text-[10px] font-semibold tabular-nums text-[#334155] hover:bg-[#F8FAFC]"
               title={t("optimize.workspace.zoomHint")}
               onClick={() => bumpZoom(100)}
             >
@@ -602,17 +656,11 @@ export function ResumePaperStage({
               onClick={() => bumpZoom(zoomRef.current + 10)}
               disabled={zoom >= ZOOM_MAX}
             >
-              <PlusIcon className="h-4 w-4" />
+              <PlusIcon className="h-3 w-3" />
             </ToolbarBtn>
           </div>
-        </div>
-      )}
+        )}
 
-      <div
-        ref={scrollRef}
-        className="optimize-ws-paper-scroll relative w-full max-w-[560px] flex-1 overflow-auto pb-20 pt-0 px-0 sm:px-1"
-        title={t("optimize.workspace.zoomHint")}
-      >
         <div
           className="relative mx-auto"
           style={{
@@ -724,7 +772,7 @@ function ToolbarBtn({
       disabled={disabled}
       onMouseDown={(e) => e.preventDefault()}
       onClick={onClick}
-      className={`inline-flex h-7 w-7 items-center justify-center rounded-md transition disabled:cursor-not-allowed disabled:opacity-35 ${
+      className={`inline-flex h-6 w-6 items-center justify-center rounded transition disabled:cursor-not-allowed disabled:opacity-35 ${
         active
           ? "bg-[#EEF2FF] text-[#4578FC]"
           : "text-[#475569] hover:bg-[#F1F5F9] hover:text-[#0f172a]"

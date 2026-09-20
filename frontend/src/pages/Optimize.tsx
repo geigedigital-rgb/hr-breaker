@@ -8,7 +8,7 @@ import { storeCheckoutResumePreview } from "../checkoutResumePreview";
 import { PipelineVerticalStepCards } from "../components/PipelineVerticalStepCards";
 import { OptimizeWorkspace } from "../components/optimize-workspace/OptimizeWorkspace";
 import { StylePanel } from "../components/optimize-workspace/StylePanel";
-import { resolveWorkspaceAnnotations } from "../components/optimize-workspace/annotationsFromAnalyze";
+import { resolveResultAnnotations, resolveWorkspaceAnnotations } from "../components/optimize-workspace/annotationsFromAnalyze";
 import {
   beginNewOptimizeWork,
   clearOptimizeWorkSession,
@@ -2428,11 +2428,16 @@ export default function Optimize() {
       : t("optimize.vacancyUntitled"));
 
   const workspaceAnnotations = useMemo(() => {
-    if (result?.annotations?.length) return result.annotations;
+    // After improve: show what got better — never tip/suggestion cards from re-analyze.
+    if (stage === "result" && result && !result.error) {
+      return resolveResultAnnotations({
+        keyChanges: result.key_changes,
+        resultAnnotations: result.annotations,
+      });
+    }
     if (preScores?.annotations?.length) return preScores.annotations;
-    // Legacy / LLM-miss: rail only shows annotations — synthesize from tip cards
     return resolveWorkspaceAnnotations(null, preScores);
-  }, [result?.annotations, preScores]);
+  }, [stage, result, preScores]);
 
   const workspaceCategoryScores = useMemo(() => {
     if (result?.category_scores) return result.category_scores;
@@ -2748,7 +2753,7 @@ export default function Optimize() {
               }
               stylePanel={
                 <StylePanel
-                  locked={false}
+                  locked={stage !== "result"}
                   selectedTemplateId={selectedTemplateId}
                   photoDataUrl={photoDataUrl}
                   onTemplateChange={(id) => {

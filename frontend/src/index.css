@@ -514,11 +514,11 @@ body.optimize-ws-active main.ds-sandbox-main {
   align-items: start;
 }
 
-/* Resume paper editor chrome */
-.optimize-ws-editor-toolbar {
+/* Resume paper editor chrome — compact floating block toolbar */
+.optimize-ws-block-toolbar {
   box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.8) inset,
-    0 2px 8px rgba(15, 23, 42, 0.06);
+    0 1px 0 rgba(255, 255, 255, 0.85) inset,
+    0 4px 14px rgba(15, 23, 42, 0.12);
 }
 .optimize-ws-paper-scroll {
   overscroll-behavior: contain;

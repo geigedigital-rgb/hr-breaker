@@ -1,10 +1,10 @@
 """
 Stripe checkout and webhook handling for HR-Breaker subscriptions.
 
-- Trial: subscription $29/mo with 7-day trial + one-time signup fee as a second Checkout line item (STRIPE_PRICE_TRIAL_ID).
-  Checkout shows that fee due today; after trial ends Stripe charges $29/mo.
+- Trial: subscription $18.99/mo with 7-day trial + one-time signup fee as a second Checkout line item (STRIPE_PRICE_TRIAL_ID).
+  Checkout shows that fee due today; after trial ends Stripe charges $18.99/mo.
 - If STRIPE_PRICE_TRIAL_ID is unset: Checkout shows $0 (subscription in trial only); legacy webhook charges TRIAL_SIGNUP_CENTS after — confusing UX.
-- Monthly: subscription $29/month, no trial.
+- Monthly: subscription $18.99/month, no trial.
 """
 
 from __future__ import annotations

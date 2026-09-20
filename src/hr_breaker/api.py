@@ -687,6 +687,53 @@ def _annotations_out(items: list[WorkspaceAnnotation] | None) -> list[WorkspaceA
     ]
 
 
+def _annotations_from_key_changes(
+    changes: list[ChangeDetailOut] | None,
+    *,
+    max_n: int = 6,
+) -> list[WorkspaceAnnotationOut]:
+    """Map optimizer key_changes → positive left-rail cards (what improved)."""
+    if not changes:
+        return []
+    out: list[WorkspaceAnnotationOut] = []
+    section_y = {
+        "skills": 0.72,
+        "experience": 0.48,
+        "summary": 0.22,
+        "education": 0.85,
+        "other": 0.4,
+    }
+    for i, c in enumerate(changes[:max_n], 1):
+        title = (c.category or "").strip()
+        if not title:
+            continue
+        desc = (c.description or "").strip()
+        items = [x.strip() for x in (c.items or []) if (x or "").strip()]
+        body = desc or ("; ".join(items[:3]) if items else "Applied to your resume.")
+        cat = title.lower()
+        if any(k in cat for k in ("keyword", "requirement", "skill")):
+            section = "skills"
+        elif any(k in cat for k in ("writing", "impact", "experience", "bullet")):
+            section = "experience"
+        elif any(k in cat for k in ("summary", "profile")):
+            section = "summary"
+        elif "education" in cat:
+            section = "education"
+        else:
+            section = "other"
+        out.append(
+            WorkspaceAnnotationOut(
+                id=f"improved-{i}",
+                severity="positive",
+                title=title[:72],
+                body=body[:220],
+                section=section,
+                anchor_y=section_y.get(section, 0.4),
+            )
+        )
+    return out
+
+
 def _keyword_score_to_pct(score: float | None) -> int | None:
     if score is None:
         return None
@@ -4155,7 +4202,7 @@ async def _run_optimize(
                     break
 
     post_category_scores: CategoryScoresOut | None = None
-    post_annotations: list[WorkspaceAnnotationOut] = []
+    post_annotations: list[WorkspaceAnnotationOut] = _annotations_from_key_changes(key_changes_out)
     if optimized_resume_text and optimized_resume_text.strip() and job:
         try:
             post_insights = await get_analysis_insights(
@@ -4167,7 +4214,9 @@ async def _run_optimize(
                 keyword_score_0_1=post_kw,
             )
             post_category_scores = _category_scores_out(post_insights.category_scores)
-            post_annotations = _annotations_out(post_insights.annotations)
+            # Keep key_changes as left-rail cards — not tip/suggestion re-analysis.
+            if not post_annotations:
+                post_annotations = _annotations_from_key_changes(key_changes_out)
         except Exception as e:
             logger.warning("Post-optimize category scores / annotations failed: %s", e)
 

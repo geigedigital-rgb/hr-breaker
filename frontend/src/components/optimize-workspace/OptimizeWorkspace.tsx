@@ -45,7 +45,7 @@ export function OptimizeWorkspace(props: OptimizeWorkspaceProps) {
 
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
-  const [insightTab, setInsightTab] = useState<"match" | "job" | "style">("match");
+  const [insightTab, setInsightTab] = useState<"match" | "style">("match");
 
   const orderedAnnotations = useMemo(
     () => sortAnnotationsByPriority(annotations),
@@ -55,6 +55,13 @@ export function OptimizeWorkspace(props: OptimizeWorkspaceProps) {
   useEffect(() => {
     if (insightTab === "style") onStyleVisited?.();
   }, [insightTab, onStyleVisited]);
+
+  // Style tab only after improve — leave Style if still on assessment.
+  useEffect(() => {
+    if (stage !== "result" && insightTab === "style") {
+      setInsightTab("match");
+    }
+  }, [stage, insightTab]);
 
   /** Only warnings + suggestions — not positive tips or key_changes. */
   const improvementCount = useMemo(
@@ -106,6 +113,7 @@ export function OptimizeWorkspace(props: OptimizeWorkspaceProps) {
       return;
     }
     if (id === "style") {
+      if (stage !== "result") return;
       setInsightTab("style");
       onStyleVisited?.();
       // Scroll right column into view on mobile
@@ -202,6 +210,7 @@ export function OptimizeWorkspace(props: OptimizeWorkspaceProps) {
             missingKeywords={missingKeywords}
             keyChanges={keyChanges}
             stylePanel={stylePanel}
+            showStyle={stage === "result"}
             tab={insightTab}
             onTabChange={setInsightTab}
           />

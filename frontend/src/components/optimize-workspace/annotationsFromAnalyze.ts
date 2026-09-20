@@ -1,5 +1,6 @@
 import type {
   AnalyzeResponse,
+  ChangeDetailOut,
   RecommendationItem,
   WorkspaceAnnotation,
 } from "../../api";
@@ -15,10 +16,40 @@ const SECTION_Y: Record<string, number> = {
 
 function categorySection(category: string): string {
   const c = category.toLowerCase();
-  if (c.includes("keyword") || c.includes("requirement")) return "skills";
-  if (c.includes("writing") || c.includes("impact")) return "experience";
-  if (c.includes("structure")) return "other";
+  if (c.includes("keyword") || c.includes("requirement") || c.includes("skill")) return "skills";
+  if (c.includes("writing") || c.includes("impact") || c.includes("experience") || c.includes("bullet"))
+    return "experience";
+  if (c.includes("summary") || c.includes("profile")) return "summary";
+  if (c.includes("structure") || c.includes("format")) return "other";
+  if (c.includes("education")) return "education";
   return "other";
+}
+
+/** After improve: left-rail cards from optimizer key_changes (what got better). */
+export function annotationsFromKeyChanges(
+  keyChanges: ChangeDetailOut[] | undefined | null,
+  maxN = 6,
+): WorkspaceAnnotation[] {
+  const out: WorkspaceAnnotation[] = [];
+  let n = 1;
+  for (const change of keyChanges || []) {
+    const title = (change.category || "").trim();
+    if (!title) continue;
+    const desc = (change.description || "").trim();
+    const items = (change.items || []).map((x) => (x || "").trim()).filter(Boolean);
+    const body = desc || (items.length ? items.slice(0, 3).join("; ") : "Applied to your resume.");
+    const section = categorySection(title);
+    out.push({
+      id: `improved-${n++}`,
+      severity: "positive",
+      title: title.slice(0, 72),
+      body: body.slice(0, 220),
+      section,
+      anchor_y: SECTION_Y[section] ?? 0.4,
+    });
+    if (out.length >= maxN) break;
+  }
+  return out;
 }
 
 /** Build left-rail cards from recommendations / blockers when API annotations are empty. */
@@ -97,4 +128,15 @@ export function resolveWorkspaceAnnotations(
     fallbackSource.recommendations,
     fallbackSource.callback_blockers,
   );
+}
+
+/** Assessment = tips to apply. Result = what improved (never tip/suggestion leftovers). */
+export function resolveResultAnnotations(opts: {
+  keyChanges?: ChangeDetailOut[] | null;
+  resultAnnotations?: WorkspaceAnnotation[] | null;
+}): WorkspaceAnnotation[] {
+  const fromChanges = annotationsFromKeyChanges(opts.keyChanges);
+  if (fromChanges.length) return fromChanges;
+  const positives = (opts.resultAnnotations || []).filter((a) => a.severity === "positive");
+  return positives;
 }

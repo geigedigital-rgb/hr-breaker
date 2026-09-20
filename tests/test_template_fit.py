@@ -109,6 +109,8 @@ FAT_TEMPLATES = (
     "jsonresume-classic-inspired",
     "reactive-chikorita",
     "reactive-cobalt",
+    "reactive-lapras",
+    "reactive-vega",
 )
 
 
@@ -117,6 +119,7 @@ def test_density_profiles_group_templates():
     flat = get_density_profile("jsonresume-flat-inspired")
     chikorita = get_density_profile("reactive-chikorita")
     cobalt = get_density_profile("reactive-cobalt")
+    lapras = get_density_profile("reactive-lapras")
     onyx = get_density_profile("reactive-onyx")
 
     assert classic.sidebar_heavy is False
@@ -124,6 +127,7 @@ def test_density_profiles_group_templates():
     assert flat.max_work_roles <= classic.max_work_roles
     assert chikorita.sidebar_heavy is True
     assert cobalt.sidebar_heavy is True
+    assert lapras.sidebar_heavy is True
     assert chikorita.summary_max_chars < classic.summary_max_chars
 
 
