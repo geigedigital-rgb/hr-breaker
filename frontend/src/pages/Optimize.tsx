@@ -1,7 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useRef, useId, useMemo } from "react";
 import { useLocation, useNavigate, useSearchParams, Link } from "react-router-dom";
-import { Disclosure, DisclosureButton, DisclosurePanel } from "@headlessui/react";
-import { SparklesIcon, ArrowUpTrayIcon, ArrowDownTrayIcon, ArrowPathIcon, ArrowLeftIcon, ArrowRightIcon, BriefcaseIcon, ClipboardDocumentIcon, ExclamationTriangleIcon, CheckCircleIcon, CheckIcon, ChevronDownIcon, MagnifyingGlassIcon, KeyIcon, BoltIcon, DocumentTextIcon, AcademicCapIcon, PencilSquareIcon } from "@heroicons/react/24/outline";
+import { SparklesIcon, ArrowUpTrayIcon, ArrowDownTrayIcon, ArrowPathIcon, ArrowLeftIcon, BriefcaseIcon, ClipboardDocumentIcon, ExclamationTriangleIcon, CheckCircleIcon, CheckIcon, MagnifyingGlassIcon } from "@heroicons/react/24/outline";
 import * as api from "../api";
 import { useAuth } from "../contexts/AuthContext";
 import { t, tFormat } from "../i18n";
@@ -205,27 +204,6 @@ function ResumeHistoryThumbnailPreview({
           />
         ) : null}
       </div>
-    </div>
-  );
-}
-
-/** Object-URL thumbnail (e.g. PDF preview blob): skeleton until decoded. */
-function ResumeBlobThumbnail({ url }: { url: string }) {
-  const [ready, setReady] = useState(false);
-  useEffect(() => {
-    setReady(false);
-  }, [url]);
-  return (
-    <div className="relative h-full min-h-[96px] w-full">
-      {!ready && <ResumeFrameSkeleton />}
-      <img
-        src={url}
-        alt=""
-        className={`absolute inset-0 h-full w-full object-cover object-top transition-opacity duration-200 ${
-          ready ? "opacity-90" : "opacity-0"
-        }`}
-        onLoad={() => setReady(true)}
-      />
     </div>
   );
 }
@@ -464,34 +442,6 @@ function getKeywordsScore(result: api.OptimizeResponse): { score: number; thresh
   return r != null ? { score: r.score, threshold: r.threshold } : null;
 }
 
-const ATS_BANDS: { max: number; category: string; description: string }[] = [
-  { max: 55, category: "Inadequate", description: "Critically low. Resume is classified as irrelevant. High chance of auto-reject." },
-  { max: 65, category: "Borderline", description: "Borderline. You meet basic criteria but rank low. May be reviewed only when candidates are scarce." },
-  { max: 75, category: "Qualified", description: "Professional minimum. You have shown core competencies. Resume makes it to the initial screening list." },
-  { max: 85, category: "Top Tier", description: "Gold standard. Strong balance of hard skills and context. You rank in the top 5 in the system." },
-  { max: 99, category: "Elite / Expert", description: "Maximum priority. Full match on all filters. Expect thorough verification at interview." },
-  { max: 100, category: "System Match", description: "Technical ideal. Can be seen as copy-paste of the job. Some HRs may view it with skepticism." },
-];
-
-const KEYWORDS_BANDS: { max: number; category: string; description: string }[] = [
-  { max: 55, category: "Weak", description: "Critical hard skills missing. The algorithm sees you as from a different field." },
-  { max: 65, category: "Basic", description: "Basic skills listed but specific tools (stack, methodologies, certs) are missing." },
-  { max: 75, category: "Strong", description: "All must-have requirements covered. You pass filters for most search queries." },
-  { max: 85, category: "Optimal", description: "Ideal coverage. Both core and nice-to-have skills. Maximum weight in search." },
-  { max: 99, category: "Exact", description: "Near-perfect match to job wording. Guarantees top placement but may need human polish." },
-  { max: 100, category: "Overfit", description: "Word-for-word match. May trigger anti-spam (keyword stuffing) in some ATS." },
-];
-
-function getAtsCategory(percent: number): { category: string; description: string } {
-  const band = ATS_BANDS.find((b) => percent <= b.max);
-  return band ? { category: band.category, description: band.description } : ATS_BANDS[ATS_BANDS.length - 1];
-}
-
-function getKeywordsCategory(percent: number): { category: string; description: string } {
-  const band = KEYWORDS_BANDS.find((b) => percent <= b.max);
-  return band ? { category: band.category, description: band.description } : KEYWORDS_BANDS[KEYWORDS_BANDS.length - 1];
-}
-
 function getScoreTextColor(pct: number): string {
   if (pct < 55) return "#dc2626";
   if (pct < 75) return "#ca8a04";
@@ -564,152 +514,6 @@ function BarScoreRow({ label, percent, compact }: { label: string; percent: numb
   );
 }
 
-function mixHex(a: string, b: string, t: number): string {
-  const ah = a.replace("#", "");
-  const bh = b.replace("#", "");
-  const ar = parseInt(ah.slice(0, 2), 16);
-  const ag = parseInt(ah.slice(2, 4), 16);
-  const ab = parseInt(ah.slice(4, 6), 16);
-  const br = parseInt(bh.slice(0, 2), 16);
-  const bg = parseInt(bh.slice(2, 4), 16);
-  const bb = parseInt(bh.slice(4, 6), 16);
-  const r = Math.round(ar + (br - ar) * t);
-  const g = Math.round(ag + (bg - ag) * t);
-  const bl = Math.round(ab + (bb - ab) * t);
-  return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${bl.toString(16).padStart(2, "0")}`;
-}
-
-function scoreProgressColor(pct: number): string {
-  const p = Math.max(0, Math.min(100, pct));
-  if (p <= 25) return mixHex("#dc2626", "#f59e0b", p / 25);
-  if (p <= 45) return "#f59e0b";
-  if (p <= 60) return mixHex("#f59e0b", "#16a34a", (p - 45) / 15);
-  return "#16a34a";
-}
-
-function ScoreRing({
-  percent,
-  size = 46,
-  thickness = 6,
-}: {
-  percent: number;
-  size?: number;
-  thickness?: number;
-}) {
-  const pct = Math.max(0, Math.min(100, percent));
-  const angle = (pct / 100) * 360;
-  const startDeg = 270;
-  const ringMask = `radial-gradient(farthest-side, transparent calc(100% - ${thickness}px), #000 calc(100% - ${thickness}px))`;
-  const qualityColor = scoreProgressColor(pct);
-  const filledGradient =
-    "conic-gradient(from 270deg, #dc2626 0%, #f59e0b 25%, #f59e0b 45%, #16a34a 60%, #16a34a 100%)";
-  const markerRadius = Math.max(2.5, thickness / 2 + 0.5);
-  const orbit = size / 2 - thickness / 2 - 0.25;
-  const markerDeg = startDeg + angle;
-  const markerRad = (markerDeg * Math.PI) / 180;
-  const markerX = size / 2 + orbit * Math.sin(markerRad) - markerRadius;
-  const markerY = size / 2 - orbit * Math.cos(markerRad) - markerRadius;
-
-  return (
-    <div className="relative shrink-0" style={{ width: size, height: size }} aria-hidden>
-      <div
-        className="absolute inset-0 rounded-full"
-        style={{
-          background: filledGradient,
-          WebkitMaskImage: ringMask,
-          maskImage: ringMask,
-        }}
-      />
-      <div
-        className="absolute inset-0 rounded-full"
-        style={{
-          background:
-            pct <= 0
-              ? "#E5E7EB"
-              : pct >= 100
-                ? "transparent"
-                : `conic-gradient(from ${startDeg}deg, transparent 0deg ${angle}deg, #E5E7EB ${angle}deg 360deg)`,
-          WebkitMaskImage: ringMask,
-          maskImage: ringMask,
-        }}
-      />
-      <span
-        className="absolute rounded-full ring-2 ring-white"
-        style={{
-          width: markerRadius * 2,
-          height: markerRadius * 2,
-          left: markerX,
-          top: markerY,
-          backgroundColor: qualityColor,
-        }}
-      />
-    </div>
-  );
-}
-
-function getQualityLevelLabel(qualityPct: number): string {
-  const q = Math.max(0, Math.min(100, Math.round(qualityPct)));
-  if (q >= 80) return t("optimize.resumeQualityLevelExcellent");
-  if (q >= 60) return t("optimize.resumeQualityLevelStrong");
-  if (q >= 45) return t("optimize.resumeQualityLevelGood");
-  if (q >= 25) return t("optimize.resumeQualityLevelFair");
-  return t("optimize.resumeQualityLevelLow");
-}
-
-/** Map API categories to plain-language “what this means for you”. */
-function keyChangeUserFacing(
-  category: string,
-  _description: string | null,
-): { headline: string; why: string; well: "accent" | "warning" | "success"; Icon: typeof DocumentTextIcon } {
-  const c = category.toLowerCase();
-  if (c.includes("structure") || c.includes("format") || c.includes("layout") || c.includes("ats")) {
-    return {
-      headline: t("optimize.keyChangeBenefitStructureTitle"),
-      why: t("optimize.keyChangeBenefitStructureWhy"),
-      well: "accent",
-      Icon: DocumentTextIcon,
-    };
-  }
-  if (c.includes("impact") || c.includes("language") || c.includes("wording") || c.includes("tone")) {
-    return {
-      headline: t("optimize.keyChangeBenefitImpactTitle"),
-      why: t("optimize.keyChangeBenefitImpactWhy"),
-      well: "warning",
-      Icon: BoltIcon,
-    };
-  }
-  if (c.includes("skill") || c.includes("technolog") || c.includes("tool") || c.includes("stack")) {
-    return {
-      headline: t("optimize.keyChangeBenefitSkillsTitle"),
-      why: t("optimize.keyChangeBenefitSkillsWhy"),
-      well: "success",
-      Icon: AcademicCapIcon,
-    };
-  }
-  if (c.includes("summary") || c.includes("profile") || c.includes("headline")) {
-    return {
-      headline: t("optimize.keyChangeBenefitSummaryTitle"),
-      why: t("optimize.keyChangeBenefitSummaryWhy"),
-      well: "accent",
-      Icon: SparklesIcon,
-    };
-  }
-  if (c.includes("experience") || c.includes("work") || c.includes("career")) {
-    return {
-      headline: t("optimize.keyChangeBenefitExperienceTitle"),
-      why: t("optimize.keyChangeBenefitExperienceWhy"),
-      well: "warning",
-      Icon: BriefcaseIcon,
-    };
-  }
-  return {
-    headline: category.trim() || t("optimize.keyChanges"),
-    why: t("optimize.keyChangeBenefitDefaultWhy"),
-    well: "accent",
-    Icon: CheckCircleIcon,
-  };
-}
-
 function clampPercent(value: number): number {
   return Math.max(0, Math.min(100, Math.round(value)));
 }
@@ -732,94 +536,6 @@ function resolvePostMatchScores(
   const vals = [atsPct, kwPct].filter((v): v is number => v != null && Number.isFinite(v));
   const overallPct = vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : null;
   return { atsPct, kwPct, overallPct };
-}
-
-function cleanRecommendationReason(label: string): string {
-  return label
-    .replace(/\s*-\s*(missing|weak mention|none listed|ok|present)$/i, "")
-    .trim();
-}
-
-function compactRecommendationTopic(label: string): string {
-  const clean = cleanRecommendationReason(label).replace(/\s+/g, " ").trim();
-  if (!clean) return "this requirement";
-  return clean.length > 72 ? `${clean.slice(0, 69)}...` : clean;
-}
-
-function impactFromRecommendationLabel(label: string, category?: string): string {
-  const l = label.toLowerCase();
-  const topic = compactRecommendationTopic(label);
-  const c = (category || "").toLowerCase();
-  if (l.includes("ci/cd")) return "ATS treats you as less production-ready and lowers shortlist priority.";
-  if (l.includes("figma")) return "Cross-team collaboration signal is weak for product roles.";
-  if (l.includes("metrics")) return "Without numbers, recruiters cannot estimate your real impact.";
-  if (l.includes("leadership")) return "You look like an individual contributor instead of a leader.";
-  if (l.includes("spelling") || l.includes("grammar") || l.includes("typo") || l.includes("fehler")) {
-    return "Language quality mismatches vacancy expectations and can cause early rejection.";
-  }
-  if (c.includes("keyword")) {
-    return `Without clear evidence for "${topic}", ATS may rank your resume below better-matched candidates.`;
-  }
-  if (c.includes("structure")) {
-    return `Weak structure around "${topic}" makes the resume harder to scan for both ATS and recruiters.`;
-  }
-  if (c.includes("requirement")) {
-    return `If "${topic}" is not explicitly evidenced, you can be filtered out as not meeting core requirements.`;
-  }
-  return `Weak evidence for "${topic}" lowers your relevance in ATS and recruiter screening.`;
-}
-
-function fixFromRecommendationLabel(label: string, category?: string): string {
-  const l = label.toLowerCase();
-  const topic = compactRecommendationTopic(label);
-  const c = (category || "").toLowerCase();
-  if (l.includes("ci/cd")) return "Add one bullet showing CI/CD ownership and release impact.";
-  if (l.includes("figma")) return "Mention collaboration with design and product discovery artifacts.";
-  if (l.includes("metrics")) return "Rewrite 2–3 bullets with measurable outcomes (%, $, team size).";
-  if (l.includes("leadership")) return "Add one leadership example with team scope and business result.";
-  if (l.includes("role-specific hard skills")) {
-    return "Add 2-3 exact vacancy tools you truly used, and tie each to one concrete outcome.";
-  }
-  if (l.includes("clear section headings")) {
-    return "Use ATS-friendly section names (Summary, Experience, Skills, Education) and keep consistent order.";
-  }
-  if (l.includes("facebook business manager") || l.includes("meta ads") || l.includes("perspective")) {
-    return "Mention this exact tool in skills and in one achievement bullet with a concrete result.";
-  }
-  if (l.includes("terminology") || l.includes("keyword")) {
-    return "Reuse exact vacancy wording in summary and experience bullets where it is truthful.";
-  }
-  if (l.includes("spelling") || l.includes("grammar") || l.includes("typo") || l.includes("fehler")) {
-    return "Fix language mistakes and keep formal, error-free wording across all sections.";
-  }
-  if (c.includes("keyword")) {
-    return `Add truthful evidence for "${topic}" in skills and one relevant experience bullet.`;
-  }
-  if (c.includes("structure")) {
-    return `Improve "${topic}" by shortening long text into bullets and making section flow clearer.`;
-  }
-  if (c.includes("requirement")) {
-    return `Add explicit, truthful proof for "${topic}" with measurable business result.`;
-  }
-  return `Add one concrete, truthful bullet proving "${topic}" with measurable outcome.`;
-}
-
-/** LLM often returns one full sentence per item — avoid duplicating with a generic fix line. */
-function recommendationLabelIsSelfContained(label: string): boolean {
-  const t = label.trim();
-  if (t.length >= 88) return true;
-  if (/[.!?]\s/.test(t)) return true;
-  return false;
-}
-
-function recommendationPriorityScore(label: string): number {
-  const l = label.toLowerCase();
-  let score = 1;
-  if (l.includes("missing")) score += 3;
-  if (l.includes("none")) score += 3;
-  if (l.includes("weak")) score += 2;
-  if (l.includes("metrics") || l.includes("leadership") || l.includes("ci/cd")) score += 2;
-  return score;
 }
 
 const RESUME_SECTION_HEADERS = /^(SPRACHEN|KENNTNISSE|ERFAHRUNG|BILDUNG|PERSONLICHE\s+DATEN|EDUCATION|EXPERIENCE|SKILLS|SUMMARY|QUALIFICATIONS|ОПЫТ|ОБРАЗОВАНИЕ|НАВЫКИ|КОНТАКТЫ)$/i;
@@ -870,223 +586,6 @@ function normalizeScorePercent(raw: number | null | undefined): number | null {
   if (raw == null || Number.isNaN(raw)) return null;
   if (raw <= 1) return Math.round(raw * 100);
   return Math.round(raw);
-}
-
-function normalizeCategoryKey(category: string): string {
-  const c = (category || "").trim().toLowerCase();
-  if (c.includes("keyword")) return "keywords";
-  if (c.includes("requirement")) return "requirements";
-  if (c.includes("structure")) return "structure";
-  if (c.includes("writing") || c.includes("wording") || c.includes("phrase")) return "writing";
-  if (c.includes("impact") || c.includes("result")) return "impact";
-  if (c.includes("skill")) return "skills";
-  if (c.includes("experience")) return "experience";
-  if (c.includes("portfolio")) return "portfolio";
-  if (c.includes("ats") || c.includes("match")) return "ats";
-  return "general";
-}
-
-function fallbackLabelsByCategory(categoryKey: string, scorePct: number | null): string[] {
-  const low = scorePct != null && scorePct < 60;
-  const mid = scorePct != null && scorePct >= 60 && scorePct < 75;
-  switch (categoryKey) {
-    case "keywords":
-      if (low) return ["Add role-specific hard skills", "Mirror exact vacancy terminology", "Mention stack/tools in achievements"];
-      if (mid) return ["Strengthen keyword coverage in experience bullets", "Add missing tools from requirements"];
-      return ["Maintain keyword consistency", "Keep strongest terms in top sections"];
-    case "requirements":
-      if (low) return ["Address must-have requirements explicitly", "Add measurable outcomes relevant to the role", "Show domain-specific practice"];
-      if (mid) return ["Tighten alignment with core requirements", "Prioritize matching responsibilities first"];
-      return ["Keep requirement alignment explicit", "Preserve evidence-based claims"];
-    case "structure":
-      if (low) return ["Use clear section headings", "Shorten long paragraphs into bullets", "Move strongest impact points to top"];
-      if (mid) return ["Improve section flow and ordering", "Keep bullets concise and specific"];
-      return ["Keep current section clarity", "Preserve readable layout and hierarchy"];
-    case "writing":
-      if (low) return ["Replace weak verbs with action verbs", "Cut filler phrases in summary and bullets"];
-      return ["Keep wording concise and concrete"];
-    case "impact":
-      if (low) return ["Add one metric to strongest project bullets", "Turn task lists into outcome statements"];
-      return ["Keep results visible in top experience bullets"];
-    case "skills":
-      if (low) return ["Highlight core technical skills first", "Tie skills to real project outcomes"];
-      return ["Keep skills prioritized by relevance", "Support skills with practical examples"];
-    case "experience":
-      if (low) return ["Emphasize measurable business impact", "Prioritize recent and relevant roles"];
-      return ["Keep achievements outcome-focused", "Maintain role relevance by job target"];
-    case "portfolio":
-      if (low) return ["Add strongest projects with outcomes", "Show tech stack and your contribution clearly"];
-      return ["Keep project descriptions concise", "Maintain links and measurable results"];
-    case "ats":
-      if (low) return ["Align wording with ATS-parsed fields", "Use standard section names and chronology"];
-      return ["Keep ATS-friendly structure", "Maintain clear, parseable formatting"];
-    default:
-      if (low) return ["Focus on role relevance first", "Replace generic claims with evidence"];
-      return ["Keep content focused and specific", "Maintain concise, evidence-driven phrasing"];
-  }
-}
-
-function isPositiveRecommendationLabel(label: string): boolean {
-  const normalized = label.trim().toLowerCase();
-  if (!normalized) return false;
-  const positivePrefixes = ["ok", "clear", "match", "maintain", "keep", "preserve", "well-structured", "aligned"];
-  return positivePrefixes.some((prefix) => normalized.startsWith(prefix));
-}
-
-function splitTipTitle(title: string): { from: string; to: string } | null {
-  const parts = (title || "")
-    .split(/\s*(?:→|->|—|–)\s*/)
-    .map((p) => p.trim())
-    .filter(Boolean);
-  if (parts.length < 2) return null;
-  return { from: parts[0], to: parts.slice(1).join(" · ") };
-}
-
-function TipTitleRow({ title }: { title: string }) {
-  const split = splitTipTitle(title);
-  if (!split) {
-    return <p className="text-[13px] font-semibold leading-snug text-[var(--text)]">{title}</p>;
-  }
-  return (
-    <div className="flex flex-wrap items-center gap-1.5 min-w-0">
-      <span className="inline-flex max-w-full sm:max-w-[48%] truncate rounded-md border border-[var(--border)]/90 bg-white/70 px-2 py-0.5 text-[12px] font-medium text-[var(--text)]">
-        {split.from}
-      </span>
-      <span
-        className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--accent)]/10 text-[var(--accent)]"
-        aria-hidden
-      >
-        <ArrowRightIcon className="h-3 w-3" strokeWidth={2} />
-      </span>
-      <span className="inline-flex max-w-full sm:max-w-[48%] truncate rounded-md border border-[var(--accent)]/25 bg-[var(--accent)]/[0.08] px-2 py-0.5 text-[12px] font-semibold text-[var(--accent)]">
-        {split.to}
-      </span>
-    </div>
-  );
-}
-
-const TIPS_PREVIEW_COUNT = 3;
-
-type RecGroup = {
-  category: string;
-  categoryKey: string;
-  labels: string[];
-  tips: api.RecommendationTip[];
-};
-
-function buildScanResultParagraphs(params: {
-  aiTips?: string | null;
-  riskSummary?: string | null;
-  criticalIssues?: string[];
-  fallbackAts: string;
-  fallbackKeywords: string;
-  addImproveNotice: boolean;
-}): string[] {
-  const baseFallback = `${params.fallbackAts} ${params.fallbackKeywords}`.trim();
-  const issueText = (params.criticalIssues || [])
-    .map((x) => (x || "").trim())
-    .filter(Boolean)
-    .slice(0, 2)
-    .join(". ");
-  const source = [params.riskSummary, issueText, params.aiTips, baseFallback]
-    .map((x) => (x || "").trim())
-    .find((x) => x.length > 0) || "";
-  const normalized = source.replace(/\s+/g, " ").trim();
-  if (!normalized) return [];
-
-  const sentences = normalized
-    .split(/(?<=[.!?])\s+/)
-    .map((s) => s.trim())
-    .filter(Boolean);
-
-  // Keep the output concise: around 3x shorter, capped to 4-5 sentences.
-  const byRatioCap = Math.max(4, Math.min(5, Math.floor(sentences.length / 3)));
-  const maxSentences = Math.min(5, byRatioCap);
-  const picked = sentences.slice(0, maxSentences);
-
-  const result: string[] = [];
-  for (let i = 0; i < picked.length; i += 2) {
-    result.push(picked.slice(i, i + 2).join(" "));
-  }
-
-  if (params.addImproveNotice && result.length === 0) {
-    result.push(t("optimize.lowScoreNeedsImprovement"));
-  }
-  return result.slice(0, 3);
-}
-
-function groupRecommendations(
-  items: api.RecommendationItem[] | undefined,
-  scores: {
-    ats: number | null;
-    keywords: number | null;
-  }
-): RecGroup[] {
-  if (!items || items.length === 0) return [];
-  const overall = (() => {
-    const values = [scores.ats, scores.keywords].filter((v): v is number => v != null);
-    if (values.length === 0) return null;
-    return Math.round(values.reduce((a, b) => a + b, 0) / values.length);
-  })();
-
-  const pickScoreForCategory = (categoryKey: string): number | null => {
-    if (categoryKey === "ats") return scores.ats ?? overall;
-    if (categoryKey === "keywords") return scores.keywords ?? overall;
-    if (categoryKey === "requirements") return scores.keywords ?? scores.ats ?? overall;
-    if (categoryKey === "structure" || categoryKey === "writing" || categoryKey === "impact") {
-      return scores.ats ?? overall;
-    }
-    return overall;
-  };
-
-  const groups = new Map<string, { labels: string[]; tips: api.RecommendationTip[] }>();
-  for (const rec of items) {
-    const category = (rec.category || "").trim() || "General";
-    if (!groups.has(category)) groups.set(category, { labels: [], tips: [] });
-    const existing = groups.get(category)!;
-    for (const raw of rec.labels || []) {
-      const label = (raw || "").trim();
-      if (!label) continue;
-      if (!existing.labels.includes(label)) existing.labels.push(label);
-    }
-    for (const tip of rec.tips || []) {
-      const title = (tip?.title || "").trim();
-      const dos = (tip?.do || "").trim();
-      if (!title || !dos) continue;
-      if (!existing.tips.some((t) => t.title === title && t.do === dos)) {
-        existing.tips.push({ title, do: dos });
-      }
-    }
-  }
-
-  return Array.from(groups.entries()).map(([category, bucket]) => {
-    const categoryKey = normalizeCategoryKey(category);
-    const categoryScore = pickScoreForCategory(categoryKey);
-    const allowOk = categoryScore == null || categoryScore >= 75;
-    const cleaned = bucket.labels.filter((label) => {
-      const normalized = label.trim().toLowerCase();
-      if (!allowOk && (normalized === "ok" || normalized === t("optimize.filterOk").toLowerCase())) {
-        return false;
-      }
-      return true;
-    });
-
-    const fallback = fallbackLabelsByCategory(categoryKey, categoryScore);
-    const maxLabels = categoryKey === "keywords" ? 16 : 5;
-    const limited = cleaned.slice(0, maxLabels);
-    const tips = bucket.tips.slice(0, 2);
-
-    // Tip cards from API — do not inject generic fallback labels.
-    // Keywords: chips only; never invent instructional text when empty.
-    if (tips.length === 0 && limited.length === 0 && categoryKey !== "keywords") {
-      for (const fb of fallback) {
-        if (limited.length >= 1) break;
-        if (!limited.some((x) => x.toLowerCase() === fb.toLowerCase())) limited.push(fb);
-      }
-    }
-
-    return { category, categoryKey, labels: limited, tips };
-  });
 }
 
 /** Block 3: title, horizontal bar with gradient, percent, category label (no ring) */
@@ -1474,7 +973,6 @@ export default function Optimize() {
   const [bootstrapPipelineCompleted, setBootstrapPipelineCompleted] = useState(0);
   /** When true, user came from /improve → "Improve my resume" mode (no job required). */
   const [isImproveMode, setIsImproveMode] = useState(false);
-  const [tipsExpanded, setTipsExpanded] = useState(false);
   const pipelineAnalysisLabels = useMemo(
     () =>
       [1, 2, 3, 4, 5].map((i) =>
@@ -2065,7 +1563,6 @@ export default function Optimize() {
       .then((data) => {
         if (!analyzeMountedRef.current) return;
         setPreScores(data);
-        setTipsExpanded(false);
         if (data.job) setParsedJob(data.job);
         const rt = (data.resume_session_token || "").trim();
         if (rt) {
@@ -2710,10 +2207,6 @@ export default function Optimize() {
   );
 
   const showSummaryBlocks = (stage === "assessment" && preScores != null) || stage === "result";
-  const recommendationGroups = groupRecommendations(preScores?.recommendations, {
-    ats: normalizeScorePercent(preScores?.ats_score),
-    keywords: normalizeScorePercent(preScores?.keyword_score),
-  });
   /** Ждём claim `/landing/claim` после ?pending= — показываем лоадер вместо hero */
   const awaitingLandingClaim = stage === "scanning" && claimGate && (!hasResume || !hasJob);
   const showFullBleedPipelineLoader =
@@ -2925,49 +2418,6 @@ export default function Optimize() {
         };
       })()
     : null;
-  const scanResultParagraphs = summaryData
-    ? buildScanResultParagraphs({
-        aiTips: preScores?.improvement_tips,
-        riskSummary: preScores?.risk_summary,
-        criticalIssues: preScores?.critical_issues,
-        fallbackAts: getAtsCategory(summaryData.atsPct).description,
-        fallbackKeywords: getKeywordsCategory(summaryData.kwPct).description,
-        addImproveNotice: summaryData.riskPct > 45 || summaryData.overallPct < 60,
-      })
-    : [];
-
-  const treatmentGroupsOptimize = recommendationGroups
-    .map((group) => {
-      const problems = group.labels.filter((label) => !isPositiveRecommendationLabel(label));
-      return {
-        category: group.category,
-        categoryKey: group.categoryKey,
-        tips: group.tips,
-        problems,
-        hasContent: group.tips.length > 0 || problems.length > 0,
-      };
-    })
-    .filter((g) => g.hasContent);
-  const problemLabelsSorted = recommendationGroups
-    .flatMap((g) =>
-      g.categoryKey === "keywords"
-        ? []
-        : g.tips.length > 0
-          ? g.tips.map((tip) => tip.title)
-          : g.labels.filter((l) => !isPositiveRecommendationLabel(l)),
-    )
-    .sort((a, b) => recommendationPriorityScore(b) - recommendationPriorityScore(a));
-  const callbackBlockersOptimize = (preScores?.callback_blockers || [])
-    .filter((b) => (b.headline || "").trim())
-    .slice(0, 2);
-  const topIssuesOptimizeLegacy = problemLabelsSorted.slice(0, 2);
-  const showWhyNoCallbacksSection =
-    stage === "assessment" &&
-    !isImproveMode &&
-    (callbackBlockersOptimize.length > 0 || topIssuesOptimizeLegacy.length > 0);
-  const scanSummaryTextOptimize =
-    scanResultParagraphs.length > 0 ? scanResultParagraphs.join(" ") : t("optimize.lowScoreNeedsImprovement");
-
   const resultJobTitleLabel =
     parsedJob?.title?.trim() ||
     (jobInput.trim()
@@ -3275,7 +2725,7 @@ export default function Optimize() {
               paperFallbackName={summaryData.displayName || "Resume"}
               canImprove={canImprove}
               showImproveStronger={showOptimizeAgainForAts}
-              improveLoading={stage === "loading"}
+              improveLoading={false}
               onImprove={() => {
                 void handleImprove();
               }}
