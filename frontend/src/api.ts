@@ -1137,12 +1137,19 @@ function unifiedSchemaQuickStats(schema: UnifiedResumeSchema): Record<string, un
 export type AdminTemplateRenderHtmlResponse = {
   html_body: string;
   full_html: string;
+  page_count?: number | null;
+  trims?: string[];
+  fit_ok?: boolean | null;
+  fit_message?: string | null;
 };
 
 export type AdminTemplateRenderPdfResponse = {
   pdf_base64: string;
   page_count: number;
   warnings: string[];
+  trims?: string[];
+  fit_ok?: boolean | null;
+  fit_message?: string | null;
 };
 
 export async function getAdminStats(): Promise<AdminStatsResponse> {

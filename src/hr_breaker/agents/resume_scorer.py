@@ -386,6 +386,111 @@ def _clamp_annotations(raw: object, max_n: int = 5) -> list[WorkspaceAnnotation]
     return out
 
 
+def _ann_from_tip(
+    *,
+    idx: int,
+    title: str,
+    body: str,
+    severity: str,
+    section: str,
+) -> WorkspaceAnnotation | None:
+    t = _clamp_str(title, 72)
+    b = _clamp_str(body, 220)
+    if not t or not b:
+        return None
+    sev = severity if severity in _VALID_SEVERITIES else "suggestion"
+    sec = section if section in _VALID_SECTIONS else "other"
+    return WorkspaceAnnotation(
+        id=f"ann-{idx}",
+        severity=sev,
+        title=t,
+        body=b,
+        section=sec,
+        anchor_y=_SECTION_DEFAULT_Y.get(sec, 0.4),
+    )
+
+
+def ensure_workspace_annotations(
+    insights: AnalysisInsights,
+    *,
+    improve_mode: bool = False,
+    max_n: int = 5,
+) -> list[WorkspaceAnnotation]:
+    """Prefer LLM annotations; if empty, synthesize from tips / callback blockers.
+
+    The workspace left rail only renders `annotations`. Tip cards in recommendations
+    are invisible there — so empty annotations look like \"no tips after analyze\".
+    """
+    if insights.annotations:
+        return insights.annotations[:max_n]
+
+    built: list[WorkspaceAnnotation] = []
+    n = 1
+
+    for blocker in insights.callback_blockers or []:
+        a = _ann_from_tip(
+            idx=n,
+            title=blocker.headline,
+            body=blocker.action or blocker.impact,
+            severity="warning",
+            section="experience",
+        )
+        if a:
+            built.append(a)
+            n += 1
+        if len(built) >= max_n:
+            return built
+
+    tip_sources: list[tuple[list, str, str]] = []
+    if improve_mode:
+        tip_sources = [
+            (insights.tips_writing or [], "suggestion", "experience"),
+            (insights.tips_structure or [], "suggestion", "other"),
+            (insights.tips_impact or [], "suggestion", "experience"),
+        ]
+    else:
+        tip_sources = [
+            (insights.tips_requirements or [], "warning", "skills"),
+            (insights.tips_structure or [], "suggestion", "other"),
+        ]
+
+    for tips, sev, section in tip_sources:
+        for tip in tips:
+            title = getattr(tip, "title", "") or ""
+            do = getattr(tip, "do", "") or ""
+            a = _ann_from_tip(idx=n, title=title, body=do, severity=sev, section=section)
+            if a:
+                built.append(a)
+                n += 1
+            if len(built) >= max_n:
+                return built
+
+    if not built:
+        # Last-resort actionable cards so the rail is never empty after a scored analyze
+        fallbacks = (
+            [
+                ("Strengthen action verbs", "Start each bullet with a concrete verb (Built, Led, Reduced).", "experience"),
+                ("Add one metric", "Put a number (%, time, scope) into your two strongest bullets.", "experience"),
+                ("Clear section headings", "Use Summary, Experience, Skills, Education in a consistent order.", "other"),
+            ]
+            if improve_mode
+            else [
+                ("Mirror must-have skills", "Add truthful proof for the top missing requirements in Skills or Experience.", "skills"),
+                ("Tighten experience bullets", "Lead with outcomes that match this role’s priorities.", "experience"),
+                ("Scan-friendly structure", "Keep standard section headings so ATS parsers map your content.", "other"),
+            ]
+        )
+        for title, body, section in fallbacks:
+            a = _ann_from_tip(idx=n, title=title, body=body, severity="suggestion", section=section)
+            if a:
+                built.append(a)
+                n += 1
+            if len(built) >= max_n:
+                break
+
+    return built
+
+
 def build_category_scores(
     llm_scores: CategoryScoresLLM | None,
     *,
@@ -483,7 +588,7 @@ async def get_analysis_insights(
             pool, audit_user_id, "analyze_insights", model, input_tokens=inp, output_tokens=out_tok
         )
 
-    return AnalysisInsights(
+    insights = AnalysisInsights(
         rejection_risk_score=max(0, min(100, int(out.rejection_risk_score))),
         callback_blockers=blockers,
         risk_summary=risk_summary,
@@ -495,3 +600,5 @@ async def get_analysis_insights(
         category_scores=category_scores,
         annotations=annotations,
     )
+    insights.annotations = ensure_workspace_annotations(insights, improve_mode=improve_mode)
+    return insights

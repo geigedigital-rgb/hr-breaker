@@ -9,6 +9,7 @@ import { storeCheckoutResumePreview } from "../checkoutResumePreview";
 import { PipelineVerticalStepCards } from "../components/PipelineVerticalStepCards";
 import { OptimizeWorkspace } from "../components/optimize-workspace/OptimizeWorkspace";
 import { StylePanel } from "../components/optimize-workspace/StylePanel";
+import { resolveWorkspaceAnnotations } from "../components/optimize-workspace/annotationsFromAnalyze";
 import {
   beginNewOptimizeWork,
   clearOptimizeWorkSession,
@@ -2979,8 +2980,9 @@ export default function Optimize() {
   const workspaceAnnotations = useMemo(() => {
     if (result?.annotations?.length) return result.annotations;
     if (preScores?.annotations?.length) return preScores.annotations;
-    return [];
-  }, [result?.annotations, preScores?.annotations]);
+    // Legacy / LLM-miss: rail only shows annotations — synthesize from tip cards
+    return resolveWorkspaceAnnotations(null, preScores);
+  }, [result?.annotations, preScores]);
 
   const workspaceCategoryScores = useMemo(() => {
     if (result?.category_scores) return result.category_scores;
@@ -3050,11 +3052,15 @@ export default function Optimize() {
 
   const [workspaceHtml, setWorkspaceHtml] = useState<string | null>(null);
   const [workspaceHtmlLoading, setWorkspaceHtmlLoading] = useState(false);
+  const [workspaceFitMessage, setWorkspaceFitMessage] = useState<string | null>(null);
+  const [workspaceFitOk, setWorkspaceFitOk] = useState<boolean | null>(null);
 
   // Live template HTML from schema — preferred paper preview after analyze/optimize.
   useEffect(() => {
     if (!showSummaryBlocks || !workspaceSchemaJson) {
       setWorkspaceHtml(null);
+      setWorkspaceFitMessage(null);
+      setWorkspaceFitOk(null);
       return;
     }
     let cancelled = false;
@@ -3063,6 +3069,8 @@ export default function Optimize() {
       schema = JSON.parse(workspaceSchemaJson) as api.UnifiedResumeSchema;
     } catch {
       setWorkspaceHtml(null);
+      setWorkspaceFitMessage(null);
+      setWorkspaceFitOk(null);
       return;
     }
     const basics =
@@ -3076,10 +3084,18 @@ export default function Optimize() {
       void api
         .renderTemplateHtml({ template_id: templateId, schema: schemaWithPhoto })
         .then((res) => {
-          if (!cancelled) setWorkspaceHtml(res.full_html || res.html_body || null);
+          if (!cancelled) {
+            setWorkspaceHtml(res.full_html || res.html_body || null);
+            setWorkspaceFitMessage(res.fit_message ?? null);
+            setWorkspaceFitOk(res.fit_ok ?? null);
+          }
         })
         .catch(() => {
-          if (!cancelled) setWorkspaceHtml(null);
+          if (!cancelled) {
+            setWorkspaceHtml(null);
+            setWorkspaceFitMessage(null);
+            setWorkspaceFitOk(null);
+          }
         })
         .finally(() => {
           if (!cancelled) setWorkspaceHtmlLoading(false);
@@ -3293,9 +3309,11 @@ export default function Optimize() {
                     setPhotoDataUrl(url);
                     setStyleVisited(true);
                   }}
+                  fitMessage={workspaceFitMessage}
+                  fitOk={workspaceFitOk}
                 />
               }
-              hasStyled={styleVisited || Boolean(selectedTemplateId.trim()) || Boolean(photoDataUrl)}
+              hasStyled={Boolean(styleVisited && stage === "result")}
               onStyleVisited={() => setStyleVisited(true)}
             />
           )}

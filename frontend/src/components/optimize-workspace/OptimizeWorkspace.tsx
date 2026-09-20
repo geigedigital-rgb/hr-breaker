@@ -71,7 +71,7 @@ export function OptimizeWorkspace(props: OptimizeWorkspaceProps) {
   const onPrimary = stage === "assessment" ? onImprove : onImproveStronger;
   const actionsEnabled = stage === "result";
 
-  const hasRecommendations = orderedAnnotations.length > 0 || stage === "assessment" || stage === "result";
+  const hasRecommendations = orderedAnnotations.length > 0;
   const hasImproved = stage === "result";
 
   function focusFirst() {

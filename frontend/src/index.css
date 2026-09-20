@@ -514,6 +514,67 @@ body.optimize-ws-active main.ds-sandbox-main {
   align-items: start;
 }
 
+/* Resume paper editor chrome */
+.optimize-ws-editor-toolbar {
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.8) inset,
+    0 2px 8px rgba(15, 23, 42, 0.06);
+}
+.optimize-ws-paper-scroll {
+  overscroll-behavior: contain;
+  touch-action: pan-x pan-y;
+}
+
+/* Journey bar — frosted glass + structured path */
+.optimize-ws-journey-glass {
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.72) 0%,
+    rgba(255, 255, 255, 0.48) 45%,
+    rgba(232, 238, 252, 0.42) 100%
+  );
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.65) inset,
+    0 8px 32px rgba(15, 23, 42, 0.1),
+    0 2px 8px rgba(69, 120, 252, 0.06);
+  backdrop-filter: blur(18px) saturate(1.35);
+  -webkit-backdrop-filter: blur(18px) saturate(1.35);
+}
+.optimize-ws-journey-meta {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.08));
+}
+.optimize-ws-journey-divider {
+  background: linear-gradient(
+    180deg,
+    transparent 8%,
+    rgba(148, 163, 184, 0.35) 30%,
+    rgba(148, 163, 184, 0.35) 70%,
+    transparent 92%
+  );
+}
+.optimize-ws-journey-rail {
+  background: rgba(226, 232, 240, 0.85);
+}
+.optimize-ws-journey-rail--on {
+  background: linear-gradient(90deg, rgba(69, 120, 252, 0.55), rgba(69, 120, 252, 0.85));
+}
+.optimize-ws-journey-step--current {
+  background: rgba(69, 120, 252, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(69, 120, 252, 0.18);
+}
+.optimize-ws-journey-dot--done {
+  background: #4578fc;
+}
+.optimize-ws-journey-dot--current {
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 0 0 2px #4578fc;
+}
+.optimize-ws-journey-dot--upcoming {
+  border: 1.5px solid #e2e8f0;
+  background: #f8fafc;
+}
+
 /* Gemini-like soft shimmer on Improve CTA */
 @keyframes optimize-ws-cta-shimmer {
   0% {

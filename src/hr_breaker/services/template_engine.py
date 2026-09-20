@@ -31,6 +31,107 @@ class SkillLayoutConfig:
     dense: bool = False
 
 
+TrimStep = str  # "projects" | "older_work" | "highlights" | "summary"
+
+
+@dataclass(frozen=True)
+class TemplateDensityProfile:
+    """Per-template content budgets so varied resume volumes still fit one A4 page."""
+
+    summary_max_chars: int
+    max_work_roles: int
+    max_highlights_per_role: int
+    highlight_max_chars: int
+    max_projects: int
+    max_project_highlights: int
+    project_desc_max_chars: int
+    sidebar_heavy: bool
+    prefer_drop: tuple[TrimStep, ...]
+    min_work_roles: int = 2
+
+
+_PROFILE_SINGLE = TemplateDensityProfile(
+    summary_max_chars=360,
+    max_work_roles=5,
+    max_highlights_per_role=4,
+    highlight_max_chars=140,
+    max_projects=3,
+    max_project_highlights=2,
+    project_desc_max_chars=180,
+    sidebar_heavy=False,
+    prefer_drop=("projects", "older_work", "highlights", "summary"),
+)
+
+_PROFILE_TWO_COL = TemplateDensityProfile(
+    summary_max_chars=320,
+    max_work_roles=4,
+    max_highlights_per_role=4,
+    highlight_max_chars=130,
+    max_projects=2,
+    max_project_highlights=2,
+    project_desc_max_chars=160,
+    sidebar_heavy=False,
+    prefer_drop=("projects", "older_work", "highlights", "summary"),
+)
+
+_PROFILE_SIDEBAR = TemplateDensityProfile(
+    summary_max_chars=280,
+    max_work_roles=4,
+    max_highlights_per_role=3,
+    highlight_max_chars=120,
+    max_projects=2,
+    max_project_highlights=2,
+    project_desc_max_chars=140,
+    sidebar_heavy=True,
+    prefer_drop=("projects", "older_work", "highlights", "summary"),
+)
+
+# Tighter budgets used on later fit iterations for sidebar layouts
+_PROFILE_SIDEBAR_TIGHT = TemplateDensityProfile(
+    summary_max_chars=220,
+    max_work_roles=3,
+    max_highlights_per_role=3,
+    highlight_max_chars=110,
+    max_projects=1,
+    max_project_highlights=1,
+    project_desc_max_chars=120,
+    sidebar_heavy=True,
+    prefer_drop=("projects", "older_work", "highlights", "summary"),
+)
+
+# Emergency caps when still overflowing after prefer_drop steps
+_PROFILE_OVERFLOW = TemplateDensityProfile(
+    summary_max_chars=200,
+    max_work_roles=3,
+    max_highlights_per_role=2,
+    highlight_max_chars=100,
+    max_projects=1,
+    max_project_highlights=1,
+    project_desc_max_chars=100,
+    sidebar_heavy=False,
+    prefer_drop=("projects", "older_work", "highlights", "summary"),
+)
+
+
+def get_density_profile(template_id: str) -> TemplateDensityProfile:
+    """Map template id / layout family → density profile group."""
+    theme = next((t for t in _TEMPLATES if t.id == template_id), None)
+    if theme is None:
+        return _PROFILE_SINGLE
+    if theme.id == "jsonresume-flat-inspired":
+        return _PROFILE_TWO_COL
+    if theme.layout in ("rx_onyx", "rx_lapras"):
+        return _PROFILE_SINGLE
+    if theme.layout.startswith("rx_"):
+        return _PROFILE_SIDEBAR
+    if theme.layout == "standard" and theme.supports_columns:
+        return _PROFILE_TWO_COL
+    return _PROFILE_SINGLE
+
+
+def get_template_manifest(template_id: str) -> TemplateManifest | None:
+    return next((t for t in _TEMPLATES if t.id == template_id), None)
+
 _TEMPLATES: list[TemplateManifest] = [
     TemplateManifest(
         id="jsonresume-flat-inspired",
@@ -225,7 +326,7 @@ def _render_projects(schema: UnifiedResumeSchema) -> str:
         bullets = "".join(f"<li>{escape(x)}</li>" for x in item.highlights if x.strip())
         desc = f"<p>{escape(item.description)}</p>" if item.description else ""
         parts.append(f"<article><h3>{escape(item.name)}</h3>{desc}<ul>{bullets}</ul></article>")
-    return _section("Projects", "".join(parts), data_section="experience")
+    return _section("Projects", "".join(parts), data_section="projects")
 
 
 def _render_languages(schema: UnifiedResumeSchema) -> str:
@@ -594,7 +695,7 @@ def _render_vega_projects(schema: UnifiedResumeSchema) -> str:
         parts.append(f"<article><h3>{escape(item.name)}</h3>{desc}<ul>{bullets}</ul></article>")
     if not parts:
         return ""
-    return f'<section data-section="experience"><h2>Projects</h2>{"".join(parts)}</section>'
+    return f'<section data-section="projects"><h2>Projects</h2>{"".join(parts)}</section>'
 
 
 def _render_skills_pills(schema: UnifiedResumeSchema) -> str:

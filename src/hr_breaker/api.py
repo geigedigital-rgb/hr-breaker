@@ -47,8 +47,8 @@ from hr_breaker.services import (
     CloudflareBlockedError,
     HTMLRenderer,
     PDFStorage,
+    fit_schema_to_template,
     list_templates,
-    render_template_html,
     scrape_job_posting,
     wrap_full_html,
 )
@@ -1898,12 +1898,19 @@ class AdminTemplateRenderRequest(BaseModel):
 class AdminTemplateRenderHtmlResponse(BaseModel):
     html_body: str
     full_html: str
+    page_count: int | None = None
+    trims: list[str] = Field(default_factory=list)
+    fit_ok: bool | None = None
+    fit_message: str | None = None
 
 
 class AdminTemplateRenderPdfResponse(BaseModel):
     pdf_base64: str
     page_count: int
     warnings: list[str] = Field(default_factory=list)
+    trims: list[str] = Field(default_factory=list)
+    fit_ok: bool | None = None
+    fit_message: str | None = None
 
 
 # --- Partner referral cookies (GET /r/{code}); merged on auth; cleared on successful JWT ---
@@ -4551,16 +4558,23 @@ async def api_templates_render_pdf(
         if not _subscription_has_paid(sub):
             raise HTTPException(402, "Upgrade to download PDFs")
     try:
-        html_body = render_template_html(req.resume_schema, req.template_id)
+        fit = fit_schema_to_template(req.resume_schema, req.template_id)
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
     renderer = HTMLRenderer()
-    result = renderer.render(html_body)
+    result = renderer.render(fit.html_body)
     pdf_b64 = base64.b64encode(result.pdf_bytes).decode("utf-8")
+    warnings = list(result.warnings)
+    fit_message = _template_fit_message(fit.trims, fit.fit_ok, result.page_count)
+    if fit_message and not fit.fit_ok:
+        warnings.append(fit_message)
     return AdminTemplateRenderPdfResponse(
         pdf_base64=pdf_b64,
         page_count=result.page_count,
-        warnings=result.warnings,
+        warnings=warnings,
+        trims=fit.trims,
+        fit_ok=fit.fit_ok,
+        fit_message=fit_message,
     )
 
 
@@ -4571,11 +4585,18 @@ async def api_templates_render_html(
 ) -> AdminTemplateRenderHtmlResponse:
     """Live HTML preview for optimize workspace (no paywall — export still uses render-pdf)."""
     try:
-        html_body = render_template_html(req.resume_schema, req.template_id)
+        fit = fit_schema_to_template(req.resume_schema, req.template_id)
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
-    full_html = wrap_full_html(html_body)
-    return AdminTemplateRenderHtmlResponse(html_body=html_body, full_html=full_html)
+    full_html = wrap_full_html(fit.html_body)
+    return AdminTemplateRenderHtmlResponse(
+        html_body=fit.html_body,
+        full_html=full_html,
+        page_count=fit.page_count,
+        trims=fit.trims,
+        fit_ok=fit.fit_ok,
+        fit_message=_template_fit_message(fit.trims, fit.fit_ok, fit.page_count),
+    )
 
 
 @router.get("/admin/templates", response_model=AdminTemplateListResponse)
@@ -4604,11 +4625,18 @@ async def api_admin_templates_render_html(
     _admin: dict = Depends(get_admin_user),
 ) -> AdminTemplateRenderHtmlResponse:
     try:
-        html_body = render_template_html(req.resume_schema, req.template_id)
+        fit = fit_schema_to_template(req.resume_schema, req.template_id)
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
-    full_html = wrap_full_html(html_body)
-    return AdminTemplateRenderHtmlResponse(html_body=html_body, full_html=full_html)
+    full_html = wrap_full_html(fit.html_body)
+    return AdminTemplateRenderHtmlResponse(
+        html_body=fit.html_body,
+        full_html=full_html,
+        page_count=fit.page_count,
+        trims=fit.trims,
+        fit_ok=fit.fit_ok,
+        fit_message=_template_fit_message(fit.trims, fit.fit_ok, fit.page_count),
+    )
 
 
 @router.post("/admin/templates/render-pdf", response_model=AdminTemplateRenderPdfResponse)
@@ -4617,16 +4645,23 @@ async def api_admin_templates_render_pdf(
     _admin: dict = Depends(get_admin_user),
 ) -> AdminTemplateRenderPdfResponse:
     try:
-        html_body = render_template_html(req.resume_schema, req.template_id)
+        fit = fit_schema_to_template(req.resume_schema, req.template_id)
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
     renderer = HTMLRenderer()
-    result = renderer.render(html_body)
+    result = renderer.render(fit.html_body)
     pdf_b64 = base64.b64encode(result.pdf_bytes).decode("utf-8")
+    warnings = list(result.warnings)
+    fit_message = _template_fit_message(fit.trims, fit.fit_ok, result.page_count)
+    if fit_message and not fit.fit_ok:
+        warnings.append(fit_message)
     return AdminTemplateRenderPdfResponse(
         pdf_base64=pdf_b64,
         page_count=result.page_count,
-        warnings=result.warnings,
+        warnings=warnings,
+        trims=fit.trims,
+        fit_ok=fit.fit_ok,
+        fit_message=fit_message,
     )
 
 
@@ -5462,6 +5497,14 @@ def _sanitize_photo_for_snapshot(raw: str | None, *, max_len: int = 700_000) -> 
         logger.warning("Ignoring session_photo_data_url for snapshot: length %s exceeds %s", len(s), max_len)
         return None
     return s
+
+
+def _template_fit_message(trims: list[str], fit_ok: bool, page_count: int) -> str | None:
+    if not fit_ok:
+        return f"Could not fully fit to one page ({page_count} pages). Content was shortened as much as possible."
+    if trims:
+        return "Content adjusted to fit 1 page"
+    return None
 
 
 def _sanitize_session_analyze_payload(raw: dict[str, Any] | None) -> dict[str, Any] | None:

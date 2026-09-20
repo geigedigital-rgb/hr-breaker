@@ -34,12 +34,16 @@ export function StylePanel({
   photoDataUrl,
   onTemplateChange,
   onPhotoChange,
+  fitMessage,
+  fitOk,
 }: {
   locked?: boolean;
   selectedTemplateId: string;
   photoDataUrl: string | null;
   onTemplateChange: (id: string) => void;
   onPhotoChange: (url: string | null) => void;
+  fitMessage?: string | null;
+  fitOk?: boolean | null;
 }) {
   const photoInputRef = useRef<HTMLInputElement>(null);
   const [templates, setTemplates] = useState<api.AdminTemplateListItem[]>([]);
@@ -84,6 +88,20 @@ export function StylePanel({
 
   return (
     <div className="space-y-4">
+      {fitMessage ? (
+        <p
+          className={`rounded-xl px-3 py-2 text-[11px] font-medium leading-snug ${
+            fitOk === false
+              ? "border border-amber-200 bg-amber-50 text-amber-800"
+              : "border border-[#E8ECF4] bg-[#F8FAFC] text-[#64748B]"
+          }`}
+          role="status"
+        >
+          {fitOk === false
+            ? t("optimize.workspace.styleFitWarning")
+            : t("optimize.workspace.styleFitAdjusted")}
+        </p>
+      ) : null}
       <div>
         <p className="text-[13px] font-semibold text-[#0f172a]">{t("optimize.addPhoto")}</p>
         <div className="mt-2 flex items-center gap-3">

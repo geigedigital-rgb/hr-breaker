@@ -1,9 +1,14 @@
 """Unit tests for category scores hybrid clamp and annotation validation."""
 
 from hr_breaker.agents.resume_scorer import (
+    AnalysisInsights,
+    CallbackBlocker,
     CategoryScoresLLM,
+    ImprovementTip,
+    WorkspaceAnnotation,
     WorkspaceAnnotationLLM,
     _clamp_annotations,
+    ensure_workspace_annotations,
     build_category_scores,
 )
 
@@ -47,3 +52,56 @@ def test_clamp_annotations_filters_and_ids():
 def test_clamp_annotations_empty_safe():
     assert _clamp_annotations(None) == []
     assert _clamp_annotations([]) == []
+
+
+def test_ensure_annotations_from_tips_when_empty():
+    insights = AnalysisInsights(
+        rejection_risk_score=70,
+        tips_writing=[ImprovementTip(title="Weak verbs", do="Start bullets with Built or Led.")],
+        tips_structure=[ImprovementTip(title="Section order", do="Put Skills after Experience.")],
+        tips_impact=[ImprovementTip(title="No metrics", do="Add one % to Acme bullets.")],
+        annotations=[],
+    )
+    out = ensure_workspace_annotations(insights, improve_mode=True)
+    assert len(out) >= 2
+    assert all(a.title and a.body for a in out)
+    assert any(a.severity != "positive" for a in out)
+
+
+def test_ensure_annotations_from_blockers_tailor():
+    insights = AnalysisInsights(
+        rejection_risk_score=80,
+        callback_blockers=[
+            CallbackBlocker(
+                headline="Missing Salesforce",
+                impact="Role requires CRM tooling.",
+                action="Add Salesforce proof in Skills or a recent role.",
+            )
+        ],
+        tips_requirements=[
+            ImprovementTip(title="Add CRM keyword", do="List Salesforce under Skills if true.")
+        ],
+        annotations=[],
+    )
+    out = ensure_workspace_annotations(insights, improve_mode=False)
+    assert out[0].severity == "warning"
+    assert "Salesforce" in out[0].title or "Salesforce" in out[0].body
+
+
+def test_ensure_annotations_keeps_llm_cards():
+    insights = AnalysisInsights(
+        rejection_risk_score=40,
+        annotations=[
+            WorkspaceAnnotation(
+                id="ann-1",
+                severity="warning",
+                title="Fix dates",
+                body="Replace Present with an end month.",
+                section="experience",
+                anchor_y=0.5,
+            )
+        ],
+    )
+    out = ensure_workspace_annotations(insights, improve_mode=True)
+    assert len(out) == 1
+    assert out[0].title == "Fix dates"
