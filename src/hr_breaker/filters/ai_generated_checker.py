@@ -23,5 +23,7 @@ class AIGeneratedChecker(BaseFilter):
         source: ResumeSource,
     ) -> FilterResult:
         result = await detect_ai_generated(optimized)
-        result.threshold = self.threshold
+        # Aggressive rewrites look more "AI-written"; soften the bar to match.
+        result.threshold = self.threshold / 2 if self.no_shame else self.threshold
+        result.passed = result.score >= result.threshold
         return result

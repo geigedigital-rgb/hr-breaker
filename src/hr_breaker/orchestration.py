@@ -58,6 +58,7 @@ async def run_filters(
     source: ResumeSource,
     parallel: bool = False,
     improve_mode: bool = False,
+    no_shame: bool = False,
 ) -> ValidationResult:
     """Run filters, either sequentially (early exit) or in parallel."""
     _ensure_optional_filters()
@@ -68,7 +69,7 @@ async def run_filters(
     if parallel:
         # Run all filters concurrently
         start = time.perf_counter()
-        filter_instances = [filter_cls() for filter_cls in filters]
+        filter_instances = [filter_cls(no_shame=no_shame) for filter_cls in filters]
         tasks = [f.evaluate(optimized, job, source) for f in filter_instances]
         raw_results = await asyncio.gather(*tasks, return_exceptions=True)
         logger.debug(f"All filters (parallel): {time.perf_counter() - start:.2f}s")
@@ -99,7 +100,7 @@ async def run_filters(
         if filter_cls.priority >= 100 and results and not all(r.passed for r in results):
             continue
 
-        f = filter_cls()
+        f = filter_cls(no_shame=no_shame)
         start = time.perf_counter()
         result = await f.evaluate(optimized, job, source)
         logger.debug(f"{filter_cls.name}: {time.perf_counter() - start:.2f}s")
@@ -327,7 +328,14 @@ async def optimize_for_job(
                     "pdf_text_chars": len(optimized.pdf_text or ""),
                 },
             )
-            validation = await run_filters(optimized, job, source, parallel=parallel, improve_mode=improve_mode)
+            validation = await run_filters(
+                optimized,
+                job,
+                source,
+                parallel=parallel,
+                improve_mode=improve_mode,
+                no_shame=no_shame,
+            )
             for r in validation.results:
                 alog(
                     "filter",
